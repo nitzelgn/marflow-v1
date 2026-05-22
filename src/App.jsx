@@ -1022,12 +1022,128 @@ function LeadCard({lead,onClick,onContacto}) {
 }
 
 // ============ LEADMODAL ===================
+/* ═══════════════════════════════════════════
+   ENVIAR WHATSAPP — selector de plantilla + preview con sustitución
+═══════════════════════════════════════════ */
+function EnviarWhatsAppModal({ lead, usuario, onClose, onEnviado }) {
+  const CATEGORIAS = [
+    { v: "primer_contacto", l: "👋 Primer contacto" },
+    { v: "seguimiento",     l: "🔄 Seguimiento" },
+    { v: "cierre",          l: "⭐ Cierre" },
+    { v: "reactivacion",    l: "♻️ Reactivación" },
+  ];
+  const [cat, setCat] = useState("primer_contacto");
+  const [idx, setIdx] = useState(0);
+  const [mensajeEditado, setMensajeEditado] = useState(null);
+
+  const opcionesPlantilla = (MENSAJES_TPL[cat] || []).map((m, i) => ({ v: String(i), l: m.titulo }));
+  const tpl = MENSAJES_TPL[cat]?.[idx] || MENSAJES_TPL.primer_contacto[0];
+  const mensajeBase = sustituirVariables(tpl.body, lead, usuario);
+  const mensajeFinal = mensajeEditado !== null ? mensajeEditado : mensajeBase;
+
+  const tel = (lead?.telefono || "").replace(/\D/g, "");
+  const numeroConLada = tel.length === 10 ? `52${tel}` : tel; // si son 10 dígitos, asumir México
+
+  function abrirWhatsApp() {
+    if (!tel) return;
+    const url = `https://wa.me/${numeroConLada}?text=${encodeURIComponent(mensajeFinal)}`;
+    window.open(url, "_blank");
+    if (onEnviado) onEnviado({ titulo: tpl.titulo, mensaje: mensajeFinal, categoria: cat });
+    onClose();
+  }
+
+  function cambiarCategoria(v) {
+    setCat(v); setIdx(0); setMensajeEditado(null);
+  }
+  function cambiarPlantilla(v) {
+    setIdx(Number(v)); setMensajeEditado(null);
+  }
+
+  return (
+    <MFModal onClose={onClose} width={640}>
+      <MHead title="Enviar WhatsApp" sub={lead?.nombre || ""} onClose={onClose}/>
+
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14}}>
+        <FL label="Categoría">
+          <Sel value={cat} onChange={cambiarCategoria} options={CATEGORIAS}/>
+        </FL>
+        <FL label="Plantilla">
+          <Sel value={String(idx)} onChange={cambiarPlantilla} options={opcionesPlantilla}/>
+        </FL>
+      </div>
+
+      <FL label="Vista previa (puedes editarlo antes de enviar)">
+        <textarea
+          value={mensajeFinal}
+          onChange={e => setMensajeEditado(e.target.value)}
+          rows={8}
+          style={{
+            width:"100%", padding:"12px 14px", borderRadius:10,
+            border:`1.5px solid ${B.gray}`, background:B.white, color:B.black,
+            fontFamily:"'Poppins',sans-serif", fontSize:14, lineHeight:1.6,
+            outline:"none", resize:"vertical", minHeight:140,
+            WebkitAppearance:"none",
+          }}
+          onFocus={e=>e.target.style.borderColor=B.gold}
+          onBlur={e=>e.target.style.borderColor=B.gray}
+        />
+      </FL>
+
+      {mensajeEditado !== null && (
+        <button onClick={() => setMensajeEditado(null)}
+          style={{background:"none", border:"none", color:B.navy, fontSize:11, fontWeight:600, cursor:"pointer", padding:"6px 0", marginBottom:6, textDecoration:"underline"}}>
+          ↺ Restaurar plantilla original
+        </button>
+      )}
+
+      <div style={{display:"flex", gap:10, marginTop:18}}>
+        <Btn onClick={onClose} color={B.navy} outline full>Cancelar</Btn>
+        <Btn onClick={abrirWhatsApp} bg="#25d366" full disabled={!tel}>
+          📲 Abrir WhatsApp
+        </Btn>
+      </div>
+
+      {!tel && (
+        <div style={{marginTop:12, padding:"10px 12px", background:B.amberLight||"#fffbeb", border:`1px solid ${B.amber}33`, borderRadius:8, fontSize:11, color:B.amber, fontWeight:600}}>
+          ⚠️ Este lead no tiene teléfono guardado. Agrégalo primero en los datos del lead.
+        </div>
+      )}
+    </MFModal>
+  );
+}
+
 function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
   const [f,setF]=useState({...lead});
   const [tab,setTab]=useState("info");
   const [nota,setNota]=useState("");
   const [tipoN,setTipoN]=useState("llamada");
   const [confirmDel,setConfirmDel]=useState(false);
+  const [wam,setWam]=useState(false); // WhatsApp modal
+
+  function registrarSeguimientoWhatsApp(info) {
+    const nuevoSeg = {
+      id: uid(),
+      fecha: hoy(),
+      texto: `📲 WhatsApp enviado · "${info.titulo}"`,
+      tipo: "whatsapp",
+      autor: usuario?.nombre || "",
+      rol: usuario?.rol || "",
+    };
+    // Marcar checklist: si wa1 no está, marcarlo; si ya está, marcar wa2
+    const newChk = { ...(f.checklist || {}) };
+    if (!newChk.wa1) newChk.wa1 = true;
+    else if (!newChk.wa2) newChk.wa2 = true;
+
+    const leadActualizado = {
+      ...f,
+      ultimoContacto: hoy(),
+      checklist: newChk,
+      seguimientos: [nuevoSeg, ...(f.seguimientos || [])],
+    };
+    setF(leadActualizado);
+    // Persistir inmediato en Supabase para que no se pierda si cierra el modal
+    if (onSave) onSave(leadActualizado);
+  }
   const esAsistente = usuario?.rol==="asistente";
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const setChk=(k,v)=>setF(p=>({...p,checklist:{...p.checklist,[k]:v}}));
@@ -1067,6 +1183,22 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
 
   return <MFModal onClose={onClose} width={640}>
     <MHead title={lead.nombre||"Nuevo lead"} sub={`${f.producto} · ${f.estado}${temp?` · ${temp.icon} ${temp.label}`:""}`} onClose={onClose}/>
+
+    {/* Barra de acciones rápidas: solo si hay teléfono y es un lead existente (no uno nuevo) */}
+    {f.telefono && lead.id === f.id && lead.nombre && (
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+        <button onClick={()=>setWam(true)}
+          style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,border:"none",background:"#25d366",color:"#fff",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer",boxShadow:"0 2px 8px rgba(37,211,102,.25)"}}>
+          📲 Enviar WhatsApp
+        </button>
+        <a href={`tel:${f.telefono}`} style={{textDecoration:"none"}}>
+          <button style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,border:`1px solid ${B.blue}40`,background:B.blueDim,color:B.blue,fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer"}}>
+            📞 Llamar
+          </button>
+        </a>
+      </div>
+    )}
+
     {f.sinSeguimiento&&<div style={{background:B.redLight,border:`1.5px solid ${B.redBright}33`,borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:20}}>🚫</span>
@@ -1156,7 +1288,40 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
       </div>
     </div>
     {confirmDel&&<ConfirmModal titulo="¿Eliminar lead?" mensaje={`Vas a eliminar a "${lead.nombre}" permanentemente.`} icono="🗑️" textoConfirm="Sí, eliminar" colorConfirm={B.redBright} onConfirm={()=>{onDelete(lead.id);onClose();}} onCancel={()=>setConfirmDel(false)}/>}
+    {wam&&<EnviarWhatsAppModal lead={f} usuario={usuario} onClose={()=>setWam(false)} onEnviado={registrarSeguimientoWhatsApp}/>}
   </MFModal>;
+}
+
+/* ═══════════════════════════════════════════
+   PLANTILLAS DE WHATSAPP — sustitución de variables
+   Reemplaza [Nombre], [Producto], etc. con los datos del lead/usuario
+═══════════════════════════════════════════ */
+function sustituirVariables(texto, lead, usuario) {
+  if (!texto) return "";
+  const ahora = new Date();
+  const fechaStr = ahora.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+  const reemplazos = {
+    "[Nombre]":    lead?.nombre || "",
+    "[nombre]":    lead?.nombre || "",
+    "[Producto]":  lead?.producto || "tu producto de interés",
+    "[producto]":  lead?.producto || "tu producto de interés",
+    "[Edad]":      lead?.edad || "",
+    "[Estado]":    lead?.estado || "",
+    "[Telefono]":  lead?.telefono || "",
+    "[Teléfono]":  lead?.telefono || "",
+    "[Email]":     lead?.correo || "",
+    "[Correo]":    lead?.correo || "",
+    "[Ejecutivo]": lead?.ejecutivo || (usuario?.nombre || ""),
+    "[Tu nombre]": usuario?.nombre || "",
+    "[tu nombre]": usuario?.nombre || "",
+    "[fecha]":     fechaStr,
+    "[Referido]":  usuario?.nombre || "tu asesor",
+  };
+  let resultado = texto;
+  for (const [clave, valor] of Object.entries(reemplazos)) {
+    resultado = resultado.split(clave).join(valor);
+  }
+  return resultado;
 }
 
 /* ═══════════════════════════════════════════
