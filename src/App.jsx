@@ -62,7 +62,7 @@ const EMPTY_CHECK = {wa1:false,wa2:false,call1:false,call2:false,email:false,sig
 
 const MENSAJES_TPL = {
   primer_contacto:[
-    {titulo:"Presentación cálida",body:"Hola [Nombre], soy [Tu nombre], especialista en gestión de ventas.\n\nMe gustaría compartirte opciones de [Producto] muy valiosas para ti y tu familia. ¿Tienes 10 minutos esta semana? 🙏"},
+    {titulo:"Presentación cálida",body:"Hola buen día *[Nombre]*!, soy [Tu nombre] *asesora directa* en *Allianz México*.\n\n  Me comunico contigo, ya que solicitaste información acerca de [Producto] mediante nuestra página oficial🙏"},
     {titulo:"Por referencia",body:"Hola [Nombre], me contacto de parte de [Referido].\n\n¿Cuándo sería un buen momento para platicar sin compromiso?"},
   ],
   seguimiento:[
