@@ -78,7 +78,16 @@ const MENSAJES_TPL = {
   ],
 };
 
-const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36);
+// Genera UUIDs v4 válidos (formato xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx)
+// Requerido por las tablas de Supabase donde `id` es de tipo uuid.
+const uid = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
 const hoy = () => new Date().toISOString().split("T")[0];
 const diasDesde = f => f ? Math.floor((Date.now()-new Date(f).getTime())/86400000) : 999;
 const fmtF = f => { if(!f) return "--"; const [y,m,d]=f.split("-"); return `${d}/${m}/${y}`; };
@@ -1151,6 +1160,96 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
 }
 
 /* ═══════════════════════════════════════════
+   MAPEO DB ↔ FRONTEND
+   - DB usa snake_case (ultimo_contacto, admin_id, etc.)
+   - Frontend usa camelCase (ultimoContacto, adminId, etc.)
+   - Seguimientos: en frontend son array dentro del lead; en DB tabla aparte
+═══════════════════════════════════════════ */
+function leadFromDB(row, seguimientos = []) {
+  return {
+    id: row.id,
+    nombre: row.nombre || "",
+    telefono: row.telefono || "",
+    correo: row.correo || "",
+    edad: row.edad || "",
+    producto: row.producto || "",
+    estado: row.estado || "",
+    ejecutivo: row.ejecutivo || "",
+    etapa: row.etapa || "nuevo",
+    ultimoContacto: row.ultimo_contacto || hoy(),
+    sinSeguimiento: !!row.sin_seguimiento,
+    notas: row.notas || "",
+    objeciones: row.objeciones || "",
+    intereses: row.intereses || "",
+    motivador: row.motivador || "",
+    checklist: { ...EMPTY_CHECK, ...(row.checklist || {}) },
+    asignadoA: row.asignado_a || null,
+    mesCreacion: row.mes_creacion || (row.created_at ? row.created_at.slice(0,7) : hoy().slice(0,7)),
+    seguimientos: seguimientos
+      .filter(s => s.lead_id === row.id)
+      .map(s => ({ id: s.id, fecha: s.fecha, texto: s.texto, tipo: s.tipo, autorId: s.autor_id }))
+      .sort((a,b) => (b.fecha || "").localeCompare(a.fecha || "")),
+  };
+}
+
+function leadToDB(lead, adminId) {
+  return {
+    id: lead.id,
+    admin_id: adminId,
+    asignado_a: lead.asignadoA || null,
+    nombre: lead.nombre || "",
+    telefono: lead.telefono || null,
+    correo: lead.correo || null,
+    edad: lead.edad || null,
+    producto: lead.producto || null,
+    estado: lead.estado || null,
+    ejecutivo: lead.ejecutivo || null,
+    etapa: lead.etapa || "nuevo",
+    ultimo_contacto: lead.ultimoContacto || null,
+    sin_seguimiento: !!lead.sinSeguimiento,
+    notas: lead.notas || null,
+    objeciones: lead.objeciones || null,
+    intereses: lead.intereses || null,
+    motivador: lead.motivador || null,
+    checklist: lead.checklist || { ...EMPTY_CHECK },
+    mes_creacion: lead.mesCreacion || hoy().slice(0,7),
+  };
+}
+
+function eventoFromDB(row) {
+  return {
+    id: row.id,
+    titulo: row.titulo || "",
+    tipo: row.tipo || "trabajo",
+    subtipo: row.subtipo || "",
+    fecha: row.fecha || hoy(),
+    hora: row.hora || "",
+    repeticion: row.repeticion || "none",
+    notas: row.notas || "",
+    privado: !!row.privado,
+    leadId: row.lead_id || null,
+    creadorId: row.creador_id || null,
+  };
+}
+
+function eventoToDB(evento, adminId, creadorId) {
+  return {
+    id: evento.id,
+    admin_id: adminId,
+    creador_id: evento.creadorId || creadorId || null,
+    lead_id: evento.leadId || null,
+    titulo: evento.titulo || "",
+    tipo: evento.tipo || "trabajo",
+    subtipo: evento.subtipo || null,
+    fecha: evento.fecha,
+    hora: evento.hora || null,
+    repeticion: evento.repeticion || "none",
+    notas: evento.notas || null,
+    privado: !!evento.privado,
+  };
+}
+
+/* ═══════════════════════════════════════════
    HELPERS DE DETECCIÓN DE DUPLICADOS
    - normalizarTel: quita todo lo que no sea dígito
    - normalizarEmail: lowercase + trim
@@ -1916,11 +2015,14 @@ export default function App() {
   const [cuentas,setCuentas]=useState([]);
   const [seccion,setSeccion]=useState("dashboard");
   const [filtroNav,setFiltroNav]=useState("todos");
-  const [allLeads,setAllLeads]=useState(()=>LS.get("mf_leads",{}));
-  const [allEventos,setAllEventos]=useState(()=>LS.get("mf_eventos",{}));
+  // Estado: leads/eventos vienen de Supabase (ya no de localStorage).
+  // La estructura sigue siendo { [adminId]: [...] } por compatibilidad.
+  const [allLeads,setAllLeads]=useState({});
+  const [allEventos,setAllEventos]=useState({});
   const [notifOpen,setNotifOpen]=useState(false);
   const [sessionStart]=useState(()=>Date.now());
   const [authReady,setAuthReady]=useState(false);
+  const [datosCargando,setDatosCargando]=useState(false);
   const [recoveryMode,setRecoveryMode]=useState(()=>detectarRecovery());
   const [loginMsg,setLoginMsg]=useState("");
 
@@ -1960,6 +2062,50 @@ export default function App() {
     })));
   }
 
+  // Carga inicial de leads + sus seguimientos desde Supabase
+  async function cargarLeadsDeDB(adminId) {
+    if (!adminId) return;
+    const { data: leadsData, error: leadsErr } = await supabase
+      .from("leads").select("*").eq("admin_id", adminId);
+    if (leadsErr) { console.error("cargarLeads error:", leadsErr); return; }
+    const ids = (leadsData || []).map(l => l.id);
+    let segs = [];
+    if (ids.length > 0) {
+      const { data } = await supabase.from("seguimientos").select("*").in("lead_id", ids);
+      segs = data || [];
+    }
+    const hidratados = (leadsData || []).map(row => leadFromDB(row, segs));
+    setAllLeads(prev => ({ ...prev, [adminId]: hidratados }));
+  }
+
+  async function cargarEventosDeDB(adminId) {
+    if (!adminId) return;
+    const { data, error } = await supabase.from("eventos").select("*").eq("admin_id", adminId);
+    if (error) { console.error("cargarEventos error:", error); return; }
+    setAllEventos(prev => ({ ...prev, [adminId]: (data || []).map(eventoFromDB) }));
+  }
+
+  // Sincroniza el array de seguimientos de un lead contra la DB (diff: insert / delete)
+  async function sincronizarSeguimientos(leadId, segsAnteriores, segsNuevos, autorId) {
+    const oldIds = new Set((segsAnteriores || []).map(s => s.id));
+    const newIds = new Set((segsNuevos || []).map(s => s.id));
+    const aInsertar = (segsNuevos || []).filter(s => !oldIds.has(s.id));
+    const aBorrar = (segsAnteriores || []).filter(s => !newIds.has(s.id));
+    if (aInsertar.length) {
+      const rows = aInsertar.map(s => ({
+        id: s.id, lead_id: leadId, fecha: s.fecha || hoy(),
+        tipo: s.tipo || null, texto: s.texto || "",
+        autor_id: s.autorId || autorId || null,
+      }));
+      const { error } = await supabase.from("seguimientos").insert(rows);
+      if (error) console.error("insert seguimientos error:", error);
+    }
+    if (aBorrar.length) {
+      const { error } = await supabase.from("seguimientos").delete().in("id", aBorrar.map(s => s.id));
+      if (error) console.error("delete seguimientos error:", error);
+    }
+  }
+
   // Verificar sesión al cargar y escuchar cambios
   useEffect(() => {
     let mounted = true;
@@ -1971,17 +2117,26 @@ export default function App() {
         if (perfil) {
           setUsuario(perfil);
           setSeccion(perfil.rol === "asistente" ? "agenda" : "dashboard");
-          await cargarEquipo();
+          const targetCid = perfil.rol === "asistente" ? perfil.adminId : perfil.id;
+          setDatosCargando(true);
+          await Promise.all([cargarEquipo(), cargarLeadsDeDB(targetCid), cargarEventosDeDB(targetCid)]);
+          setDatosCargando(false);
         }
       }
       setAuthReady(true);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "PASSWORD_RECOVERY") { setRecoveryMode(true); return; }
-      if (event === "SIGNED_OUT") { setUsuario(null); setCuentas([]); return; }
+      if (event === "SIGNED_OUT") { setUsuario(null); setCuentas([]); setAllLeads({}); setAllEventos({}); return; }
       if (event === "SIGNED_IN" && session?.user && !recoveryMode && !detectarRecovery()) {
         const perfil = await cargarPerfil(session.user.id);
-        if (perfil) { setUsuario(perfil); await cargarEquipo(); }
+        if (perfil) {
+          setUsuario(perfil);
+          const targetCid = perfil.rol === "asistente" ? perfil.adminId : perfil.id;
+          setDatosCargando(true);
+          await Promise.all([cargarEquipo(), cargarLeadsDeDB(targetCid), cargarEventosDeDB(targetCid)]);
+          setDatosCargando(false);
+        }
       }
     });
     return () => { mounted = false; subscription.unsubscribe(); };
@@ -1992,14 +2147,119 @@ export default function App() {
   const leads=cid?(allLeads[cid]||[]):[];
   const eventos=cid?(allEventos[cid]||[]):[];
 
-  function setLeads(fn){setAllLeads(p=>{const u={...p,[cid]:typeof fn==="function"?fn(p[cid]||[]):fn};LS.set("mf_leads",u);return u;});}
-  function setEventos(fn){setAllEventos(p=>{const u={...p,[cid]:typeof fn==="function"?fn(p[cid]||[]):fn};LS.set("mf_eventos",u);return u;});}
+  // setLeads: aplica el cambio al state local Y sincroniza con Supabase.
+  // Detecta inserts/deletes/updates automáticamente comparando con el estado anterior.
+  function setLeads(fn) {
+    if (!cid) return;
+    setAllLeads(prev => {
+      const old = prev[cid] || [];
+      const next = typeof fn === "function" ? fn(old) : fn;
+      // Sincronización en background con Supabase
+      sincronizarLeadsConDB(old, next, cid, usuario?.id);
+      return { ...prev, [cid]: next };
+    });
+  }
+
+  async function sincronizarLeadsConDB(oldLeads, newLeads, adminId, autorId) {
+    const oldMap = new Map(oldLeads.map(l => [l.id, l]));
+    const newMap = new Map(newLeads.map(l => [l.id, l]));
+    const inserted = newLeads.filter(l => !oldMap.has(l.id));
+    const deleted = oldLeads.filter(l => !newMap.has(l.id));
+    const updated = newLeads.filter(l => {
+      const o = oldMap.get(l.id);
+      if (!o) return false;
+      const { seguimientos: _s1, ...lNoSegs } = l;
+      const { seguimientos: _s2, ...oNoSegs } = o;
+      return JSON.stringify(lNoSegs) !== JSON.stringify(oNoSegs);
+    });
+    const errores = [];
+    try {
+      if (inserted.length) {
+        const rows = inserted.map(l => leadToDB(l, adminId));
+        const { error } = await supabase.from("leads").insert(rows);
+        if (error) { console.error("INSERT leads error:", error); errores.push(`INSERT: ${error.message}`); }
+        else {
+          for (const l of inserted) {
+            if (l.seguimientos?.length) await sincronizarSeguimientos(l.id, [], l.seguimientos, autorId);
+          }
+        }
+      }
+      if (deleted.length) {
+        const { error } = await supabase.from("leads").delete().in("id", deleted.map(l => l.id));
+        if (error) { console.error("DELETE leads error:", error); errores.push(`DELETE: ${error.message}`); }
+      }
+      for (const l of updated) {
+        const { error } = await supabase.from("leads").update(leadToDB(l, adminId)).eq("id", l.id);
+        if (error) { console.error("UPDATE lead error:", error); errores.push(`UPDATE: ${error.message}`); }
+      }
+      for (const l of newLeads) {
+        const o = oldMap.get(l.id);
+        if (!o) continue;
+        const segsOld = o.seguimientos || [];
+        const segsNew = l.seguimientos || [];
+        if (JSON.stringify(segsOld) !== JSON.stringify(segsNew)) {
+          await sincronizarSeguimientos(l.id, segsOld, segsNew, autorId);
+        }
+      }
+    } catch (e) {
+      console.error("sincronizarLeadsConDB falló:", e);
+      errores.push(`Excepción: ${e.message || e}`);
+    }
+    if (errores.length) {
+      alert("⚠️ No se pudieron guardar los cambios en Supabase:\n\n" + errores.join("\n") + "\n\nRevisa la consola (Cmd+Option+I) para más detalle.");
+    }
+  }
+
+  function setEventos(fn) {
+    if (!cid) return;
+    setAllEventos(prev => {
+      const old = prev[cid] || [];
+      const next = typeof fn === "function" ? fn(old) : fn;
+      sincronizarEventosConDB(old, next, cid, usuario?.id);
+      return { ...prev, [cid]: next };
+    });
+  }
+
+  async function sincronizarEventosConDB(oldEv, newEv, adminId, creadorId) {
+    const oldMap = new Map(oldEv.map(e => [e.id, e]));
+    const newMap = new Map(newEv.map(e => [e.id, e]));
+    const inserted = newEv.filter(e => !oldMap.has(e.id));
+    const deleted = oldEv.filter(e => !newMap.has(e.id));
+    const updated = newEv.filter(e => {
+      const o = oldMap.get(e.id);
+      return o && JSON.stringify(o) !== JSON.stringify(e);
+    });
+    const errores = [];
+    try {
+      if (inserted.length) {
+        const rows = inserted.map(e => eventoToDB(e, adminId, creadorId));
+        const { error } = await supabase.from("eventos").insert(rows);
+        if (error) { console.error("INSERT eventos error:", error); errores.push(`INSERT: ${error.message}`); }
+      }
+      if (deleted.length) {
+        const { error } = await supabase.from("eventos").delete().in("id", deleted.map(e => e.id));
+        if (error) { console.error("DELETE eventos error:", error); errores.push(`DELETE: ${error.message}`); }
+      }
+      for (const e of updated) {
+        const { error } = await supabase.from("eventos").update(eventoToDB(e, adminId, creadorId)).eq("id", e.id);
+        if (error) { console.error("UPDATE evento error:", error); errores.push(`UPDATE: ${error.message}`); }
+      }
+    } catch (e) {
+      console.error("sincronizarEventosConDB falló:", e);
+      errores.push(`Excepción: ${e.message || e}`);
+    }
+    if (errores.length) {
+      alert("⚠️ No se pudieron guardar los eventos en Supabase:\n\n" + errores.join("\n") + "\n\nRevisa la consola (Cmd+Option+I) para más detalle.");
+    }
+  }
 
   async function onLogin(u){
     setUsuario(u);
     setSeccion(u.rol==="asistente"?"agenda":"dashboard");
-    await cargarEquipo();
-    // Ya NO regeneramos leads de demostración. Los leads vienen vacíos hasta que importes o crees manualmente.
+    const targetCid = u.rol === "asistente" ? u.adminId : u.id;
+    setDatosCargando(true);
+    await Promise.all([cargarEquipo(), cargarLeadsDeDB(targetCid), cargarEventosDeDB(targetCid)]);
+    setDatosCargando(false);
   }
 
   async function logout(){
@@ -2008,6 +2268,13 @@ export default function App() {
   }
 
   if(!authReady) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#060e1c",color:"#C6A96B",fontFamily:"'Poppins',sans-serif",fontSize:14}}>Cargando...</div>;
+
+  // Mientras se cargan datos desde Supabase tras el login
+  if(usuario && datosCargando) return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#F8F6F2",color:"#0A1F44",fontFamily:"'Poppins',sans-serif",gap:14}}>
+    <div style={{width:32,height:32,border:"3px solid #C6A96B33",borderTopColor:"#C6A96B",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>
+    <div style={{fontSize:13,fontWeight:500,color:"#64748b"}}>Cargando tus leads y eventos...</div>
+    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+  </div>;
 
   // Modo recuperación de contraseña (después del link del correo)
   if (recoveryMode) {
