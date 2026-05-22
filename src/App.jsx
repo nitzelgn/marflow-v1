@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { supabase } from "./supabaseClient";
 
 const B = {
   navy:"#0A1F44", navyMid:"#122550",
@@ -316,21 +317,98 @@ function WolfMark({size=120, opacity=1}) {
   );
 }
 
-function Auth({onLogin}) {
-  const [usuario,setUsuario]=useState("");
+function Auth({onLogin, mensajeInicial}) {
+  const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
+  const [nombre,setNombre]=useState("");
   const [err,setErr]=useState("");
+  const [info,setInfo]=useState(mensajeInicial||"");
   const [loading,setLoading]=useState(false);
-  const [cuentas]=useState(()=>LS.get("mf_cuentas",CUENTAS_INIT));
+  const [modo,setModo]=useState("login"); // 'login' | 'signup' | 'forgot'
+  const [verPass,setVerPass]=useState(false);
 
-  function login(){
+  async function login(){
     if(loading) return;
-    setErr(""); setLoading(true);
-    setTimeout(()=>{
-      const c=cuentas.find(c=>c.usuario.toLowerCase()===usuario.toLowerCase()&&c.pass===pass);
-      if(!c){setErr("Credenciales incorrectas");setLoading(false);return;}
-      onLogin(c,cuentas);
-    },400);
+    setErr(""); setInfo(""); setLoading(true);
+    try {
+      // Modo: olvidé contraseña
+      if (modo === "forgot") {
+        if (!email.trim()) { setErr("Escribe tu email"); setLoading(false); return; }
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: window.location.origin
+        });
+        if (error) { setErr(error.message); setLoading(false); return; }
+        setInfo("Te enviamos un correo con instrucciones para crear una nueva contraseña. Revisa tu bandeja (y también spam por si acaso).");
+        setLoading(false);
+        return;
+      }
+      // Modo: signup
+      if (modo === "signup") {
+        if (!nombre.trim()) { setErr("Escribe tu nombre"); setLoading(false); return; }
+        if (pass.length < 8) { setErr("La contraseña debe tener al menos 8 caracteres"); setLoading(false); return; }
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password: pass,
+          options: { data: { nombre: nombre.trim(), rol: "admin" } }
+        });
+        if (error) { setErr(error.message); setLoading(false); return; }
+        if (!data.session) {
+          setInfo("Te enviamos un correo para confirmar tu cuenta. Revisa tu bandeja de entrada.");
+          setLoading(false); return;
+        }
+        await cargarPerfilYContinuar(data.session.user.id);
+        return;
+      }
+      // Modo: login
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: pass
+      });
+      if (error) { setErr("Email o contraseña incorrectos"); setLoading(false); return; }
+      await cargarPerfilYContinuar(data.user.id);
+    } catch (e) {
+      setErr("Error inesperado: " + (e.message || e));
+      setLoading(false);
+    }
+  }
+
+  function cambiarModo(nuevo){
+    setModo(nuevo); setErr(""); setInfo(""); setPass(""); setNombre("");
+  }
+
+  async function cargarPerfilYContinuar(userId) {
+    let { data: perfil, error } = await supabase
+      .from("cuentas").select("*").eq("id", userId).maybeSingle();
+    if (error) {
+      setErr("Error al cargar perfil: " + error.message);
+      setLoading(false); return;
+    }
+    // Auto-create si el trigger no se ejecutó
+    if (!perfil) {
+      const { data: userData } = await supabase.auth.getUser();
+      const meta = userData?.user?.user_metadata || {};
+      const emailUser = userData?.user?.email || "";
+      const prefijo = emailUser.split("@")[0] || "usuario";
+      const { data: nuevoPerfil, error: insertError } = await supabase
+        .from("cuentas")
+        .insert({
+          id: userId,
+          nombre: meta.nombre || nombre.trim() || prefijo,
+          usuario: prefijo + "_" + userId.substring(0, 4),
+          rol: meta.rol || "admin",
+        })
+        .select().single();
+      if (insertError) {
+        setErr("No pudimos crear tu perfil: " + insertError.message);
+        setLoading(false); return;
+      }
+      perfil = nuevoPerfil;
+    }
+    const cuentaAdaptada = {
+      id: perfil.id, nombre: perfil.nombre, usuario: perfil.usuario,
+      rol: perfil.rol, color: perfil.color, adminId: perfil.admin_id,
+    };
+    onLogin(cuentaAdaptada);
   }
 
   const AUTH_CSS = `
@@ -387,32 +465,60 @@ function Auth({onLogin}) {
           <div style={{width:"100%",maxWidth:380,animation:"fadeUp .5s ease",animationDelay:".1s",animationFillMode:"both",marginTop:40}}>
             <div style={{textAlign:"center",marginBottom:14}}>
               <img src="/LOGOT.png" alt="MARFLOW" style={{height:180,objectFit:"contain",marginBottom:24,filter:"drop-shadow(0 8px 24px rgba(198,169,107,0.45))"}}/>
-              <div style={{fontFamily:"Cormorant Garamond, serif",fontSize:30,fontWeight:600}}>Bienvenido</div>
-              <div style={{fontSize:13,color:"rgba(240,236,228,0.4)",fontWeight:300,letterSpacing:0.2}}>Acceso exclusivo · Plataforma privada</div>
+              <div style={{fontFamily:"Cormorant Garamond, serif",fontSize:30,fontWeight:600}}>
+                {modo==="forgot"?"Recuperar contraseña":modo==="signup"?"Crear cuenta":"Bienvenido"}
+              </div>
+              <div style={{fontSize:13,color:"rgba(240,236,228,0.4)",fontWeight:300,letterSpacing:0.2}}>
+                {modo==="forgot"?"Te enviaremos un link a tu correo":"Acceso exclusivo · Plataforma privada"}
+              </div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:14,marginBottom:6}}>
+              {modo==="signup"&&(
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  <label style={{fontSize:10,fontWeight:600,color:"rgba(198,169,107,0.8)",textTransform:"uppercase",letterSpacing:"1px"}}>Nombre completo</label>
+                  <input className="mf-input" value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Tu nombre" onKeyDown={e=>e.key==="Enter"&&login()} autoCapitalize="words"/>
+                </div>
+              )}
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                <label style={{fontSize:10,fontWeight:600,color:"rgba(198,169,107,0.8)",textTransform:"uppercase",letterSpacing:"1px"}}>Usuario</label>
-                <input className="mf-input" value={usuario} onChange={e=>setUsuario(e.target.value)} placeholder="Tu usuario" onKeyDown={e=>e.key==="Enter"&&login()} autoCapitalize="none" autoCorrect="off" spellCheck={false}/>
+                <label style={{fontSize:10,fontWeight:600,color:"rgba(198,169,107,0.8)",textTransform:"uppercase",letterSpacing:"1px"}}>Email</label>
+                <input className="mf-input" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com" onKeyDown={e=>e.key==="Enter"&&login()} autoCapitalize="none" autoCorrect="off" spellCheck={false}/>
               </div>
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                <label style={{fontSize:10,fontWeight:600,color:"rgba(198,169,107,0.8)",textTransform:"uppercase",letterSpacing:"1px"}}>Contraseña</label>
-                <input className="mf-input" type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==="Enter"&&login()}/>
-              </div>
+              {modo!=="forgot"&&(
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <label style={{fontSize:10,fontWeight:600,color:"rgba(198,169,107,0.8)",textTransform:"uppercase",letterSpacing:"1px"}}>Contraseña {modo==="signup"&&<span style={{color:"rgba(240,236,228,0.35)",fontWeight:400,textTransform:"none",letterSpacing:0}}>(mín. 8 caracteres)</span>}</label>
+                    {modo==="login"&&(
+                      <button type="button" onClick={()=>cambiarModo("forgot")} style={{background:"none",border:"none",color:"rgba(198,169,107,0.7)",fontFamily:"'Poppins',sans-serif",fontSize:10,fontWeight:600,cursor:"pointer",textTransform:"uppercase",letterSpacing:".5px",padding:0,textDecoration:"underline"}}>
+                        ¿Olvidaste tu contraseña?
+                      </button>
+                    )}
+                  </div>
+                  <div style={{position:"relative"}}>
+                    <input className="mf-input" type={verPass?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==="Enter"&&login()} style={{paddingRight:46}}/>
+                    <button type="button" onClick={()=>setVerPass(v=>!v)} aria-label={verPass?"Ocultar contraseña":"Mostrar contraseña"} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",padding:"6px 8px",borderRadius:6,color:"rgba(240,236,228,0.5)",fontSize:18,lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {verPass?"🙈":"👁️"}
+                    </button>
+                  </div>
+                </div>
+              )}
               {err&&(<div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:8,background:"rgba(220,38,38,0.12)",border:"1px solid rgba(220,38,38,0.25)"}}><span style={{fontSize:14}}>⚠</span><span style={{fontSize:12,color:"#fca5a5",fontWeight:500}}>{err}</span></div>)}
+              {info&&(<div style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 14px",borderRadius:8,background:"rgba(34,197,94,0.12)",border:"1px solid rgba(34,197,94,0.25)"}}><span style={{fontSize:14}}>✓</span><span style={{fontSize:12,color:"#86efac",fontWeight:500,lineHeight:1.5}}>{info}</span></div>)}
               <button className="mf-btn-gold" onClick={login} disabled={loading} style={{marginTop:8,opacity:loading?.7:1}}>
-                {loading?(<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(10,31,68,0.4)",borderTopColor:"#0A1F44",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>Verificando...</span>):"Ingresar →"}
+                {loading
+                  ? (<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(10,31,68,0.4)",borderTopColor:"#0A1F44",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>{modo==="signup"?"Creando cuenta...":modo==="forgot"?"Enviando...":"Verificando..."}</span>)
+                  : (modo==="signup"?"Crear cuenta →":modo==="forgot"?"Enviar instrucciones →":"Ingresar →")}
               </button>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:12,margin:"24px 0"}}>
               <div style={{flex:1,height:1,background:"rgba(198,169,107,0.12)"}}/>
-              <div style={{fontSize:10,color:"rgba(198,169,107,0.35)",letterSpacing:2,textTransform:"uppercase"}}>acceso seguro</div>
+              <div style={{fontSize:10,color:"rgba(198,169,107,0.35)",letterSpacing:2,textTransform:"uppercase"}}>
+                {modo==="signup"?"o si ya tienes cuenta":modo==="forgot"?"o regresa al inicio":"o crea una cuenta"}
+              </div>
               <div style={{flex:1,height:1,background:"rgba(198,169,107,0.12)"}}/>
             </div>
-            <div style={{background:"rgba(198,169,107,0.05)",border:"1px solid rgba(198,169,107,0.12)",borderRadius:10,padding:"12px 16px",textAlign:"center"}}>
-              <div style={{fontSize:10,color:"rgba(198,169,107,0.5)",textTransform:"uppercase",letterSpacing:1.5,marginBottom:5}}>Demo</div>
-              <div style={{fontSize:12,color:"rgba(240,236,228,0.5)",fontFamily:"monospace",letterSpacing:0.5}}>mariana <span style={{color:"rgba(198,169,107,0.4)"}}>·</span> Mariana2024</div>
-            </div>
+            <button onClick={()=>cambiarModo(modo==="login"?"signup":"login")} style={{width:"100%",padding:"12px",background:"transparent",border:"1px solid rgba(198,169,107,0.3)",borderRadius:10,color:"rgba(240,236,228,0.7)",fontFamily:"'Poppins',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",transition:"all .15s"}}>
+              {modo==="signup"?"Ya tengo cuenta · Iniciar sesión":modo==="forgot"?"Volver al inicio de sesión":"Soy nuevo · Crear cuenta"}
+            </button>
             <div style={{marginTop:32,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(198,169,107,0.25)",letterSpacing:2,textTransform:"uppercase"}}>© 2025 MarFlow</div></div>
           </div>
         </div>
@@ -422,6 +528,103 @@ function Auth({onLogin}) {
   );
 }
 
+
+/* ═══════════════════════════════════════════
+   RECOVERY PASSWORD — pantalla para crear nueva contraseña
+   tras hacer clic en el link del correo de recuperación
+═══════════════════════════════════════════ */
+function RecoveryPassword({onSuccess, onCancel}) {
+  const [pass, setPass] = useState("");
+  const [pass2, setPass2] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [verPass, setVerPass] = useState(false);
+  const [verPass2, setVerPass2] = useState(false);
+
+  async function guardar() {
+    if (loading) return;
+    setErr("");
+    if (pass.length < 8) { setErr("La contraseña debe tener al menos 8 caracteres"); return; }
+    if (pass !== pass2) { setErr("Las contraseñas no coinciden"); return; }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pass });
+      if (error) { setErr(error.message || "No se pudo actualizar la contraseña"); setLoading(false); return; }
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      await supabase.auth.signOut();
+      onSuccess();
+    } catch (e) {
+      setErr("Error inesperado: " + (e.message || e));
+      setLoading(false);
+    }
+  }
+
+  const CSS = `
+    .mfr-input{width:100%;padding:14px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(198,169,107,0.2);border-radius:10px;color:#f0ece4;font-family:'Poppins',sans-serif;font-size:14px;outline:none;transition:border-color .2s,background .2s,box-shadow .2s;-webkit-appearance:none;}
+    .mfr-input::placeholder{color:rgba(255,255,255,0.25);}
+    .mfr-input:focus{border-color:rgba(198,169,107,0.7);background:rgba(255,255,255,0.07);box-shadow:0 0 0 3px rgba(198,169,107,0.1);}
+    .mfr-btn{width:100%;padding:15px;background:linear-gradient(135deg,#C6A96B 0%,#d4bc89 50%,#b8960e 100%);border:none;border-radius:10px;color:#0A1F44;font-family:'Poppins',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;}
+    .mfr-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(198,169,107,.45);}
+    .mfr-btn-secondary{width:100%;padding:12px;background:transparent;border:1px solid rgba(198,169,107,0.3);border-radius:10px;color:rgba(240,236,228,0.7);font-family:'Poppins',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  `;
+
+  return (
+    <div style={{minHeight:"100vh",background:"#060e1c",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px",fontFamily:"'Poppins',sans-serif",position:"relative",overflow:"hidden"}}>
+      <style>{CSS}</style>
+      <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}>
+        <div style={{position:"absolute",top:-200,left:-200,width:600,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(198,169,107,0.07) 0%,transparent 70%)"}}/>
+        <div style={{position:"absolute",bottom:-150,right:-100,width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(10,31,68,0.8) 0%,transparent 70%)"}}/>
+      </div>
+      <div style={{width:"100%",maxWidth:420,position:"relative",zIndex:1,animation:"fadeUp .5s ease"}}>
+        <div style={{textAlign:"center",marginBottom:28}}>
+          <div style={{fontSize:44,marginBottom:12}}>🔐</div>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:600,color:"#f0ece4",marginBottom:8}}>Nueva contraseña</div>
+          <div style={{fontSize:13,color:"rgba(240,236,228,0.5)",fontWeight:300}}>Escribe tu nueva contraseña y confírmala</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:14,marginBottom:18}}>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <label style={{fontSize:10,fontWeight:600,color:"rgba(198,169,107,0.8)",textTransform:"uppercase",letterSpacing:"1px"}}>Nueva contraseña <span style={{color:"rgba(240,236,228,0.35)",fontWeight:400,textTransform:"none",letterSpacing:0}}>(mín. 8 caracteres)</span></label>
+            <div style={{position:"relative"}}>
+              <input className="mfr-input" type={verPass?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==="Enter"&&guardar()} autoFocus style={{paddingRight:46}}/>
+              <button type="button" onClick={()=>setVerPass(v=>!v)} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",padding:"6px 8px",borderRadius:6,color:"rgba(240,236,228,0.5)",fontSize:18,lineHeight:1}}>
+                {verPass?"🙈":"👁️"}
+              </button>
+            </div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <label style={{fontSize:10,fontWeight:600,color:"rgba(198,169,107,0.8)",textTransform:"uppercase",letterSpacing:"1px"}}>Confirmar contraseña</label>
+            <div style={{position:"relative"}}>
+              <input className="mfr-input" type={verPass2?"text":"password"} value={pass2} onChange={e=>setPass2(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==="Enter"&&guardar()} style={{paddingRight:46}}/>
+              <button type="button" onClick={()=>setVerPass2(v=>!v)} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",padding:"6px 8px",borderRadius:6,color:"rgba(240,236,228,0.5)",fontSize:18,lineHeight:1}}>
+                {verPass2?"🙈":"👁️"}
+              </button>
+            </div>
+          </div>
+          {err && (
+            <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:8,background:"rgba(220,38,38,0.12)",border:"1px solid rgba(220,38,38,0.25)"}}>
+              <span style={{fontSize:14}}>⚠</span>
+              <span style={{fontSize:12,color:"#fca5a5",fontWeight:500}}>{err}</span>
+            </div>
+          )}
+          <button className="mfr-btn" onClick={guardar} disabled={loading} style={{marginTop:6,opacity:loading?.7:1}}>
+            {loading ? (
+              <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                <span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(10,31,68,0.4)",borderTopColor:"#0A1F44",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>
+                Guardando...
+              </span>
+            ) : "Actualizar contraseña →"}
+          </button>
+          <button className="mfr-btn-secondary" onClick={onCancel}>Cancelar y volver al inicio</button>
+        </div>
+        <div style={{textAlign:"center",marginTop:24}}>
+          <div style={{fontSize:10,color:"rgba(198,169,107,0.25)",letterSpacing:2,textTransform:"uppercase"}}>© 2025 MarFlow</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ===========================================
    CAMBIO 1 — VENTA DEL DÍA (REDISEÑADA)
@@ -948,6 +1151,38 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
 }
 
 /* ═══════════════════════════════════════════
+   HELPERS DE DETECCIÓN DE DUPLICADOS
+   - normalizarTel: quita todo lo que no sea dígito
+   - normalizarEmail: lowercase + trim
+   - esDuplicado: compara contra una lista por tel O email
+═══════════════════════════════════════════ */
+function normalizarTel(t) {
+  return String(t || "").replace(/\D/g, "");
+}
+function normalizarEmail(e) {
+  return String(e || "").trim().toLowerCase();
+}
+function esDuplicado(lead, leadsExistentes) {
+  const tel = normalizarTel(lead.telefono);
+  const email = normalizarEmail(lead.correo);
+  if (!tel && !email) return false; // sin tel ni email: no podemos comparar → se considera único
+  return leadsExistentes.some(l => {
+    const lTel = normalizarTel(l.telefono);
+    const lEmail = normalizarEmail(l.correo);
+    return (tel && lTel && tel === lTel) || (email && lEmail && email === lEmail);
+  });
+}
+function clasificarDuplicados(leadsParsed, leadsExistentes) {
+  const nuevos = [];
+  const duplicados = [];
+  for (const lead of leadsParsed) {
+    if (esDuplicado(lead, leadsExistentes)) duplicados.push(lead);
+    else nuevos.push(lead);
+  }
+  return { nuevos, duplicados };
+}
+
+/* ═══════════════════════════════════════════
    PARSEO DE LEADS DESDE EXCEL/CSV
    - Detecta encabezados con aliases
    - Fallback por orden posicional si no reconoce headers
@@ -1048,22 +1283,41 @@ function parsearLeads(rows) {
    IMPORTAR LEADS MODAL — Vista previa + confirmación
 ═══════════════════════════════════════════ */
 function ImportarLeadsModal({ datos, onConfirm, onClose }) {
-  const { leads, warnings } = datos;
-  return (
-    <MFModal onClose={onClose} width={780}>
-      <MHead title="Vista previa de importación" sub={`${leads.length} leads detectados`} onClose={onClose}/>
+  const { nuevos, duplicados, warnings } = datos;
+  const [tab, setTab] = useState("nuevos"); // 'nuevos' | 'duplicados'
+  const listaVis = tab === "nuevos" ? nuevos : duplicados;
 
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
-        <Tag color={B.green}>✓ {leads.length} listos para importar</Tag>
+  return (
+    <MFModal onClose={onClose} width={820}>
+      <MHead title="Vista previa de importación" sub={`${nuevos.length + duplicados.length} leads procesados`} onClose={onClose}/>
+
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+        <Tag color={B.green}>✓ {nuevos.length} nuevos</Tag>
+        {duplicados.length > 0 && <Tag color={B.blue}>🔄 {duplicados.length} duplicados (omitidos)</Tag>}
         {warnings.omitidasSinNombre > 0 && <Tag color={B.redBright}>⚠ {warnings.omitidasSinNombre} sin nombre (omitidas)</Tag>}
         {warnings.sinTelefono > 0 && <Tag color={B.amber}>⚠ {warnings.sinTelefono} sin teléfono</Tag>}
         {warnings.sinMail > 0 && <Tag color={B.amber}>⚠ {warnings.sinMail} sin mail</Tag>}
-        {warnings.sinEdad > 0 && <Tag color={B.amber}>⚠ {warnings.sinEdad} sin edad</Tag>}
       </div>
 
-      {leads.length === 0 ? (
+      {/* Pestañas Nuevos / Duplicados */}
+      {duplicados.length > 0 && (
+        <div style={{display:"flex",gap:4,marginBottom:12,background:B.cream,borderRadius:8,padding:4}}>
+          <button onClick={()=>setTab("nuevos")} style={{flex:1,padding:"8px 12px",borderRadius:6,border:"none",background:tab==="nuevos"?B.white:"transparent",color:tab==="nuevos"?B.navy:"#6b7280",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer",boxShadow:tab==="nuevos"?B.shadow:"none"}}>
+            ✓ Nuevos ({nuevos.length})
+          </button>
+          <button onClick={()=>setTab("duplicados")} style={{flex:1,padding:"8px 12px",borderRadius:6,border:"none",background:tab==="duplicados"?B.white:"transparent",color:tab==="duplicados"?B.blue:"#6b7280",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer",boxShadow:tab==="duplicados"?B.shadow:"none"}}>
+            🔄 Duplicados ({duplicados.length})
+          </button>
+        </div>
+      )}
+
+      {nuevos.length === 0 && duplicados.length === 0 ? (
         <div style={{textAlign:"center",padding:"30px 20px",color:"#6b7280",fontSize:13}}>
           No se detectó ningún lead con nombre. Revisa que tu archivo tenga al menos la columna "Nombre" con datos.
+        </div>
+      ) : listaVis.length === 0 ? (
+        <div style={{textAlign:"center",padding:"30px 20px",color:"#6b7280",fontSize:13}}>
+          {tab === "nuevos" ? "Todos los leads del archivo ya existen en tu pipeline." : "No hay duplicados."}
         </div>
       ) : (
         <div style={{overflowX:"auto",maxHeight:380,border:`1px solid ${B.gray}`,borderRadius:8,background:B.white}}>
@@ -1076,10 +1330,11 @@ function ImportarLeadsModal({ datos, onConfirm, onClose }) {
               </tr>
             </thead>
             <tbody>
-              {leads.map((l) => {
+              {listaVis.map((l) => {
                 const et = ETAPAS.find(e => e.id === l.etapa);
+                const opacity = tab === "duplicados" ? 0.55 : 1;
                 return (
-                  <tr key={l.id} style={{borderBottom:`1px solid ${B.gray}33`}}>
+                  <tr key={l.id} style={{borderBottom:`1px solid ${B.gray}33`,opacity}}>
                     <td style={{padding:"8px 10px",fontWeight:600,color:B.navy,whiteSpace:"nowrap"}}>{l.nombre}</td>
                     <td style={{padding:"8px 10px",color:"#6b7280"}}>{l.edad || "—"}</td>
                     <td style={{padding:"8px 10px",color:l.telefono?B.black:B.amber,whiteSpace:"nowrap"}}>{l.telefono || "—"}</td>
@@ -1098,8 +1353,8 @@ function ImportarLeadsModal({ datos, onConfirm, onClose }) {
 
       <div style={{display:"flex",gap:10,marginTop:20}}>
         <Btn onClick={onClose} color={B.navy} outline full>Cancelar</Btn>
-        <Btn onClick={onConfirm} bg={B.green} full disabled={leads.length === 0}>
-          ✓ Importar {leads.length} {leads.length === 1 ? "lead" : "leads"}
+        <Btn onClick={onConfirm} bg={B.green} full disabled={nuevos.length === 0}>
+          ✓ Importar {nuevos.length} {nuevos.length === 1 ? "nuevo" : "nuevos"}
         </Btn>
       </div>
     </MFModal>
@@ -1135,10 +1390,12 @@ function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
       const parsed = parsearLeads(rows);
-      if (!parsed.leads.length && !parsed.warnings.omitidasSinNombre) {
+      // Clasificar contra los leads existentes en el pipeline
+      const { nuevos, duplicados } = clasificarDuplicados(parsed.leads, leads);
+      if (!nuevos.length && !duplicados.length && !parsed.warnings.omitidasSinNombre) {
         alert("El archivo está vacío o no se detectaron filas con datos.");
       } else {
-        setPreview(parsed); // Abre vista previa antes de guardar
+        setPreview({ nuevos, duplicados, warnings: parsed.warnings });
       }
     } catch(err){
       alert("Error al leer el archivo: " + (err.message || err));
@@ -1148,10 +1405,11 @@ function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
 
   function confirmarImport(){
     if (!preview) return;
-    const n = preview.leads.length;
-    setLeads(p => [...p, ...preview.leads]);
+    const n = preview.nuevos.length;
+    if (n === 0) { setPreview(null); return; }
+    setLeads(p => [...p, ...preview.nuevos]);
     setPreview(null);
-    setTimeout(() => alert(`✅ ${n} leads importados`), 100);
+    setTimeout(() => alert(`✅ ${n} ${n === 1 ? "lead importado" : "leads importados"}`), 100);
   }
 
   async function exportar(){
@@ -1425,6 +1683,8 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
   const [contactoL,setContactoL]=useState(null);
   const [leadAct,setLeadAct]=useState(null);
   const [nuevoM,setNuevoM]=useState(false);
+  const [seleccionados,setSeleccionados]=useState(()=>new Set());
+  const [confirmandoBorrado,setConfirmandoBorrado]=useState(false);
   const emptyL={id:uid(),nombre:"",telefono:"",correo:"",edad:"",producto:PRODUCTOS_LEAD[0],estado:"",etapa:"nuevo",ultimoContacto:hoy(),notas:"",objeciones:"",intereses:"",motivador:"",checklist:{...EMPTY_CHECK},seguimientos:[],sinSeguimiento:false,asignadoA:null,mesCreacion:tab==="sig"?mesSig:mesHoy};
   const mesesDisponibles=[...new Set(leads.map(l=>l.mesCreacion||l.ultimoContacto?.slice(0,7)||mesHoy).filter(Boolean))].sort().reverse();
   const leadsActual=leads.filter(l=>{const mc=l.mesCreacion||l.ultimoContacto?.slice(0,7)||mesHoy;return mc===mesHoy||(mc<mesHoy&&l.etapa==="seguimiento"&&!l.sinSeguimiento);});
@@ -1440,6 +1700,32 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
   const seguAnt=tab==="actual"?leadsActual.filter(l=>{const mc=l.mesCreacion||l.ultimoContacto?.slice(0,7)||mesHoy;return mc<mesHoy&&l.etapa==="seguimiento"&&!l.sinSeguimiento;}).length:0;
   function save(d){setLeads(p=>p.find(l=>l.id===d.id)?p.map(l=>l.id===d.id?d:l):[...p,d]);}
   function del(id){setLeads(p=>p.filter(l=>l.id!==id));}
+
+  // ── Selección múltiple ──
+  function toggleSeleccion(id, e){
+    if (e) e.stopPropagation();
+    setSeleccionados(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  const visIds = vis.map(l => l.id);
+  const todosVisSeleccionados = visIds.length > 0 && visIds.every(id => seleccionados.has(id));
+  function toggleSeleccionarTodos(){
+    if (todosVisSeleccionados) {
+      setSeleccionados(prev => { const n = new Set(prev); visIds.forEach(id => n.delete(id)); return n; });
+    } else {
+      setSeleccionados(prev => new Set([...prev, ...visIds]));
+    }
+  }
+  function limpiarSeleccion(){ setSeleccionados(new Set()); }
+  function confirmarBorradoMasivo(){
+    setLeads(p => p.filter(l => !seleccionados.has(l.id)));
+    setSeleccionados(new Set());
+    setConfirmandoBorrado(false);
+  }
+
   const LISTA_CSS=`.mf-table{width:100%;border-collapse:collapse;min-width:580px;}.mf-th{text-align:left;padding:10px 12px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;border-bottom:2px solid #E5E7EB;white-space:nowrap;background:#F8F6F2;position:sticky;top:0;z-index:1;}.mf-td{padding:10px 12px;font-size:13px;border-bottom:1px solid rgba(229,231,235,.5);vertical-align:middle;}.mf-tr{transition:background .12s;cursor:pointer;}.mf-tr:hover .mf-td{background:rgba(10,31,68,.025);}.mf-tr.rojo .mf-td{background:#fef2f2;}.mf-tr.seg-ant .mf-td{background:#fffbeb;}.mf-tel-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:20px;border:1px solid #E5E7EB;background:#fff;color:#0A1F44;font-family:'Poppins',sans-serif;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;}.mf-tel-btn:hover{border-color:#0A1F44;background:#0A1F44;color:#fff;}@media(max-width:640px){.mf-col-hide{display:none!important;}}`;
   const fmtMes=m=>{const[y,mo]=m.split("-");return `${["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][parseInt(mo)-1]} ${y}`;};
   return(<div>
@@ -1469,12 +1755,21 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
     <div style={{background:B.white,borderRadius:12,border:`1px solid ${B.gray}`,boxShadow:B.shadow,overflow:"hidden"}}>
       <div className="mf-table-wrap">
         <table className="mf-table">
-          <thead><tr><th className="mf-th">#</th><th className="mf-th">Nombre</th><th className="mf-th">Contacto</th><th className="mf-th mf-col-hide">Estado</th><th className="mf-th mf-col-hide">Producto</th><th className="mf-th">Etapa</th><th className="mf-th">T°</th><th className="mf-th mf-col-hide">Último contacto</th><th className="mf-th">Checklist</th></tr></thead>
+          <thead><tr>
+            <th className="mf-th" style={{width:36,textAlign:"center",padding:"10px 6px"}}>
+              <input type="checkbox" checked={todosVisSeleccionados} onChange={toggleSeleccionarTodos} aria-label="Seleccionar todos los visibles" style={{width:16,height:16,cursor:"pointer",accentColor:B.navy}}/>
+            </th>
+            <th className="mf-th">#</th><th className="mf-th">Nombre</th><th className="mf-th">Contacto</th><th className="mf-th mf-col-hide">Estado</th><th className="mf-th mf-col-hide">Producto</th><th className="mf-th">Etapa</th><th className="mf-th">T°</th><th className="mf-th mf-col-hide">Último contacto</th><th className="mf-th">Checklist</th>
+          </tr></thead>
           <tbody>
-            {vis.length===0&&(<tr><td colSpan={9} className="mf-td" style={{textAlign:"center",color:"#94a3b8",padding:"40px 16px"}}>Sin leads en este período</td></tr>)}
+            {vis.length===0&&(<tr><td colSpan={10} className="mf-td" style={{textAlign:"center",color:"#94a3b8",padding:"40px 16px"}}>Sin leads en este período</td></tr>)}
             {vis.map((lead,idx)=>{
               const etapa=ETAPAS.find(e=>e.id===lead.etapa)||ETAPAS[0];const temp=getTempLead(lead);const alerts=getAlertas(lead);const sinSeg2=lead.sinSeguimiento||lead.checklist?.noInteres;const mc=lead.mesCreacion||lead.ultimoContacto?.slice(0,7)||mesHoy;const esSeguAnt=tab==="actual"&&mc<mesHoy&&lead.etapa==="seguimiento";const chkDone=Object.values(lead.checklist||{}).filter(Boolean).length;const chkTot=CHECKLIST_DEF.length;
-              return(<tr key={lead.id} className={`mf-tr${sinSeg2?" rojo":esSeguAnt?" seg-ant":""}`} onClick={()=>setLeadAct(lead)}>
+              const seleccionado=seleccionados.has(lead.id);
+              return(<tr key={lead.id} className={`mf-tr${sinSeg2?" rojo":esSeguAnt?" seg-ant":""}`} onClick={()=>setLeadAct(lead)} style={seleccionado?{background:B.gold+"12"}:{}}>
+                <td className="mf-td" style={{width:36,textAlign:"center",padding:"10px 6px"}} onClick={e=>e.stopPropagation()}>
+                  <input type="checkbox" checked={seleccionado} onChange={(e)=>toggleSeleccion(lead.id, e)} aria-label={`Seleccionar ${lead.nombre}`} style={{width:16,height:16,cursor:"pointer",accentColor:B.navy}}/>
+                </td>
                 <td className="mf-td" style={{color:"#94a3b8",fontSize:11,width:32}}>{idx+1}</td>
                 <td className="mf-td"><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:32,height:32,borderRadius:"50%",flexShrink:0,background:sinSeg2?B.redDim:esSeguAnt?"#fde68a44":B.navy+"12",border:`1.5px solid ${sinSeg2?B.redBright+"44":esSeguAnt?"#fcd34d":B.navy+"20"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:sinSeg2?B.redBright:esSeguAnt?B.amber:B.navy}}>{initials(lead.nombre)}</div><div style={{minWidth:0}}><div style={{fontWeight:700,color:sinSeg2?B.redBright:B.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}>{sinSeg2?"🚫 ":esSeguAnt?"⟳ ":""}{lead.nombre}</div><div style={{fontSize:10,color:"#94a3b8"}}>{lead.edad&&`${lead.edad} años`}{esSeguAnt&&<span style={{color:B.amber,fontWeight:600}}> · seguimiento anterior</span>}</div>{alerts.slice(0,1).map((a,i)=>(<div key={i} style={{fontSize:9,color:a.color,fontWeight:600}}>{a.msg}</div>))}</div></div></td>
                 <td className="mf-td" onClick={e=>e.stopPropagation()}><button className="mf-tel-btn" onClick={()=>setContactoL(lead)}>📞 {lead.telefono||"--"}</button></td>
@@ -1494,6 +1789,59 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
     {contactoL&&<ContactoModal lead={contactoL} onClose={()=>setContactoL(null)}/>}
     {leadAct&&<LeadModal lead={leadAct} onClose={()=>setLeadAct(null)} onSave={save} onDelete={del} cuentas={cuentas} usuario={usuario}/>}
     {nuevoM&&<LeadModal lead={{...emptyL,mesCreacion:tab==="sig"?mesSig:mesHoy}} onClose={()=>setNuevoM(false)} onSave={d=>{save(d);setNuevoM(false);}} onDelete={()=>{}} cuentas={cuentas} usuario={usuario}/>}
+
+    {/* Barra de acción de selección múltiple — flotante abajo */}
+    {seleccionados.size > 0 && (
+      <div style={{
+        position:"fixed", bottom:18, left:"50%", transform:"translateX(-50%)",
+        zIndex:800, background:B.navy, color:B.white,
+        borderRadius:14, padding:"12px 16px",
+        boxShadow:"0 12px 40px rgba(10,31,68,.4)",
+        display:"flex", alignItems:"center", gap:14, flexWrap:"wrap",
+        border:`1px solid ${B.gold}55`,
+        animation:"fadeUp .2s ease",
+        maxWidth:"calc(100vw - 32px)",
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:30,height:30,borderRadius:"50%",background:B.gold,color:B.navy,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:13}}>
+            {seleccionados.size}
+          </div>
+          <span style={{fontSize:13,fontWeight:600}}>
+            {seleccionados.size === 1 ? "1 lead seleccionado" : `${seleccionados.size} leads seleccionados`}
+          </span>
+        </div>
+        <button onClick={()=>setConfirmandoBorrado(true)} style={{
+          padding:"9px 16px", borderRadius:9, border:"none",
+          background:B.redBright, color:"#fff",
+          fontFamily:"'Poppins',sans-serif", fontWeight:700, fontSize:12,
+          cursor:"pointer", display:"inline-flex", alignItems:"center", gap:6,
+          boxShadow:`0 4px 14px ${B.redBright}66`,
+        }}>
+          🗑 Eliminar
+        </button>
+        <button onClick={limpiarSeleccion} style={{
+          padding:"9px 14px", borderRadius:9,
+          border:"1px solid rgba(255,255,255,0.2)",
+          background:"transparent", color:"rgba(255,255,255,0.85)",
+          fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+          cursor:"pointer",
+        }}>
+          Limpiar
+        </button>
+      </div>
+    )}
+
+    {/* Modal de confirmación de borrado masivo */}
+    {confirmandoBorrado && (
+      <ConfirmModal
+        titulo={`¿Eliminar ${seleccionados.size} ${seleccionados.size === 1 ? "lead" : "leads"}?`}
+        mensaje="Esta acción no se puede deshacer. Los leads seleccionados se borrarán permanentemente."
+        icono="🗑️"
+        textoConfirm={`Sí, eliminar ${seleccionados.size}`}
+        onConfirm={confirmarBorradoMasivo}
+        onCancel={()=>setConfirmandoBorrado(false)}
+      />
+    )}
   </div>);
 }
 
@@ -1555,15 +1903,90 @@ function Usuarios({usuario,cuentas,setCuentas}) {
   </div>;
 }
 
+// Detecta si la URL viene del link de recuperación (#access_token=...&type=recovery)
+function detectarRecovery() {
+  if (typeof window === "undefined") return false;
+  const hash = window.location.hash || "";
+  const search = window.location.search || "";
+  return hash.includes("type=recovery") || search.includes("type=recovery");
+}
+
 export default function App() {
   const [usuario,setUsuario]=useState(null);
-  const [cuentas,setCuentas]=useState(()=>LS.get("mf_cuentas",CUENTAS_INIT));
+  const [cuentas,setCuentas]=useState([]);
   const [seccion,setSeccion]=useState("dashboard");
   const [filtroNav,setFiltroNav]=useState("todos");
   const [allLeads,setAllLeads]=useState(()=>LS.get("mf_leads",{}));
   const [allEventos,setAllEventos]=useState(()=>LS.get("mf_eventos",{}));
   const [notifOpen,setNotifOpen]=useState(false);
   const [sessionStart]=useState(()=>Date.now());
+  const [authReady,setAuthReady]=useState(false);
+  const [recoveryMode,setRecoveryMode]=useState(()=>detectarRecovery());
+  const [loginMsg,setLoginMsg]=useState("");
+
+  // Cargar perfil desde la tabla cuentas (con auto-create si el trigger falló)
+  async function cargarPerfil(userId) {
+    let { data, error } = await supabase
+      .from("cuentas").select("*").eq("id", userId).maybeSingle();
+    if (error) { console.error("cargarPerfil error:", error); return null; }
+    if (!data) {
+      const { data: userData } = await supabase.auth.getUser();
+      const meta = userData?.user?.user_metadata || {};
+      const emailUser = userData?.user?.email || "";
+      const prefijo = emailUser.split("@")[0] || "usuario";
+      const { data: nuevo, error: insErr } = await supabase
+        .from("cuentas")
+        .insert({
+          id: userId,
+          nombre: meta.nombre || prefijo,
+          usuario: prefijo + "_" + userId.substring(0, 4),
+          rol: meta.rol || "admin",
+        })
+        .select().single();
+      if (insErr) { console.error("auto-create perfil falló:", insErr); return null; }
+      data = nuevo;
+    }
+    return {
+      id: data.id, nombre: data.nombre, usuario: data.usuario,
+      rol: data.rol, color: data.color, adminId: data.admin_id,
+    };
+  }
+
+  async function cargarEquipo() {
+    const { data } = await supabase.from("cuentas").select("*");
+    if (data) setCuentas(data.map(c => ({
+      id: c.id, nombre: c.nombre, usuario: c.usuario,
+      rol: c.rol, color: c.color, adminId: c.admin_id,
+    })));
+  }
+
+  // Verificar sesión al cargar y escuchar cambios
+  useEffect(() => {
+    let mounted = true;
+    const enRecovery = detectarRecovery();
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      if (session?.user && !enRecovery) {
+        const perfil = await cargarPerfil(session.user.id);
+        if (perfil) {
+          setUsuario(perfil);
+          setSeccion(perfil.rol === "asistente" ? "agenda" : "dashboard");
+          await cargarEquipo();
+        }
+      }
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "PASSWORD_RECOVERY") { setRecoveryMode(true); return; }
+      if (event === "SIGNED_OUT") { setUsuario(null); setCuentas([]); return; }
+      if (event === "SIGNED_IN" && session?.user && !recoveryMode && !detectarRecovery()) {
+        const perfil = await cargarPerfil(session.user.id);
+        if (perfil) { setUsuario(perfil); await cargarEquipo(); }
+      }
+    });
+    return () => { mounted = false; subscription.unsubscribe(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const cid=usuario?.rol==="asistente"?usuario.adminId:usuario?.id;
   const leads=cid?(allLeads[cid]||[]):[];
@@ -1572,14 +1995,38 @@ export default function App() {
   function setLeads(fn){setAllLeads(p=>{const u={...p,[cid]:typeof fn==="function"?fn(p[cid]||[]):fn};LS.set("mf_leads",u);return u;});}
   function setEventos(fn){setAllEventos(p=>{const u={...p,[cid]:typeof fn==="function"?fn(p[cid]||[]):fn};LS.set("mf_eventos",u);return u;});}
 
-  function onLogin(u,cs){
-    setUsuario(u);setCuentas(cs||[]);
+  async function onLogin(u){
+    setUsuario(u);
     setSeccion(u.rol==="asistente"?"agenda":"dashboard");
-    // Ya NO regeneramos leads de demostración automáticamente.
-    // Los leads quedan vacíos hasta que el usuario los importe o los cree manualmente.
+    await cargarEquipo();
+    // Ya NO regeneramos leads de demostración. Los leads vienen vacíos hasta que importes o crees manualmente.
   }
 
-  if(!usuario)return <Auth onLogin={onLogin}/>;
+  async function logout(){
+    await supabase.auth.signOut();
+    // El listener onAuthStateChange limpia el resto
+  }
+
+  if(!authReady) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#060e1c",color:"#C6A96B",fontFamily:"'Poppins',sans-serif",fontSize:14}}>Cargando...</div>;
+
+  // Modo recuperación de contraseña (después del link del correo)
+  if (recoveryMode) {
+    return <RecoveryPassword
+      onSuccess={() => {
+        setRecoveryMode(false);
+        setUsuario(null);
+        setLoginMsg("Contraseña actualizada. Inicia sesión con tu nueva contraseña.");
+      }}
+      onCancel={async () => {
+        window.history.replaceState(null, "", window.location.pathname);
+        await supabase.auth.signOut();
+        setRecoveryMode(false);
+        setUsuario(null);
+      }}
+    />;
+  }
+
+  if(!usuario) return <Auth onLogin={onLogin} mensajeInicial={loginMsg}/>;
 
   const esAdmin=["admin","superadmin"].includes(usuario.rol);
   const esAsistente=usuario.rol==="asistente";
@@ -1670,7 +2117,7 @@ export default function App() {
             {alertaCount>0&&(<div style={{minWidth:20,height:20,padding:"0 5px",background:B.redBright,borderRadius:10,fontSize:9,color:"#fff",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{alertaCount}</div>)}
             <Av name={usuario.nombre} size={32} color={usuario.color||B.gold}/>
             <div className="mf-user-nasme"><div style={{fontSize:12,fontWeight:700,color:"#fff",lineHeight:1.2}}>{usuario.nombre}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",textTransform:"capitalize",letterSpacing:".3px"}}>{usuario.rol}</div></div>
-            <button onClick={()=>setUsuario(null)} style={{padding:"6px 12px",minHeight:34,borderRadius:8,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.8)",fontFamily:"'Poppins',sans-serif",fontSize:11,cursor:"pointer",flexShrink:0,fontWeight:500}}>Salir</button>
+            <button onClick={logout} style={{padding:"6px 12px",minHeight:34,borderRadius:8,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.8)",fontFamily:"'Poppins',sans-serif",fontSize:11,cursor:"pointer",flexShrink:0,fontWeight:500}}>Salir</button>
           </div>
         </div>
         <div className="mf-header-row2">
