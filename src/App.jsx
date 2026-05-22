@@ -2097,7 +2097,7 @@ export default function App() {
         tipo: s.tipo || null, texto: s.texto || "",
         autor_id: s.autorId || autorId || null,
       }));
-      const { error } = await supabase.from("seguimientos").insert(rows);
+      const { error } = await supabase.from("seguimientos").upsert(rows, { onConflict: "id", ignoreDuplicates: true });
       if (error) console.error("insert seguimientos error:", error);
     }
     if (aBorrar.length) {
@@ -2148,16 +2148,14 @@ export default function App() {
   const eventos=cid?(allEventos[cid]||[]):[];
 
   // setLeads: aplica el cambio al state local Y sincroniza con Supabase.
-  // Detecta inserts/deletes/updates automáticamente comparando con el estado anterior.
+  // IMPORTANTE: la sincronización va FUERA del updater de setState para evitar
+  // doble ejecución bajo React StrictMode (que dispararía duplicate key errors).
   function setLeads(fn) {
     if (!cid) return;
-    setAllLeads(prev => {
-      const old = prev[cid] || [];
-      const next = typeof fn === "function" ? fn(old) : fn;
-      // Sincronización en background con Supabase
-      sincronizarLeadsConDB(old, next, cid, usuario?.id);
-      return { ...prev, [cid]: next };
-    });
+    const old = allLeads[cid] || [];
+    const next = typeof fn === "function" ? fn(old) : fn;
+    setAllLeads(prev => ({ ...prev, [cid]: next }));
+    sincronizarLeadsConDB(old, next, cid, usuario?.id);
   }
 
   async function sincronizarLeadsConDB(oldLeads, newLeads, adminId, autorId) {
@@ -2176,7 +2174,8 @@ export default function App() {
     try {
       if (inserted.length) {
         const rows = inserted.map(l => leadToDB(l, adminId));
-        const { error } = await supabase.from("leads").insert(rows);
+        // upsert con ignoreDuplicates: protege contra dobles llamadas (StrictMode, doble click, etc.)
+        const { error } = await supabase.from("leads").upsert(rows, { onConflict: "id", ignoreDuplicates: true });
         if (error) { console.error("INSERT leads error:", error); errores.push(`INSERT: ${error.message}`); }
         else {
           for (const l of inserted) {
@@ -2208,16 +2207,15 @@ export default function App() {
     if (errores.length) {
       alert("⚠️ No se pudieron guardar los cambios en Supabase:\n\n" + errores.join("\n") + "\n\nRevisa la consola (Cmd+Option+I) para más detalle.");
     }
+    return { ok: errores.length === 0, errores };
   }
 
   function setEventos(fn) {
     if (!cid) return;
-    setAllEventos(prev => {
-      const old = prev[cid] || [];
-      const next = typeof fn === "function" ? fn(old) : fn;
-      sincronizarEventosConDB(old, next, cid, usuario?.id);
-      return { ...prev, [cid]: next };
-    });
+    const old = allEventos[cid] || [];
+    const next = typeof fn === "function" ? fn(old) : fn;
+    setAllEventos(prev => ({ ...prev, [cid]: next }));
+    sincronizarEventosConDB(old, next, cid, usuario?.id);
   }
 
   async function sincronizarEventosConDB(oldEv, newEv, adminId, creadorId) {
@@ -2233,7 +2231,7 @@ export default function App() {
     try {
       if (inserted.length) {
         const rows = inserted.map(e => eventoToDB(e, adminId, creadorId));
-        const { error } = await supabase.from("eventos").insert(rows);
+        const { error } = await supabase.from("eventos").upsert(rows, { onConflict: "id", ignoreDuplicates: true });
         if (error) { console.error("INSERT eventos error:", error); errores.push(`INSERT: ${error.message}`); }
       }
       if (deleted.length) {
