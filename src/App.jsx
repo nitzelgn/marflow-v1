@@ -521,6 +521,35 @@ const IconTrash = ({size=14, color="currentColor"}) => (
     <line x1="14" x2="14" y1="11" y2="17"/>
   </svg>
 );
+const IconLock = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+);
+const IconShield = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+  </svg>
+);
+const IconFingerprint = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 11v2a14 14 0 0 0 2.5 8"/>
+    <path d="M16 11v2a23 23 0 0 0 .5 4.5"/>
+    <path d="M8 14a18.5 18.5 0 0 0 1.5 6"/>
+    <path d="M6 11a6 6 0 0 1 8-5.7"/>
+    <path d="M19 13a13 13 0 0 1-1 4"/>
+    <path d="M19.5 9.5a8 8 0 0 0-14 0"/>
+    <path d="M3 16a26 26 0 0 0 .8 4.7"/>
+    <path d="M12 5a7 7 0 0 1 7 7"/>
+  </svg>
+);
+const IconClock2 = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>
+);
 
 function Auth({onLogin, mensajeInicial}) {
   const [email,setEmail]=useState("");
@@ -1234,6 +1263,526 @@ function RecoveryPassword({onSuccess, onCancel}) {
         </div>
         <div style={{textAlign:"center",marginTop:24}}>
           <div style={{fontSize:10,color:"rgba(198,169,107,0.25)",letterSpacing:2,textTransform:"uppercase"}}>© 2025 MarFlow</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   BIOMETRÍA WebAuthn (Face ID / Touch ID nativo del browser)
+   - Sin librerías externas, sólo navigator.credentials API
+   - Modelo "lock screen": la biometría desbloquea la sesión guardada de Supabase
+   - NUNCA almacenamos contraseñas ni tokens; solo el credentialId
+═══════════════════════════════════════════ */
+const BIO_KEY_CRED = "mf_biometric_cred";
+const BIO_KEY_USER = "mf_biometric_user";
+const BIO_SESSION_UNLOCKED = "mf_bio_unlocked";
+
+function biometriaSoportada() {
+  return typeof window !== "undefined" && !!(window.PublicKeyCredential && navigator.credentials);
+}
+
+async function biometriaPlataformaDisponible() {
+  if (!biometriaSoportada()) return false;
+  try {
+    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  } catch { return false; }
+}
+
+function biometriaActiva(usuarioId) {
+  try {
+    const cred = localStorage.getItem(BIO_KEY_CRED);
+    const user = localStorage.getItem(BIO_KEY_USER);
+    return !!(cred && user && (!usuarioId || user === usuarioId));
+  } catch { return false; }
+}
+
+async function registrarBiometria(usuario) {
+  if (!biometriaSoportada()) throw new Error("Tu dispositivo no soporta biometría");
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  const userIdBytes = new TextEncoder().encode(usuario.id);
+
+  const credential = await navigator.credentials.create({
+    publicKey: {
+      challenge,
+      rp: { name: "MarFlow", id: window.location.hostname },
+      user: {
+        id: userIdBytes,
+        name: usuario.usuario || usuario.id,
+        displayName: usuario.nombre || "Usuario MarFlow",
+      },
+      pubKeyCredParams: [
+        { type: "public-key", alg: -7 },   // ES256
+        { type: "public-key", alg: -257 }, // RS256
+      ],
+      authenticatorSelection: {
+        authenticatorAttachment: "platform",
+        userVerification: "required",
+        requireResidentKey: false,
+      },
+      timeout: 60000,
+      attestation: "none",
+    },
+  });
+
+  const credId = new Uint8Array(credential.rawId);
+  const credIdB64 = btoa(String.fromCharCode(...credId));
+  localStorage.setItem(BIO_KEY_CRED, credIdB64);
+  localStorage.setItem(BIO_KEY_USER, usuario.id);
+  sessionStorage.setItem(BIO_SESSION_UNLOCKED, "true");
+}
+
+async function verificarBiometria() {
+  if (!biometriaSoportada()) throw new Error("Biometría no soportada");
+  const credB64 = localStorage.getItem(BIO_KEY_CRED);
+  if (!credB64) throw new Error("No hay biometría configurada");
+
+  const credBytes = Uint8Array.from(atob(credB64), c => c.charCodeAt(0));
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+
+  await navigator.credentials.get({
+    publicKey: {
+      challenge,
+      allowCredentials: [{ type: "public-key", id: credBytes, transports: ["internal"] }],
+      userVerification: "required",
+      timeout: 60000,
+      rpId: window.location.hostname,
+    },
+  });
+  // Si no lanzó, la verificación fue exitosa
+  sessionStorage.setItem(BIO_SESSION_UNLOCKED, "true");
+  return true;
+}
+
+function desactivarBiometria() {
+  localStorage.removeItem(BIO_KEY_CRED);
+  localStorage.removeItem(BIO_KEY_USER);
+  sessionStorage.removeItem(BIO_SESSION_UNLOCKED);
+}
+
+function bioSessionDesbloqueada() {
+  try { return sessionStorage.getItem(BIO_SESSION_UNLOCKED) === "true"; }
+  catch { return false; }
+}
+
+/* ═══════════════════════════════════════════
+   PANTALLA DE BLOQUEO BIOMÉTRICO
+═══════════════════════════════════════════ */
+function BiometricLockScreen({ onUnlocked, onUsePassword }) {
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function intentar() {
+    if (loading) return;
+    setErr(""); setLoading(true);
+    try {
+      await verificarBiometria();
+      onUnlocked();
+    } catch (e) {
+      setErr(e?.name === "NotAllowedError" ? "Verificación cancelada o fallida."
+           : (e?.message || "No se pudo verificar."));
+      setLoading(false);
+    }
+  }
+
+  // Auto-prompt al cargar (mejor UX)
+  useEffect(() => {
+    const t = setTimeout(intentar, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div style={{
+      minHeight: "100vh", minHeight: "100dvh",
+      background: "#F8F6F2",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 24,
+      fontFamily: "'Poppins', sans-serif",
+      position: "relative", overflow: "hidden",
+    }} className="mf-fade-in">
+      <div style={{position:"absolute",top:-160,left:-160,width:480,height:480,borderRadius:"50%",background:"radial-gradient(circle,rgba(198,169,107,0.18),transparent 70%)",filter:"blur(80px)",pointerEvents:"none"}}/>
+      <div style={{position:"absolute",bottom:-200,right:-200,width:600,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(10,31,68,0.08),transparent 70%)",filter:"blur(80px)",pointerEvents:"none"}}/>
+
+      <div style={{width:"100%",maxWidth:380,textAlign:"center",position:"relative",zIndex:1}}>
+        <img src="/icon-512.png" alt="MarFlow"
+          style={{height:80,width:80,objectFit:"contain",margin:"0 auto 24px",display:"block",filter:"drop-shadow(0 12px 28px rgba(10,31,68,0.10))"}}
+          draggable="false"/>
+
+        <div style={{
+          width: 64, height: 64, borderRadius: "50%",
+          background: "rgba(198,169,107,0.10)",
+          border: "1px solid rgba(198,169,107,0.25)",
+          margin: "0 auto 20px",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: "#C6A96B",
+        }}>
+          <IconFingerprint size={32} color="#C6A96B"/>
+        </div>
+
+        <h1 style={{
+          fontFamily: "'Cormorant Garamond', serif",
+          fontSize: 28, fontWeight: 500,
+          color: "#0A1F44",
+          letterSpacing: "-0.02em",
+          margin: "0 0 8px",
+        }}>Tu sesión está activa</h1>
+        <p style={{
+          fontSize: 14, color: "rgba(10,31,68,0.55)",
+          margin: "0 0 28px", lineHeight: 1.5,
+        }}>Verifica con biometría para continuar.</p>
+
+        {err && (
+          <div style={{
+            display:"flex",alignItems:"center",gap:8,
+            padding:"10px 14px",borderRadius:10,
+            background:"rgba(220,38,38,0.06)",
+            border:"1px solid rgba(220,38,38,0.18)",
+            color:"#991b1b", fontSize:13, marginBottom:14,
+            justifyContent:"center",
+          }}>
+            <IconAlert size={15} color="#991b1b"/>{err}
+          </div>
+        )}
+
+        <button onClick={intentar} disabled={loading}
+          style={{
+            width:"100%",
+            padding:"14px 20px",
+            borderRadius:12,
+            border:"none",
+            background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+            color:"#fff",
+            fontFamily:"'Poppins',sans-serif",
+            fontSize:14, fontWeight:600,
+            cursor:"pointer",
+            boxShadow:"0 4px 14px rgba(10,31,68,0.18)",
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            opacity: loading ? 0.7 : 1,
+            display:"inline-flex", alignItems:"center", justifyContent:"center", gap:8,
+            marginBottom:12,
+          }}>
+          {loading ? <><IconLoader size={14} color="#fff"/> Verificando…</> : <><IconFingerprint size={15} color="#fff"/> Desbloquear</>}
+        </button>
+
+        <button onClick={onUsePassword}
+          style={{
+            width:"100%",
+            padding:"12px 18px",
+            borderRadius:12,
+            border:"1px solid rgba(10,31,68,0.10)",
+            background:"transparent",
+            color:"rgba(10,31,68,0.65)",
+            fontFamily:"'Poppins',sans-serif",
+            fontSize:13, fontWeight:500,
+            cursor:"pointer",
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+          }}>
+          Usar contraseña
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   MODAL DE AVISO DE INACTIVIDAD (1 min antes del logout)
+═══════════════════════════════════════════ */
+function IdleWarningModal({ onContinue, onLogout, countdownSeconds = 60 }) {
+  const [seconds, setSeconds] = useState(countdownSeconds);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setSeconds(s => {
+        if (s <= 1) { clearInterval(t); onLogout(); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const mm = String(Math.floor(seconds/60)).padStart(1,"0");
+  const ss = String(seconds%60).padStart(2,"0");
+
+  return (
+    <div style={{
+      position:"fixed", inset:0, zIndex:1200,
+      background:"rgba(10,31,68,0.40)",
+      backdropFilter:"blur(8px)",
+      WebkitBackdropFilter:"blur(8px)",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      padding:24,
+      animation:"mfFadeIn .25s var(--mf-ease-out)",
+    }} onClick={(e)=>{ if(e.target===e.currentTarget) onContinue(); }}>
+      <div style={{
+        background:"#F8F6F2",
+        borderRadius:20,
+        padding:"32px 28px 26px",
+        maxWidth:400, width:"100%",
+        boxShadow:"0 24px 60px rgba(10,31,68,0.25)",
+        border:"1px solid rgba(10,31,68,0.05)",
+        animation:"mfFadeUp .35s var(--mf-ease-spring)",
+        textAlign:"center",
+        fontFamily:"'Poppins', sans-serif",
+      }}>
+        <div style={{
+          width:56, height:56, borderRadius:"50%",
+          background:"rgba(198,169,107,0.10)",
+          border:"1px solid rgba(198,169,107,0.25)",
+          margin:"0 auto 18px",
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}>
+          <IconClock2 size={26} color="#C6A96B"/>
+        </div>
+
+        <h2 style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:24, fontWeight:500,
+          color:"#0A1F44",
+          letterSpacing:"-0.01em",
+          margin:"0 0 8px",
+        }}>Sesión a punto de cerrarse</h2>
+
+        <p style={{
+          fontSize:13.5, color:"rgba(10,31,68,0.60)",
+          lineHeight:1.55,
+          margin:"0 0 18px",
+        }}>Por seguridad, tu sesión se cerrará pronto por inactividad.</p>
+
+        <div style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:42, fontWeight:500,
+          color:"#0A1F44",
+          letterSpacing:"-0.02em",
+          margin:"0 0 24px",
+          fontVariantNumeric:"tabular-nums",
+        }}>{mm}:{ss}</div>
+
+        <div style={{display:"flex", gap:10, flexDirection:"column"}}>
+          <button onClick={onContinue}
+            style={{
+              padding:"13px 18px",
+              borderRadius:12, border:"none",
+              background:"linear-gradient(135deg, #C6A96B 0%, #d4bc89 100%)",
+              color:"#0A1F44",
+              fontFamily:"'Poppins',sans-serif",
+              fontWeight:600, fontSize:13.5,
+              cursor:"pointer",
+              boxShadow:"0 4px 14px rgba(198,169,107,0.35)",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)"; e.currentTarget.style.boxShadow="0 6px 18px rgba(198,169,107,0.45)";}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 4px 14px rgba(198,169,107,0.35)";}}>
+            Seguir usando MarFlow
+          </button>
+          <button onClick={onLogout}
+            style={{
+              padding:"11px 18px",
+              borderRadius:12,
+              border:"1px solid rgba(10,31,68,0.10)",
+              background:"transparent",
+              color:"rgba(10,31,68,0.65)",
+              fontFamily:"'Poppins',sans-serif",
+              fontWeight:500, fontSize:12.5,
+              cursor:"pointer",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}>
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   SEGURIDAD — sección de preferencias de seguridad
+═══════════════════════════════════════════ */
+function Seguridad({ usuario }) {
+  const [bioActivada, setBioActivada] = useState(() => biometriaActiva(usuario?.id));
+  const [bioPlataforma, setBioPlataforma] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    biometriaPlataformaDisponible().then(setBioPlataforma);
+  }, []);
+
+  async function activar() {
+    setMsg(""); setLoading(true);
+    try {
+      await registrarBiometria(usuario);
+      setBioActivada(true);
+      setMsg("✓ Biometría activada. La próxima vez que entres podrás desbloquear con Face ID / Touch ID.");
+    } catch (e) {
+      setMsg("✗ " + (e?.message || "No se pudo activar la biometría."));
+    } finally { setLoading(false); }
+  }
+
+  function desactivar() {
+    desactivarBiometria();
+    setBioActivada(false);
+    setMsg("Biometría desactivada para este dispositivo.");
+  }
+
+  const soportada = biometriaSoportada();
+
+  return (
+    <div className="mf-fade-in" style={{maxWidth:680, margin:"0 auto"}}>
+      <div style={{marginBottom:24}}>
+        <div style={{
+          fontSize:10.5, fontWeight:500,
+          color:"rgba(10,31,68,0.45)",
+          textTransform:"uppercase", letterSpacing:"0.22em",
+          marginBottom:8,
+        }}>Preferencias</div>
+        <h1 style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:32, fontWeight:500,
+          color:"#0A1F44", letterSpacing:"-0.02em",
+          margin:"0 0 8px", lineHeight:1.1,
+        }}>Seguridad</h1>
+        <p style={{fontSize:14, color:"rgba(10,31,68,0.55)", margin:0, lineHeight:1.5}}>
+          Controla cómo accedes a MarFlow desde este dispositivo.
+        </p>
+      </div>
+
+      {/* Tarjeta biometría */}
+      <div style={{
+        background:"#fff",
+        border:"1px solid rgba(10,31,68,0.06)",
+        borderRadius:16,
+        padding:"22px 24px",
+        boxShadow:"var(--mf-shadow-xs)",
+        marginBottom:14,
+      }}>
+        <div style={{display:"flex", alignItems:"flex-start", gap:14, marginBottom:16}}>
+          <div style={{
+            width:42, height:42, borderRadius:10,
+            background:"rgba(198,169,107,0.10)",
+            border:"1px solid rgba(198,169,107,0.20)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            flexShrink:0,
+          }}>
+            <IconFingerprint size={20} color="#C6A96B"/>
+          </div>
+          <div style={{flex:1, minWidth:0}}>
+            <div style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:20, fontWeight:500,
+              color:"#0A1F44", letterSpacing:"-0.01em",
+              marginBottom:4,
+            }}>Acceso biométrico</div>
+            <div style={{fontSize:13, color:"rgba(10,31,68,0.60)", lineHeight:1.55}}>
+              {soportada && bioPlataforma
+                ? "Usa Face ID o Touch ID para desbloquear tu sesión cuando regreses a la app."
+                : "Tu dispositivo no soporta biometría o el navegador no la expone."}
+            </div>
+          </div>
+          <span style={{
+            fontSize:10, fontWeight:600,
+            color: bioActivada ? "#166534" : "rgba(10,31,68,0.45)",
+            background: bioActivada ? "rgba(22,101,52,0.08)" : "rgba(10,31,68,0.05)",
+            padding:"4px 10px", borderRadius:8,
+            textTransform:"uppercase", letterSpacing:"0.10em",
+            whiteSpace:"nowrap",
+          }}>{bioActivada ? "Activa" : "Inactiva"}</span>
+        </div>
+
+        {msg && (
+          <div style={{
+            padding:"10px 13px", borderRadius:10,
+            background: msg.startsWith("✓") ? "rgba(22,101,52,0.05)"
+                      : msg.startsWith("✗") ? "rgba(220,38,38,0.05)"
+                      : "rgba(10,31,68,0.04)",
+            border: `1px solid ${msg.startsWith("✓") ? "rgba(22,101,52,0.18)"
+                      : msg.startsWith("✗") ? "rgba(220,38,38,0.18)"
+                      : "rgba(10,31,68,0.08)"}`,
+            color: msg.startsWith("✓") ? "#166534"
+                 : msg.startsWith("✗") ? "#991b1b"
+                 : "rgba(10,31,68,0.70)",
+            fontSize:12.5, lineHeight:1.5,
+            marginBottom:12,
+          }}>{msg.replace(/^[✓✗]\s*/, "")}</div>
+        )}
+
+        {!soportada || !bioPlataforma ? (
+          <div style={{
+            padding:"10px 13px", borderRadius:10,
+            background:"rgba(10,31,68,0.03)",
+            border:"1px solid rgba(10,31,68,0.06)",
+            fontSize:12, color:"rgba(10,31,68,0.55)",
+            lineHeight:1.55, fontStyle:"italic",
+          }}>
+            Tu dispositivo no expone autenticación biométrica al navegador. Funciona en iOS 16+ (Safari) y la mayoría de dispositivos Android/Windows modernos.
+          </div>
+        ) : !bioActivada ? (
+          <button onClick={activar} disabled={loading}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:7,
+              padding:"10px 16px", borderRadius:10, border:"none",
+              background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+              color:"#fff",
+              fontFamily:"'Poppins',sans-serif",
+              fontWeight:600, fontSize:12.5,
+              cursor:"pointer",
+              boxShadow:"0 1px 2px rgba(10,31,68,0.10)",
+              opacity: loading ? 0.7 : 1,
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}>
+            {loading ? <><IconLoader size={13} color="#fff"/> Activando…</> : <><IconFingerprint size={13} color="#fff"/> Activar biometría</>}
+          </button>
+        ) : (
+          <button onClick={desactivar}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:7,
+              padding:"10px 16px", borderRadius:10,
+              border:"1px solid rgba(220,38,38,0.20)",
+              background:"transparent",
+              color:"#991b1b",
+              fontFamily:"'Poppins',sans-serif",
+              fontWeight:500, fontSize:12.5,
+              cursor:"pointer",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.04)";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+            <IconLock size={13} color="#991b1b"/> Desactivar biometría
+          </button>
+        )}
+      </div>
+
+      {/* Tarjeta auto-logout (informativa) */}
+      <div style={{
+        background:"#fff",
+        border:"1px solid rgba(10,31,68,0.06)",
+        borderRadius:16,
+        padding:"22px 24px",
+        boxShadow:"var(--mf-shadow-xs)",
+      }}>
+        <div style={{display:"flex", alignItems:"flex-start", gap:14}}>
+          <div style={{
+            width:42, height:42, borderRadius:10,
+            background:"rgba(10,31,68,0.05)",
+            border:"1px solid rgba(10,31,68,0.08)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            flexShrink:0,
+          }}>
+            <IconShield size={20} color="#0A1F44"/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:20, fontWeight:500,
+              color:"#0A1F44", letterSpacing:"-0.01em",
+              marginBottom:4,
+            }}>Cierre automático por inactividad</div>
+            <div style={{fontSize:13, color:"rgba(10,31,68,0.60)", lineHeight:1.55}}>
+              Por seguridad, tu sesión se cerrará automáticamente tras <strong>15 minutos sin actividad</strong>. Verás un aviso 1 minuto antes para extender la sesión.
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -4019,6 +4568,8 @@ export default function App() {
   const [datosCargando,setDatosCargando]=useState(false);
   const [recoveryMode,setRecoveryMode]=useState(()=>detectarRecovery());
   const [loginMsg,setLoginMsg]=useState("");
+  const [idleWarning,setIdleWarning]=useState(false);
+  const [bioLocked,setBioLocked]=useState(false);
 
   // Cargar perfil desde la tabla cuentas (con auto-create si el trigger falló)
   async function cargarPerfil(userId) {
@@ -4259,6 +4810,47 @@ export default function App() {
     // El listener onAuthStateChange limpia el resto
   }
 
+  // ── Auto-logout por inactividad (15 min total, warning a los 14) ──
+  useEffect(() => {
+    if (!usuario || bioLocked) return; // No correr el timer si está bloqueado o sin sesión
+
+    const WARNING_MS = 14 * 60 * 1000; // 14 min de inactividad → warning
+    const lastActivityRef = { current: Date.now() };
+    let lastReset = 0;
+
+    const resetTimer = () => {
+      const now = Date.now();
+      if (now - lastReset < 1000) return; // throttle 1s
+      lastReset = now;
+      lastActivityRef.current = now;
+      if (idleWarning) setIdleWarning(false); // si vuelve, esconder el warning
+    };
+
+    const events = ["mousedown", "keydown", "scroll", "touchstart", "mousemove"];
+    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
+
+    const checkInterval = setInterval(() => {
+      const idle = Date.now() - lastActivityRef.current;
+      if (idle >= WARNING_MS && !idleWarning) setIdleWarning(true);
+    }, 5000);
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+      clearInterval(checkInterval);
+    };
+  }, [usuario, bioLocked, idleWarning]);
+
+  // ── Bloqueo biométrico al cargar (si está activado y no se verificó en esta sesión) ──
+  useEffect(() => {
+    if (!usuario) { setBioLocked(false); return; }
+    if (recoveryMode) { setBioLocked(false); return; }
+    if (biometriaActiva(usuario.id) && !bioSessionDesbloqueada()) {
+      setBioLocked(true);
+    } else {
+      setBioLocked(false);
+    }
+  }, [usuario, recoveryMode]);
+
   if(!authReady) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#060e1c",color:"#C6A96B",fontFamily:"'Poppins',sans-serif",fontSize:14}}>Cargando...</div>;
 
   // Mientras se cargan datos desde Supabase tras el login
@@ -4287,6 +4879,20 @@ export default function App() {
 
   if(!usuario) return <Auth onLogin={onLogin} mensajeInicial={loginMsg}/>;
 
+  // Pantalla de bloqueo biométrico (lock screen)
+  if (bioLocked) {
+    return (
+      <BiometricLockScreen
+        onUnlocked={() => setBioLocked(false)}
+        onUsePassword={async () => {
+          // Salir y forzar login con contraseña
+          setBioLocked(false);
+          await supabase.auth.signOut();
+        }}
+      />
+    );
+  }
+
   const esAdmin=["admin","superadmin"].includes(usuario.rol);
   const esAsistente=usuario.rol==="asistente";
   const alertaCount=leads.filter(l=>!l.sinSeguimiento&&getAlertas(l).some(a=>["riesgo","sin_contacto"].includes(a.tipo))&&!["otro","cierre"].includes(l.etapa)).length;
@@ -4300,6 +4906,7 @@ export default function App() {
     ...(esAdmin?[{id:"mensajes",icon:<IconMail size={14}/>,l:"Mensajes"}]:[]),
     ...(esAdmin?[{id:"cobranza",icon:<IconDollar size={14}/>,l:"Cobranza"}]:[]),
     ...(esAdmin?[{id:"usuarios",icon:<IconUser size={14}/>,l:"Usuarios"}]:[]),
+    {id:"seguridad",icon:<IconShield size={14}/>,l:"Seguridad"},
   ];
 
   const APP_CSS=`
@@ -4345,7 +4952,25 @@ export default function App() {
 
       <header className="mf-header">
         <div className="mf-header-row1" style={{background:"#0A1F44"}}>
-          <MarflowLogo height={36} dark={true}/>
+          <div style={{display:"inline-flex",alignItems:"center",gap:10}}>
+            <img
+              src="/icon-512.png"
+              alt="MarFlow"
+              style={{
+                height: 32, width: 32,
+                objectFit: "contain",
+                filter: "drop-shadow(0 4px 12px rgba(198,169,107,0.30))",
+                userSelect: "none", WebkitUserDrag: "none",
+              }}
+              draggable="false"
+            />
+            <span style={{
+              fontFamily: "'Cormorant Garamond', serif",
+              fontSize: 19, fontWeight: 500,
+              letterSpacing: "-0.01em",
+              color: "#f0ece4",
+            }}>MarFlow</span>
+          </div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
             <div style={{position:"relative"}}>
               <button onClick={()=>setNotifOpen(o=>!o)} style={{width:36,height:36,borderRadius:"50%",border:`1px solid ${notifOpen?B.gold:"rgba(255,255,255,0.3)"}`,background:notifOpen?B.gold+"22":"rgba(255,255,255,0.1)",color:notifOpen?B.gold:"#fff",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .18s",flexShrink:0,position:"relative"}}>
@@ -4404,9 +5029,26 @@ export default function App() {
         {seccion==="mensajes"&&esAdmin&&<Mensajes/>}
         {seccion==="cobranza"&&esAdmin&&<Cobranza/>}
         {seccion==="usuarios"&&esAdmin&&<Usuarios usuario={usuario} cuentas={cuentas} setCuentas={cs=>{setCuentas(cs);LS.set("mf_cuentas",cs);}}/>}
+        {seccion==="seguridad"&&<Seguridad usuario={usuario}/>}
       </main>
 
       <div style={{height:2,background:`linear-gradient(90deg,transparent,${B.gold}55,transparent)`,position:"fixed",bottom:0,left:0,right:0,pointerEvents:"none"}}/>
+
+      {/* Modal de aviso de inactividad (overlay sobre la app) */}
+      {idleWarning && (
+        <IdleWarningModal
+          countdownSeconds={60}
+          onContinue={() => setIdleWarning(false)}
+          onLogout={async () => {
+            setIdleWarning(false);
+            // Limpiar state local sensible antes de cerrar sesión
+            setAllLeads({});
+            setAllEventos({});
+            setCuentas([]);
+            await supabase.auth.signOut();
+          }}
+        />
+      )}
     </div>
   );
 }
