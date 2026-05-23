@@ -4024,8 +4024,8 @@ export default function App() {
   const alertaCount=leads.filter(l=>!l.sinSeguimiento&&getAlertas(l).some(a=>["riesgo","sin_contacto"].includes(a.tipo))&&!["otro","cierre"].includes(l.etapa)).length;
 
   const NAV=[
-    ...(esAdmin?[{id:"dashboard",icon:<IconHome size={14}/>,l:"Resumen"}]:[]),
-    ...(esAdmin?[{id:"pipeline",icon:<IconLayers size={14}/>,l:"Flujo"}]:[]),
+    ...(esAdmin?[{id:"dashboard",icon:<IconHome size={14}/>,l:"Hoy"}]:[]),
+    ...(esAdmin?[{id:"pipeline",icon:<IconLayers size={14}/>,l:"Seguimiento"}]:[]),
     {id:"lista",icon:<IconUsers size={14}/>,l:"Leads"},
     {id:"agenda",icon:<IconCalendar size={14}/>,l:"Agenda"},
     ...(esAdmin?[{id:"metricas",icon:<IconBarChart size={14}/>,l:"Métricas"}]:[]),
