@@ -379,6 +379,11 @@ const IconChevronRight = ({size=14, color="currentColor"}) => (
     <polyline points="9 18 15 12 9 6"/>
   </svg>
 );
+const IconChevronLeft = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+);
 const IconAlertCircle = ({size=16, color="currentColor"}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10"/>
@@ -2793,30 +2798,206 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
   while(celdas.length%7!==0){const[ny,nm]=mes===11?[anio+1,0]:[anio,mes+1];celdas.push({dia:nextDia,tipo:"next",fecha:strFull(ny,nm,nextDia)});nextDia++;}
   const diasConEvs=diaClick?mapEvDia(strD(diaClick)):[];
   const DIAS_MIN=["L","M","X","J","V","S","D"];
-  const AGENDA_CSS=`.mf-cal-wrap{width:100%;box-sizing:border-box;overflow-x:hidden;}.mf-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);width:100%;}.mf-cal-hdr{display:grid;grid-template-columns:repeat(7,1fr);background:#0A1F44;border-radius:12px 12px 0 0;}.mf-cell{box-sizing:border-box;overflow:hidden;border-right:1px solid rgba(10,31,68,0.06);border-bottom:1px solid rgba(10,31,68,0.06);cursor:pointer;transition:background .12s;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column;}.mf-cell:hover{background:rgba(10,31,68,0.03)!important;}.mf-cell.today{background:rgba(10,31,68,0.04);}.mf-cell.selected{background:rgba(198,169,107,0.10)!important;}.mf-cell.weekend{background:#faf8f4;}.mf-daynum{border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:500;transition:all .15s;}.mf-daynum.today-num{background:#0A1F44;color:#fff;font-weight:800;}.mf-daynum.sel-num{border:2px solid #C6A96B;color:#C6A96B;font-weight:700;}.mf-daynum.weekend-num{color:#C6A96B;}.mf-pill{display:block;width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border-radius:4px;font-weight:600;cursor:pointer;transition:opacity .12s;box-sizing:border-box;}.mf-pill:hover{opacity:.8;}@media(max-width:390px){.mf-cell{min-height:48px;padding:3px 2px 2px;}.mf-daynum{width:20px;height:20px;font-size:10px;}.mf-pill{font-size:7px;padding:1px 3px;margin-bottom:1px;line-height:1.4;}.mf-legend{display:none!important;}}@media(min-width:391px) and (max-width:600px){.mf-cell{min-height:60px;padding:4px 3px 3px;}.mf-daynum{width:22px;height:22px;font-size:11px;}.mf-pill{font-size:8px;padding:1px 4px;margin-bottom:1px;line-height:1.5;}}@media(min-width:601px) and (max-width:900px){.mf-cell{min-height:80px;padding:5px 4px 4px;}.mf-daynum{width:26px;height:26px;font-size:12px;}.mf-pill{font-size:9px;padding:2px 5px;margin-bottom:2px;line-height:1.5;}}@media(min-width:901px){.mf-cell{min-height:100px;padding:6px 6px 4px;}.mf-daynum{width:30px;height:30px;font-size:13px;}.mf-pill{font-size:10px;padding:2px 6px;margin-bottom:2px;line-height:1.6;}}`;
+  const AGENDA_CSS = `
+    .mf-cal-wrap { width: 100%; box-sizing: border-box; overflow-x: hidden; font-family: 'Poppins', sans-serif; }
+    .mf-cal-grid { display: grid; grid-template-columns: repeat(7,1fr); width: 100%; }
+    .mf-cal-hdr {
+      display: grid; grid-template-columns: repeat(7,1fr);
+      background: rgba(248,246,242,0.6);
+      border-bottom: 1px solid rgba(10,31,68,0.06);
+    }
+    .mf-cell {
+      box-sizing: border-box; overflow: hidden;
+      border-right: 1px solid rgba(10,31,68,0.04);
+      border-bottom: 1px solid rgba(10,31,68,0.04);
+      cursor: pointer;
+      transition: background-color var(--mf-t-fast) var(--mf-ease-out);
+      -webkit-tap-highlight-color: transparent;
+      display: flex; flex-direction: column;
+    }
+    .mf-cell:hover { background: rgba(10,31,68,0.022) !important; }
+    .mf-cell.today { background: rgba(198,169,107,0.04); }
+    .mf-cell.selected { background: rgba(198,169,107,0.10) !important; }
+    .mf-cell.weekend { background: rgba(248,246,242,0.4); }
+    .mf-daynum {
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-weight: 500;
+      color: rgba(10,31,68,0.75);
+      font-variant-numeric: tabular-nums;
+      transition: all var(--mf-t-fast) var(--mf-ease-out);
+    }
+    .mf-daynum.today-num {
+      background: #0A1F44; color: #fff;
+      font-weight: 600;
+      box-shadow: 0 2px 6px rgba(10,31,68,0.20);
+    }
+    .mf-daynum.sel-num {
+      border: 1.5px solid #C6A96B;
+      color: #C6A96B; font-weight: 600;
+    }
+    .mf-daynum.weekend-num { color: #C6A96B; }
+    .mf-pill {
+      display: block; width: 100%;
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      border-radius: 4px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity var(--mf-t-fast) var(--mf-ease-out);
+      box-sizing: border-box;
+      letter-spacing: 0.005em;
+    }
+    .mf-pill:hover { opacity: 0.75; }
+    @media (max-width: 390px) {
+      .mf-cell { min-height: 50px; padding: 3px 3px 2px; }
+      .mf-daynum { width: 20px; height: 20px; font-size: 10.5px; }
+      .mf-pill { font-size: 7.5px; padding: 1px 3px; margin-bottom: 1px; line-height: 1.4; }
+      .mf-legend { display: none !important; }
+    }
+    @media (min-width: 391px) and (max-width: 600px) {
+      .mf-cell { min-height: 62px; padding: 4px 4px 3px; }
+      .mf-daynum { width: 22px; height: 22px; font-size: 11px; }
+      .mf-pill { font-size: 8.5px; padding: 1.5px 4px; margin-bottom: 1.5px; line-height: 1.5; }
+    }
+    @media (min-width: 601px) and (max-width: 900px) {
+      .mf-cell { min-height: 82px; padding: 5px 5px 4px; }
+      .mf-daynum { width: 26px; height: 26px; font-size: 12px; }
+      .mf-pill { font-size: 9.5px; padding: 2px 5px; margin-bottom: 2px; line-height: 1.5; }
+    }
+    @media (min-width: 901px) {
+      .mf-cell { min-height: 104px; padding: 7px 7px 5px; }
+      .mf-daynum { width: 30px; height: 30px; font-size: 13px; }
+      .mf-pill { font-size: 10.5px; padding: 2.5px 6px; margin-bottom: 2.5px; line-height: 1.6; }
+    }
+  `;
+  // Botón circular para navegación (chevron izquierda/derecha)
+  const navBtnStyle = {
+    width: 36, height: 36, borderRadius: 9,
+    border: "1px solid rgba(10,31,68,0.08)",
+    background: B.white,
+    color: B.navy,
+    cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0,
+    boxShadow: "var(--mf-shadow-xs)",
+    transition: "all var(--mf-t-fast) var(--mf-ease-out)",
+  };
+
   return (
-    <div className="mf-cal-wrap">
+    <div className="mf-cal-wrap mf-fade-in">
       <style>{AGENDA_CSS}</style>
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12,flexWrap:"nowrap",justifyContent:"space-between",width:"100%"}}>
-        <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:0}}>
-          <button onClick={()=>{if(mes===0){setMes(11);setAnio(a=>a-1);}else setMes(m=>m-1);}} style={{width:38,height:38,borderRadius:9,border:`1px solid ${B.gray}`,background:B.white,color:B.navy,fontSize:18,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>‹</button>
-          <div style={{textAlign:"center",minWidth:0,padding:"0 2px"}}>
-            <span style={{fontWeight:800,color:B.navy,letterSpacing:"-.5px",fontSize:18}}>{MESES[mes]}</span>
-            <span style={{fontSize:12,color:"#64748b",marginLeft:5,fontWeight:400}}>{anio}</span>
+
+      {/* ═══ Header refinado ═══ */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        marginBottom: 16, flexWrap: "nowrap", justifyContent: "space-between", width: "100%",
+      }}>
+        {/* Navegación mes */}
+        <div style={{display: "flex", alignItems: "center", gap: 8, flexShrink: 0, minWidth: 0}}>
+          <button
+            onClick={()=>{if(mes===0){setMes(11);setAnio(a=>a-1);}else setMes(m=>m-1);}}
+            aria-label="Mes anterior"
+            style={navBtnStyle}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
+            <IconChevronLeft size={15} color={B.navy}/>
+          </button>
+
+          <div style={{textAlign: "center", minWidth: 0, padding: "0 6px"}}>
+            <div style={{
+              fontFamily: "'Cormorant Garamond', serif",
+              fontWeight: 500, color: B.navy,
+              letterSpacing: "-0.02em",
+              fontSize: 22, lineHeight: 1,
+            }}>{MESES[mes]}</div>
+            <div style={{
+              fontSize: 10, color: "rgba(10,31,68,0.45)",
+              marginTop: 3, fontWeight: 500,
+              letterSpacing: "0.18em", textTransform: "uppercase",
+            }}>{anio}</div>
           </div>
-          <button onClick={()=>{if(mes===11){setMes(0);setAnio(a=>a+1);}else setMes(m=>m+1);}} style={{width:38,height:38,borderRadius:9,border:`1px solid ${B.gray}`,background:B.white,color:B.navy,fontSize:18,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>›</button>
+
+          <button
+            onClick={()=>{if(mes===11){setMes(0);setAnio(a=>a+1);}else setMes(m=>m+1);}}
+            aria-label="Mes siguiente"
+            style={navBtnStyle}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
+            <IconChevronRight size={15} color={B.navy}/>
+          </button>
         </div>
-        <div className="mf-legend" style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap",flex:1,justifyContent:"center"}}>
-          {TIPO_EVENTO.filter(t=>!esAsistente||!t.privado).map(t=>(<div key={t.id} style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:"#64748b",fontWeight:500,whiteSpace:"nowrap"}}><div style={{width:7,height:7,borderRadius:"50%",background:t.color,flexShrink:0}}/>{t.label.replace(" 🔒","").replace(" ✈️","")}</div>))}
+
+        {/* Leyenda discreta (sólo desktop) */}
+        <div className="mf-legend" style={{display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", flex: 1, justifyContent: "center"}}>
+          {TIPO_EVENTO.filter(t=>!esAsistente||!t.privado).map(t=>(
+            <div key={t.id} style={{
+              display: "flex", alignItems: "center", gap: 5,
+              fontSize: 10.5, color: "rgba(10,31,68,0.55)", fontWeight: 500,
+              whiteSpace: "nowrap",
+            }}>
+              <span style={{width: 6, height: 6, borderRadius: "50%", background: t.color, flexShrink: 0}}/>
+              {t.label.replace(" 🔒","").replace(" ✈️","")}
+            </div>
+          ))}
         </div>
-        <div style={{display:"flex",gap:5,flexShrink:0}}>
-          <button onClick={()=>{setMes(now.getMonth());setAnio(now.getFullYear());}} style={{padding:"0 12px",height:38,borderRadius:8,border:`1px solid ${B.gray}`,background:B.white,color:B.navy,fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>Hoy</button>
-          <button onClick={()=>abrirNuevo(hoy())} style={{padding:"0 13px",height:38,borderRadius:8,border:"none",background:B.navy,color:"#fff",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>+ Evento</button>
+
+        {/* Acciones */}
+        <div style={{display: "flex", gap: 8, flexShrink: 0}}>
+          <button
+            onClick={()=>{setMes(now.getMonth()); setAnio(now.getFullYear());}}
+            style={{
+              padding: "0 14px", height: 36, borderRadius: 8,
+              border: "1px solid rgba(10,31,68,0.08)",
+              background: B.white,
+              color: "rgba(10,31,68,0.85)",
+              fontFamily: "'Poppins', sans-serif",
+              fontWeight: 500, fontSize: 12.5,
+              cursor: "pointer", whiteSpace: "nowrap",
+              boxShadow: "var(--mf-shadow-xs)",
+              transition: "all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
+            Hoy
+          </button>
+          <button
+            onClick={()=>abrirNuevo(hoy())}
+            style={{
+              padding: "0 14px", height: 36, borderRadius: 8,
+              border: "none",
+              background: "linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+              color: "#fff",
+              fontFamily: "'Poppins', sans-serif",
+              fontWeight: 600, fontSize: 12.5,
+              cursor: "pointer", whiteSpace: "nowrap",
+              display: "inline-flex", alignItems: "center", gap: 6,
+              boxShadow: "0 1px 2px rgba(10,31,68,0.10)",
+              transition: "all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
+            onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
+            <IconPlus size={13} color="#fff"/>Nuevo evento
+          </button>
         </div>
       </div>
-      <div style={{background:B.white,borderRadius:14,border:`1px solid ${B.gray}`,overflow:"hidden",boxShadow:B.shadow}}>
+
+      {/* ═══ Calendario premium ═══ */}
+      <div style={{
+        background: B.white,
+        borderRadius: 14,
+        border: "1px solid rgba(10,31,68,0.06)",
+        overflow: "hidden",
+        boxShadow: "var(--mf-shadow-xs)",
+      }}>
         <div className="mf-cal-hdr">
-          {DIAS_MIN.map((d,i)=>(<div key={i} style={{textAlign:"center",padding:"10px 0",fontSize:10,fontWeight:700,letterSpacing:"0.8px",textTransform:"uppercase",color:i>=5?B.gold:"rgba(255,255,255,0.7)"}}>{d}</div>))}
+          {DIAS_MIN.map((d,i)=>(
+            <div key={i} style={{
+              textAlign: "center", padding: "12px 0 11px",
+              fontSize: 10, fontWeight: 600,
+              letterSpacing: "0.18em", textTransform: "uppercase",
+              color: i >= 5 ? B.gold : "rgba(10,31,68,0.50)",
+            }}>{d}</div>
+          ))}
         </div>
         <div className="mf-cal-grid">
           {celdas.map((celda,i)=>{
