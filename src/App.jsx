@@ -380,6 +380,7 @@ function Auth({onLogin, mensajeInicial}) {
   const [pass,setPass]=useState("");
   const [pass2,setPass2]=useState("");
   const [nombre,setNombre]=useState("");
+  const [apellidos,setApellidos]=useState("");
   const [telefono,setTelefono]=useState("");
   const [estado,setEstado]=useState("");
   const [err,setErr]=useState("");
@@ -408,7 +409,8 @@ function Auth({onLogin, mensajeInicial}) {
       if (modo === "signup") {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const passSegura = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/; // mín 8, al menos una letra y un número
-        if (!nombre.trim()) { setErr("Escribe tu nombre completo"); setLoading(false); return; }
+        if (!nombre.trim()) { setErr("Escribe tu nombre"); setLoading(false); return; }
+        if (!apellidos.trim()) { setErr("Escribe tu(s) apellido(s)"); setLoading(false); return; }
         if (!telefono.trim() || telefono.replace(/\D/g,"").length < 10) {
           setErr("Escribe un teléfono válido (mínimo 10 dígitos)"); setLoading(false); return;
         }
@@ -419,11 +421,14 @@ function Auth({onLogin, mensajeInicial}) {
         }
         if (pass !== pass2) { setErr("Las contraseñas no coinciden"); setLoading(false); return; }
 
+        const nombreCompleto = `${nombre.trim()} ${apellidos.trim()}`;
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password: pass,
           options: { data: {
-            nombre: nombre.trim(),
+            nombre: nombreCompleto,
+            nombre_pila: nombre.trim(),
+            apellidos: apellidos.trim(),
             telefono: telefono.trim(),
             estado: estado || null,
             rol: "admin",
@@ -452,7 +457,7 @@ function Auth({onLogin, mensajeInicial}) {
 
   function cambiarModo(nuevo){
     setModo(nuevo); setErr(""); setInfo("");
-    setPass(""); setPass2(""); setNombre(""); setTelefono(""); setEstado("");
+    setPass(""); setPass2(""); setNombre(""); setApellidos(""); setTelefono(""); setEstado("");
   }
 
   async function cargarPerfilYContinuar(userId) {
@@ -531,18 +536,21 @@ function Auth({onLogin, mensajeInicial}) {
 
     .mf-auth-logo-wrap {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
       animation: mfFadeIn .9s ease;
     }
     .mf-auth-logo-img {
-      height: 96px; width: auto;
+      height: 160px; width: auto;
       object-fit: contain;
-      filter: drop-shadow(0 12px 28px rgba(10, 31, 68, 0.10));
+      filter: drop-shadow(0 16px 36px rgba(10, 31, 68, 0.12));
       user-select: none; -webkit-user-drag: none;
     }
+    @media (min-width: 480px) {
+      .mf-auth-logo-img { height: 190px; }
+    }
     @media (min-width: 768px) {
-      .mf-auth-logo-wrap { margin-bottom: 44px; }
-      .mf-auth-logo-img { height: 120px; }
+      .mf-auth-logo-wrap { margin-bottom: 40px; }
+      .mf-auth-logo-img { height: 220px; }
     }
 
     .mf-auth-select {
@@ -593,6 +601,19 @@ function Auth({onLogin, mensajeInicial}) {
 
     .mf-auth-field { margin-bottom: 18px; }
     .mf-auth-field:last-of-type { margin-bottom: 6px; }
+
+    .mf-auth-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+    @media (min-width: 480px) {
+      .mf-auth-row {
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+    }
+    .mf-auth-field-half { margin-bottom: 18px; }
 
     .mf-auth-label {
       display: flex; justify-content: space-between; align-items: baseline;
@@ -804,16 +825,31 @@ function Auth({onLogin, mensajeInicial}) {
         <div className="mf-auth-card">
           {modo==="signup" && (
             <>
-              <div className="mf-auth-field">
-                <label className="mf-auth-label"><span>Nombre completo</span></label>
-                <input
-                  className="mf-auth-input"
-                  value={nombre}
-                  onChange={e=>setNombre(e.target.value)}
-                  placeholder="Tu nombre"
-                  onKeyDown={e=>e.key==="Enter"&&login()}
-                  autoCapitalize="words"
-                />
+              <div className="mf-auth-row">
+                <div className="mf-auth-field mf-auth-field-half">
+                  <label className="mf-auth-label"><span>Nombre(s)</span></label>
+                  <input
+                    className="mf-auth-input"
+                    value={nombre}
+                    onChange={e=>setNombre(e.target.value)}
+                    placeholder="Mariana"
+                    onKeyDown={e=>e.key==="Enter"&&login()}
+                    autoCapitalize="words"
+                    autoComplete="given-name"
+                  />
+                </div>
+                <div className="mf-auth-field mf-auth-field-half">
+                  <label className="mf-auth-label"><span>Apellido(s)</span></label>
+                  <input
+                    className="mf-auth-input"
+                    value={apellidos}
+                    onChange={e=>setApellidos(e.target.value)}
+                    placeholder="González Nava"
+                    onKeyDown={e=>e.key==="Enter"&&login()}
+                    autoCapitalize="words"
+                    autoComplete="family-name"
+                  />
+                </div>
               </div>
 
               <div className="mf-auth-field">
