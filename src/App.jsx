@@ -469,6 +469,44 @@ const IconPhoneCall = ({size=16, color="currentColor"}) => (
     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
   </svg>
 );
+const IconSearch = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8"/>
+    <path d="m21 21-4.3-4.3"/>
+  </svg>
+);
+const IconUpload = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="17 8 12 3 7 8"/>
+    <line x1="12" x2="12" y1="3" y2="15"/>
+  </svg>
+);
+const IconDownload = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" x2="12" y1="15" y2="3"/>
+  </svg>
+);
+const IconPlus = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" x2="12" y1="5" y2="19"/>
+    <line x1="5" x2="19" y1="12" y2="12"/>
+  </svg>
+);
+const IconX = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 6 6 18"/>
+    <path d="m6 6 12 12"/>
+  </svg>
+);
+const IconMinusCircle = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="8" x2="16" y1="12" y2="12"/>
+  </svg>
+);
 
 function Auth({onLogin, mensajeInicial}) {
   const [email,setEmail]=useState("");
@@ -1719,32 +1757,127 @@ function LeadCard({lead,onClick,onContacto}) {
   const alerts=getAlertas(lead);
   const sinSeg=lead.sinSeguimiento||lead.checklist?.noInteres;
   const temp=getTempLead(lead);
+  // color del dot de temperatura sin emoji
+  const tempColor = temp?.nivel === "caliente" ? "#dc2626"
+                  : temp?.nivel === "tibio"    ? "#d97706"
+                  : temp?.nivel === "frio"     ? "#3b82f6"
+                  : "transparent";
   return <div onClick={()=>onClick(lead)}
-    style={{background:sinSeg?B.redLight:B.white,border:`1.5px solid ${sinSeg?B.redBright+"44":B.gray}`,borderLeft:`3px solid ${sinSeg?B.redBright:etapa.color}`,borderRadius:10,padding:"12px 13px 11px",cursor:"pointer",marginBottom:8,transition:"all .15s",boxShadow:B.shadow}}
-    onMouseEnter={e=>{e.currentTarget.style.boxShadow=B.shadowMd;e.currentTarget.style.transform="translateY(-1px)";}}
-    onMouseLeave={e=>{e.currentTarget.style.boxShadow=B.shadow;e.currentTarget.style.transform="none";}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-      <div style={{flex:1,minWidth:0,paddingRight:8}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:1}}>
-          {temp&&!sinSeg&&<span style={{fontSize:13}}>{temp.icon}</span>}
-          {sinSeg&&<span style={{fontSize:11}}>🚫</span>}
-          <div style={{fontWeight:700,fontSize:13,color:sinSeg?B.redBright:B.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lead.nombre}</div>
+    style={{
+      background: sinSeg ? "rgba(220,38,38,0.03)" : B.white,
+      border: `1px solid ${sinSeg ? "rgba(220,38,38,0.15)" : "rgba(10,31,68,0.06)"}`,
+      borderRadius: 12,
+      padding: "13px 14px 12px",
+      cursor: "pointer",
+      marginBottom: 8,
+      boxShadow: "var(--mf-shadow-xs)",
+      transition: "box-shadow var(--mf-t-normal) var(--mf-ease-out), transform var(--mf-t-normal) var(--mf-ease-out), border-color var(--mf-t-fast) var(--mf-ease-out)",
+      position: "relative",
+    }}
+    onMouseEnter={e=>{
+      e.currentTarget.style.boxShadow = "var(--mf-shadow-sm)";
+      e.currentTarget.style.transform = "translateY(-1px)";
+      e.currentTarget.style.borderColor = sinSeg ? "rgba(220,38,38,0.25)" : "rgba(198,169,107,0.20)";
+    }}
+    onMouseLeave={e=>{
+      e.currentTarget.style.boxShadow = "var(--mf-shadow-xs)";
+      e.currentTarget.style.transform = "translateY(0)";
+      e.currentTarget.style.borderColor = sinSeg ? "rgba(220,38,38,0.15)" : "rgba(10,31,68,0.06)";
+    }}>
+    {/* Línea de color de etapa lateral, muy delgada */}
+    <div style={{
+      position: "absolute", left: 0, top: 10, bottom: 10, width: 2,
+      background: sinSeg ? B.redBright : etapa.color,
+      borderRadius: "0 2px 2px 0",
+      opacity: 0.55,
+    }}/>
+
+    {/* Header: nombre + producto */}
+    <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:5, paddingLeft:6}}>
+      <div style={{flex:1, minWidth:0}}>
+        <div style={{display:"flex", alignItems:"center", gap:7, marginBottom:2}}>
+          {temp && !sinSeg && (
+            <span aria-label={temp.label} title={temp.label}
+              style={{width:6, height:6, borderRadius:"50%", background:tempColor, flexShrink:0}}/>
+          )}
+          {sinSeg && (
+            <span style={{display:"inline-flex", color:B.redBright, flexShrink:0}}>
+              <IconMinusCircle size={12}/>
+            </span>
+          )}
+          <div style={{
+            fontWeight:600, fontSize:13.5,
+            color: sinSeg ? B.redBright : B.navy,
+            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+            letterSpacing:"-0.005em",
+          }}>{lead.nombre}</div>
         </div>
-        <div style={{fontSize:11,color:"#6b7280"}}>{lead.estado} · {lead.edad} años</div>
+        <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", fontWeight:400}}>
+          {lead.estado || "—"}{lead.edad ? ` · ${lead.edad} años` : ""}
+        </div>
       </div>
-      <Tag color={sinSeg?B.redBright:etapa.color} small>{sinSeg?"Sin seguimiento":lead.producto}</Tag>
+      {!sinSeg && lead.producto && (
+        <span style={{
+          fontSize:10, fontWeight:500,
+          color: etapa.color,
+          background: etapa.color+"0e",
+          border: `1px solid ${etapa.color}25`,
+          padding: "2px 8px", borderRadius: 6,
+          whiteSpace: "nowrap", flexShrink: 0,
+          letterSpacing: "0.005em",
+        }}>{lead.producto}</span>
+      )}
     </div>
-    {!sinSeg&&alerts.length>0&&<div style={{marginBottom:6}}>
-      {alerts.map((a,i)=><span key={i} style={{fontSize:10,color:a.color,fontWeight:600,marginRight:8,display:"inline-flex",alignItems:"center",gap:3}}>
-        <span style={{fontSize:7,animation:a.tipo==="riesgo"?"pulse 1.4s infinite":"none"}}>●</span>{a.msg}
-      </span>)}
-    </div>}
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-      <div style={{fontSize:10,color:"#9ca3af"}}>Ult: {fmtF(lead.ultimoContacto)}</div>
-      {!sinSeg&&<button onClick={e=>{e.stopPropagation();onContacto(lead);}}
-        style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,border:`1px solid ${B.gray}`,background:B.cream,cursor:"pointer",fontSize:11,color:B.navy,fontWeight:600,fontFamily:"Poppins"}}>
-        📞 Contactar
-      </button>}
+
+    {/* Alertas (puntos coloreados + texto sutil, sin animaciones bruscas) */}
+    {!sinSeg && alerts.length > 0 && (
+      <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:6, paddingLeft:6}}>
+        {alerts.map((a,i)=>(
+          <span key={i} style={{
+            display:"inline-flex", alignItems:"center", gap:5,
+            fontSize:10, color:a.color, fontWeight:500,
+            letterSpacing:"0.005em",
+          }}>
+            <span style={{
+              width:5, height:5, borderRadius:"50%",
+              background:a.color,
+              animation: a.tipo === "riesgo" ? "mfPulseDot 1.6s var(--mf-ease-out) infinite" : "none",
+            }}/>
+            {a.msg}
+          </span>
+        ))}
+      </div>
+    )}
+
+    {/* Footer: último contacto + botón contactar */}
+    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", paddingLeft:6, marginTop:2}}>
+      <div style={{fontSize:10, color:"rgba(10,31,68,0.35)", fontWeight:400, letterSpacing:"0.01em"}}>
+        Último contacto · {fmtF(lead.ultimoContacto)}
+      </div>
+      {!sinSeg && (
+        <button onClick={e=>{e.stopPropagation(); onContacto(lead);}}
+          style={{
+            display:"inline-flex", alignItems:"center", gap:5,
+            padding:"5px 11px", borderRadius:8,
+            border:`1px solid rgba(10,31,68,0.08)`,
+            background:"transparent",
+            cursor:"pointer",
+            fontSize:11, color:B.navy, fontWeight:500,
+            fontFamily:"'Poppins',sans-serif",
+            transition: "all var(--mf-t-fast) var(--mf-ease-out)",
+          }}
+          onMouseEnter={e=>{
+            e.currentTarget.style.background = "rgba(10,31,68,0.04)";
+            e.currentTarget.style.borderColor = "rgba(198,169,107,0.30)";
+          }}
+          onMouseLeave={e=>{
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.borderColor = "rgba(10,31,68,0.08)";
+          }}>
+          <IconPhoneCall size={12} color={B.navy}/>
+          Contactar
+        </button>
+      )}
     </div>
   </div>;
 }
@@ -2433,28 +2566,168 @@ function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
       alert("Error al exportar: " + (err.message || err));
     }
   }
-  return <div>
-    <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-      <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder="🔍 Buscar por nombre o estado..." style={{flex:1,minWidth:0,padding:"11px 13px",borderRadius:8,border:`1.5px solid ${B.gray}`,background:B.white,color:B.black,fontFamily:"'Poppins',sans-serif",fontSize:16,outline:"none",minHeight:44,WebkitAppearance:"none"}} onFocus={e=>e.target.style.borderColor=B.gold} onBlur={e=>e.target.style.borderColor=B.gray}/>
-      <Sel value={filtProd} onChange={setFiltProd} options={[{v:"",l:"Todos productos"},...PRODUCTOS_LEAD.map(p=>({v:p,l:p}))]}/>
-      <Sel value={filtTemp} onChange={setFiltTemp} options={[{v:"",l:"Temperatura"},{v:"caliente",l:"🔥 Caliente"},{v:"tibio",l:"🟡 Tibio"},{v:"frio",l:"❄️ Frío"}]}/>
+  // Botón de toolbar reusable estilo Linear
+  const ToolbarBtn = ({ onClick, icon, label, variant = "ghost" }) => (
+    <button onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        padding: "8px 12px", minHeight: 36,
+        borderRadius: 8,
+        border: variant === "primary" ? "none" : "1px solid rgba(10,31,68,0.08)",
+        background: variant === "primary" ? B.navy : B.white,
+        color: variant === "primary" ? "#fff" : "rgba(10,31,68,0.85)",
+        fontFamily: "'Poppins',sans-serif",
+        fontSize: 12.5, fontWeight: 500,
+        letterSpacing: "0.005em",
+        cursor: "pointer",
+        boxShadow: variant === "primary" ? "0 1px 2px rgba(10,31,68,0.10)" : "var(--mf-shadow-xs)",
+        transition: "all var(--mf-t-fast) var(--mf-ease-out)",
+        whiteSpace: "nowrap",
+      }}
+      onMouseEnter={e=>{
+        if (variant === "primary") {
+          e.currentTarget.style.background = "#122550";
+          e.currentTarget.style.boxShadow = "0 4px 14px rgba(10,31,68,0.20)";
+        } else {
+          e.currentTarget.style.background = "rgba(10,31,68,0.025)";
+          e.currentTarget.style.borderColor = "rgba(198,169,107,0.30)";
+        }
+      }}
+      onMouseLeave={e=>{
+        if (variant === "primary") {
+          e.currentTarget.style.background = B.navy;
+          e.currentTarget.style.boxShadow = "0 1px 2px rgba(10,31,68,0.10)";
+        } else {
+          e.currentTarget.style.background = B.white;
+          e.currentTarget.style.borderColor = "rgba(10,31,68,0.08)";
+        }
+      }}>
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+
+  // Color del dot de temperatura (sin emoji)
+  const tempDot = (color) => (
+    <span style={{display:"inline-block", width:8, height:8, borderRadius:"50%", background:color, marginRight:6, verticalAlign:"middle"}}/>
+  );
+
+  return <div className="mf-fade-in">
+    {/* ═══ Toolbar premium ═══ */}
+    <div style={{
+      display: "flex", flexWrap: "wrap", gap: 10,
+      alignItems: "center", marginBottom: 18,
+    }}>
+      {/* Buscador con icono SVG embebido */}
+      <div style={{
+        position: "relative", flex: 1, minWidth: 220,
+        display: "flex", alignItems: "center",
+      }}>
+        <span style={{
+          position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
+          color: "rgba(10,31,68,0.35)", pointerEvents: "none",
+          display: "inline-flex",
+        }}>
+          <IconSearch size={16}/>
+        </span>
+        <input
+          value={busq}
+          onChange={e=>setBusq(e.target.value)}
+          placeholder="Buscar por nombre o estado…"
+          style={{
+            width: "100%", paddingLeft: 40, paddingRight: 14,
+            paddingTop: 10, paddingBottom: 10, minHeight: 38,
+            borderRadius: 10,
+            border: "1px solid rgba(10,31,68,0.08)",
+            background: B.white,
+            color: B.navy,
+            fontFamily: "'Poppins',sans-serif",
+            fontSize: 14, fontWeight: 400,
+            outline: "none",
+            WebkitAppearance: "none",
+            boxShadow: "var(--mf-shadow-xs)",
+          }}
+          onFocus={e=>{
+            e.target.style.borderColor = "rgba(198,169,107,0.55)";
+            e.target.style.boxShadow = "0 0 0 4px rgba(198,169,107,0.10)";
+          }}
+          onBlur={e=>{
+            e.target.style.borderColor = "rgba(10,31,68,0.08)";
+            e.target.style.boxShadow = "var(--mf-shadow-xs)";
+          }}
+        />
+      </div>
+
+      {/* Select Producto refinado */}
+      <Sel value={filtProd} onChange={setFiltProd}
+        options={[{v:"",l:"Todos los productos"},...PRODUCTOS_LEAD.map(p=>({v:p,l:p}))]}/>
+
+      {/* Select Temperatura sin emojis (dots de color en el label) */}
+      <Sel value={filtTemp} onChange={setFiltTemp}
+        options={[
+          {v:"",l:"Temperatura"},
+          {v:"caliente",l:"● Caliente"},
+          {v:"tibio",l:"● Tibio"},
+          {v:"frio",l:"● Frío"},
+        ]}/>
+
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={importar}/>
-      <Btn onClick={()=>fileRef.current?.click()} color={B.green} outline small>📂 Importar</Btn>
-      <Btn onClick={exportar} color={B.navy} outline small>📥 Exportar</Btn>
-      {esAdmin&&<Btn onClick={()=>setNuevoM(true)} bg={B.navy} small>+ Lead</Btn>}
+      <ToolbarBtn onClick={()=>fileRef.current?.click()} icon={<IconUpload size={14}/>} label="Importar"/>
+      <ToolbarBtn onClick={exportar} icon={<IconDownload size={14}/>} label="Exportar"/>
+      {esAdmin && <ToolbarBtn onClick={()=>setNuevoM(true)} icon={<IconPlus size={14} color="#fff"/>} label="Nuevo lead" variant="primary"/>}
     </div>
+
+    {/* ═══ Kanban refinado ═══ */}
     <div className="mf-kanban">
-      {etapasVis.map(etapa=>{
-        const cols=vis.filter(l=>l.etapa===etapa.id);
-        return <div key={etapa.id} className="mf-kanban-col">
-          <div style={{background:B.white,border:`1px solid ${B.gray}`,borderTop:`3px solid ${etapa.color}`,borderRadius:"0 0 9px 9px",padding:"10px 13px",marginBottom:8,boxShadow:B.shadow}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{color:etapa.color,fontSize:13}}>{etapa.icon}</span><span style={{fontSize:12,fontWeight:700,color:B.navy}}>{etapa.label}</span></div>
-              <span style={{background:etapa.color+"14",color:etapa.color,borderRadius:20,padding:"1px 9px",fontSize:11,fontWeight:700}}>{cols.length}</span>
+      {etapasVis.map((etapa, idx) => {
+        const cols = vis.filter(l => l.etapa === etapa.id);
+        return (
+          <div key={etapa.id} className={`mf-kanban-col mf-fade-up mf-stagger-${(idx%4)+1}`}>
+            {/* Header de columna minimalista */}
+            <div style={{
+              padding: "4px 4px 12px",
+              marginBottom: 4,
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              borderBottom: "1px solid rgba(10,31,68,0.06)",
+            }}>
+              <div style={{display: "flex", alignItems: "center", gap: 8}}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: etapa.color, flexShrink: 0,
+                }}/>
+                <span style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: B.navy,
+                  letterSpacing: "0.005em",
+                }}>{etapa.label.replace(/[¡⭐!]/g,"").trim()}</span>
+              </div>
+              <span style={{
+                fontSize: 11,
+                fontWeight: 500,
+                color: "rgba(10,31,68,0.45)",
+                fontVariantNumeric: "tabular-nums",
+              }}>{cols.length}</span>
             </div>
+
+            {/* Cards o estado vacío */}
+            {cols.length === 0 ? (
+              <div style={{
+                border: "1px dashed rgba(10,31,68,0.10)",
+                borderRadius: 10,
+                padding: "22px 10px",
+                textAlign: "center",
+                color: "rgba(10,31,68,0.30)",
+                fontSize: 11,
+                background: "rgba(255,255,255,0.4)",
+                fontStyle: "italic",
+                letterSpacing: "0.01em",
+              }}>Sin leads</div>
+            ) : (
+              cols.map(l => <LeadCard key={l.id} lead={l} onClick={setLeadAct} onContacto={setContactoL}/>)
+            )}
           </div>
-          {cols.length===0?<div style={{border:`1.5px dashed ${B.gray}`,borderRadius:10,padding:"20px 8px",textAlign:"center",color:"#9ca3af",fontSize:11,background:B.cream}}>Sin leads</div>:cols.map(l=><LeadCard key={l.id} lead={l} onClick={setLeadAct} onContacto={setContactoL}/>)}
-        </div>;
+        );
       })}
     </div>
     {leadAct&&<LeadModal lead={leadAct} onClose={()=>setLeadAct(null)} onSave={save} onDelete={del} cuentas={cuentas} usuario={usuario}/>}
