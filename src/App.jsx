@@ -1481,6 +1481,7 @@ function getMicrocopyDelDia() {
 
 function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
   const activos=leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa));
+  const cierres=leads.filter(l=>l.etapa==="cierre");
   const riesgo=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="riesgo"));
   const sinC=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="sin_contacto"));
   const reactivar=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="reactivar"));
