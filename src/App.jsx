@@ -2056,35 +2056,118 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
   const asistentes=(cuentas||[]).filter(c=>c.rol==="asistente"&&c.adminId===(usuario.rol==="superadmin"?c.adminId:usuario.id));
   const tipoColor={llamada:B.blue,whatsapp:"#25d366",visita:B.purple,correo:B.amber,nota:"#9ca3af"};
 
-  return <MFModal onClose={onClose} width={640}>
-    <MHead title={lead.nombre||"Nuevo lead"} sub={`${f.producto} · ${f.estado}${temp?` · ${temp.icon} ${temp.label}`:""}`} onClose={onClose}/>
+  const tempColorLead = temp?.nivel === "caliente" ? "#dc2626"
+                      : temp?.nivel === "tibio"    ? "#d97706"
+                      : temp?.nivel === "frio"     ? "#3b82f6"
+                      : null;
 
-    {/* Barra de acciones rápidas: solo si hay teléfono y es un lead existente (no uno nuevo) */}
+  return <MFModal onClose={onClose} width={640}>
+    <MHead
+      title={lead.nombre||"Nuevo lead"}
+      sub={
+        <span style={{display:"inline-flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span>{f.producto || "—"}</span>
+          {f.estado && <><span style={{opacity:0.4}}>·</span><span>{f.estado}</span></>}
+          {temp && tempColorLead && (
+            <>
+              <span style={{opacity:0.4}}>·</span>
+              <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:tempColorLead}}/>
+                {temp.label}
+              </span>
+            </>
+          )}
+        </span>
+      }
+      onClose={onClose}
+    />
+
+    {/* Acciones rápidas con SVG icons (no emojis) */}
     {f.telefono && lead.id === f.id && lead.nombre && (
-      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
         <button onClick={()=>setWam(true)}
-          style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,border:"none",background:"#25d366",color:"#fff",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer",boxShadow:"0 2px 8px rgba(37,211,102,.25)"}}>
-          📲 Enviar WhatsApp
+          style={{display:"inline-flex",alignItems:"center",gap:7,padding:"8px 14px",borderRadius:9,border:"none",background:"#25d366",color:"#fff",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12.5,cursor:"pointer",boxShadow:"0 2px 8px rgba(37,211,102,0.20)",transition:"all var(--mf-t-fast) var(--mf-ease-out)"}}
+          onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)"; e.currentTarget.style.boxShadow="0 6px 16px rgba(37,211,102,0.30)";}}
+          onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 2px 8px rgba(37,211,102,0.20)";}}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          Enviar WhatsApp
         </button>
         <a href={`tel:${f.telefono}`} style={{textDecoration:"none"}}>
-          <button style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,border:`1px solid ${B.blue}40`,background:B.blueDim,color:B.blue,fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer"}}>
-            📞 Llamar
+          <button style={{display:"inline-flex",alignItems:"center",gap:7,padding:"8px 14px",borderRadius:9,border:"1px solid rgba(10,31,68,0.08)",background:B.white,color:B.navy,fontFamily:"'Poppins',sans-serif",fontWeight:500,fontSize:12.5,cursor:"pointer",boxShadow:"var(--mf-shadow-xs)",transition:"all var(--mf-t-fast) var(--mf-ease-out)"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
+            <IconPhoneCall size={13} color={B.navy}/>
+            Llamar
           </button>
         </a>
       </div>
     )}
 
-    {f.sinSeguimiento&&<div style={{background:B.redLight,border:`1.5px solid ${B.redBright}33`,borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-      <div style={{display:"flex",alignItems:"center",gap:10}}>
-        <span style={{fontSize:20}}>🚫</span>
-        <div><div style={{fontSize:13,fontWeight:700,color:B.redBright}}>Sin seguimiento</div><div style={{fontSize:11,color:"#6b7280"}}>No interesado / perdido definitivo</div></div>
+    {/* Banner sin seguimiento sin emoji */}
+    {f.sinSeguimiento && (
+      <div style={{background:"rgba(220,38,38,0.04)",border:"1px solid rgba(220,38,38,0.18)",borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <IconMinusCircle size={18} color={B.redBright}/>
+          <div>
+            <div style={{fontSize:13,fontWeight:600,color:B.redBright}}>Sin seguimiento</div>
+            <div style={{fontSize:11,color:"rgba(10,31,68,0.55)"}}>No interesado / perdido definitivo</div>
+          </div>
+        </div>
+        <button onClick={toggleSinSeg}
+          style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${B.green}40`,background:"transparent",color:B.green,fontFamily:"'Poppins',sans-serif",fontWeight:500,fontSize:12,cursor:"pointer"}}>
+          Reactivar
+        </button>
       </div>
-      <Btn onClick={toggleSinSeg} color={B.green} outline small>Reactivar</Btn>
-    </div>}
-    <div style={{display:"flex",gap:3,marginBottom:18,background:B.cream,borderRadius:10,padding:4}}>
-      {TABS.map(t=>(<button key={t.v} onClick={()=>setTab(t.v)} style={{flex:1,padding:"7px 2px",borderRadius:7,border:"none",background:tab===t.v?B.white:"transparent",color:tab===t.v?B.navy:"#6b7280",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:10,cursor:"pointer",transition:"all .15s",boxShadow:tab===t.v?B.shadow:"none"}}>{t.l}</button>))}
+    )}
+
+    {/* Tabs estilo Linear con underline gold */}
+    <div style={{display:"flex",gap:0,marginBottom:18,borderBottom:"1px solid rgba(10,31,68,0.06)"}}>
+      {TABS.map(t=>{
+        const active = tab===t.v;
+        return (
+          <button key={t.v} onClick={()=>setTab(t.v)}
+            style={{
+              position:"relative",
+              padding:"10px 14px 11px",
+              border:"none",
+              background:"transparent",
+              color: active ? B.navy : "rgba(10,31,68,0.50)",
+              fontFamily:"'Poppins',sans-serif",
+              fontWeight: active ? 600 : 500,
+              fontSize:12.5,
+              letterSpacing:"0.005em",
+              cursor:"pointer",
+              transition:"color var(--mf-t-fast) var(--mf-ease-out)",
+              whiteSpace:"nowrap",
+            }}
+            onMouseEnter={e=>{if(!active) e.currentTarget.style.color="rgba(10,31,68,0.80)";}}
+            onMouseLeave={e=>{if(!active) e.currentTarget.style.color="rgba(10,31,68,0.50)";}}>
+            {t.l}
+            {active && (
+              <span style={{position:"absolute",left:6,right:6,bottom:-1,height:2,background:B.gold,borderRadius:"2px 2px 0 0"}}/>
+            )}
+          </button>
+        );
+      })}
     </div>
-    {!f.sinSeguimiento&&alerts.map((a,i)=><div key={i} style={{background:a.color+"10",border:`1px solid ${a.color}25`,borderRadius:8,padding:"8px 13px",marginBottom:8,fontSize:12,color:a.color,fontWeight:600}}>{a.msg}</div>)}
+
+    {/* Alertas con dots y mfPulseDot solo en riesgo */}
+    {!f.sinSeguimiento && alerts.map((a,i)=>(
+      <div key={i} style={{
+        background: a.color + "0a",
+        border: `1px solid ${a.color}22`,
+        borderRadius:9, padding:"9px 13px", marginBottom:8,
+        fontSize:12, color:a.color, fontWeight:500,
+        display:"inline-flex", alignItems:"center", gap:8,
+        letterSpacing:"0.005em",
+      }}>
+        <span style={{
+          width:6, height:6, borderRadius:"50%", background:a.color,
+          animation: a.tipo === "riesgo" ? "mfPulseDot 1.6s var(--mf-ease-out) infinite" : "none",
+        }}/>
+        {a.msg}
+      </div>
+    ))}
     {tab==="info"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
       <FL label="Nombre completo" span2><Inp value={f.nombre} onChange={v=>set("nombre",v)}/></FL>
       <FL label="Teléfono / WhatsApp"><Inp value={f.telefono} onChange={v=>set("telefono",v)}/></FL>
@@ -2102,67 +2185,252 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
       <FL label="Motivador de compra"><Inp value={f.motivador||""} onChange={v=>set("motivador",v)} rows={2} placeholder="¿Qué lo haría decidir hoy?"/></FL>
     </div>}
     {tab==="etapa"&&<div>
-      <div style={{fontSize:12,color:"#6b7280",marginBottom:14}}>Selecciona la etapa actual</div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:18}}>
-        {ETAPAS.map(et=>(<button key={et.id} onClick={()=>cambiarEtapa(et.id)} style={{padding:"8px 16px",borderRadius:20,border:`1.5px solid ${f.etapa===et.id?et.color:B.gray}`,background:f.etapa===et.id?et.color+"14":B.cream,color:f.etapa===et.id?et.color:"#6b7280",fontFamily:"Poppins",fontWeight:600,fontSize:12,cursor:"pointer"}}>{et.icon} {et.label}</button>))}
+      <div style={{
+        fontSize:11, fontWeight:500,
+        color:"rgba(10,31,68,0.45)",
+        textTransform:"uppercase", letterSpacing:"0.12em",
+        marginBottom:14,
+      }}>Selecciona la etapa actual</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
+        {ETAPAS.map(et=>{
+          const active = f.etapa === et.id;
+          return (
+            <button key={et.id} onClick={()=>cambiarEtapa(et.id)}
+              style={{
+                display:"inline-flex", alignItems:"center", gap:7,
+                padding:"8px 14px",
+                borderRadius:9,
+                border: `1px solid ${active ? et.color + "55" : "rgba(10,31,68,0.08)"}`,
+                background: active ? et.color + "0e" : B.white,
+                color: active ? et.color : "rgba(10,31,68,0.65)",
+                fontFamily:"'Poppins',sans-serif",
+                fontWeight: active ? 600 : 500,
+                fontSize:12,
+                cursor:"pointer",
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                letterSpacing:"0.005em",
+              }}>
+              <span style={{width:7,height:7,borderRadius:"50%",background:et.color}}/>
+              {et.label.replace(/[¡⭐!]/g,"").trim()}
+            </button>
+          );
+        })}
       </div>
-      <div style={{background:f.sinSeguimiento?B.redLight:B.cream,border:`1.5px solid ${f.sinSeguimiento?B.redBright+"44":B.gray}`,borderRadius:12,padding:"14px 16px"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div><div style={{fontSize:13,fontWeight:700,color:f.sinSeguimiento?B.redBright:B.navy}}>🚫 Sin seguimiento</div><div style={{fontSize:11,color:"#6b7280",marginTop:2}}>No interesado / perdido definitivo.</div></div>
-          <Btn onClick={toggleSinSeg} color={f.sinSeguimiento?B.green:B.redBright} outline small>{f.sinSeguimiento?"Reactivar":"Marcar"}</Btn>
+      <div style={{
+        background: f.sinSeguimiento ? "rgba(220,38,38,0.04)" : "rgba(248,246,242,0.6)",
+        border: `1px solid ${f.sinSeguimiento ? "rgba(220,38,38,0.18)" : "rgba(10,31,68,0.06)"}`,
+        borderRadius:12,
+        padding:"14px 16px",
+      }}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <IconMinusCircle size={16} color={f.sinSeguimiento ? B.redBright : "rgba(10,31,68,0.40)"}/>
+            <div>
+              <div style={{fontSize:13,fontWeight:600,color:f.sinSeguimiento?B.redBright:B.navy}}>Sin seguimiento</div>
+              <div style={{fontSize:11,color:"rgba(10,31,68,0.50)",marginTop:2}}>No interesado / perdido definitivo.</div>
+            </div>
+          </div>
+          <button onClick={toggleSinSeg}
+            style={{
+              padding:"6px 12px", borderRadius:8,
+              border:`1px solid ${f.sinSeguimiento?B.green+"40":B.redBright+"40"}`,
+              background:"transparent",
+              color: f.sinSeguimiento ? B.green : B.redBright,
+              fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+              cursor:"pointer", whiteSpace:"nowrap",
+            }}>
+            {f.sinSeguimiento ? "Reactivar" : "Marcar"}
+          </button>
         </div>
       </div>
     </div>}
     {tab==="checklist"&&<div>
-      <div style={{fontSize:12,color:"#6b7280",marginBottom:14}}>Registra cada acción de contacto</div>
+      <div style={{
+        fontSize:11, fontWeight:500,
+        color:"rgba(10,31,68,0.45)",
+        textTransform:"uppercase", letterSpacing:"0.12em",
+        marginBottom:14,
+      }}>Registra cada acción de contacto</div>
       {CHECKLIST_DEF.map(item=>{
-        const done=f.checklist?.[item.key]||false;
-        const esNI=item.key==="noInteres";
-        const col=esNI?B.redBright:done?B.green:"#d1d5db";
-        return <div key={item.key} onClick={()=>{setChk(item.key,!done);if(item.key==="noInteres")setF(p=>({...p,sinSeguimiento:!done,etapa:!done?"perdido":p.etapa}));}}
-          style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderRadius:9,background:done?(esNI?B.redLight:B.greenLight):"transparent",border:`1px solid ${done?(esNI?B.redBright+"28":B.green+"28"):B.gray}`,marginBottom:6,cursor:"pointer",transition:"all .15s"}}>
-          <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${col}`,background:done?(esNI?B.redBright:B.green):"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            {done&&<span style={{color:"#fff",fontSize:10,fontWeight:800}}>✓</span>}
+        const done = f.checklist?.[item.key] || false;
+        const esNI = item.key === "noInteres";
+        return (
+          <div key={item.key} onClick={()=>{setChk(item.key,!done); if(item.key==="noInteres") setF(p=>({...p,sinSeguimiento:!done,etapa:!done?"perdido":p.etapa}));}}
+            style={{
+              display:"flex", alignItems:"center", gap:12,
+              padding:"11px 14px",
+              borderRadius:10,
+              background: done ? (esNI ? "rgba(220,38,38,0.04)" : "rgba(22,101,52,0.04)") : B.white,
+              border: `1px solid ${done ? (esNI ? "rgba(220,38,38,0.20)" : "rgba(22,101,52,0.20)") : "rgba(10,31,68,0.06)"}`,
+              marginBottom:6,
+              cursor:"pointer",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{if(!done) e.currentTarget.style.borderColor = "rgba(198,169,107,0.30)";}}
+            onMouseLeave={e=>{if(!done) e.currentTarget.style.borderColor = "rgba(10,31,68,0.06)";}}>
+            <div style={{
+              width:18, height:18, borderRadius:5,
+              border: `1.5px solid ${done ? (esNI ? B.redBright : B.green) : "rgba(10,31,68,0.20)"}`,
+              background: done ? (esNI ? B.redBright : B.green) : "transparent",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              flexShrink:0,
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}>
+              {done && <IconCheck size={12} color="#fff"/>}
+            </div>
+            <span style={{
+              fontSize:13, fontWeight: done ? 600 : 500,
+              color: done ? (esNI ? B.redBright : B.green) : "rgba(10,31,68,0.85)",
+              letterSpacing:"0.005em",
+            }}>{item.label}</span>
           </div>
-          <span style={{fontSize:14}}>{item.icon}</span>
-          <span style={{fontSize:13,fontWeight:done?600:400,color:done?(esNI?B.redBright:B.green):B.black}}>{item.label}</span>
-        </div>;
+        );
       })}
     </div>}
     {tab==="historial"&&<div>
-      <div style={{display:"flex",gap:8,marginBottom:14}}>
-        <Sel value={tipoN} onChange={setTipoN} options={[{v:"llamada",l:"📞 Llamada"},{v:"whatsapp",l:"💬 WhatsApp"},{v:"visita",l:"🤝 Visita"},{v:"correo",l:"📧 Correo"},{v:"nota",l:"📝 Nota"}]}/>
-        <Inp value={nota} onChange={setNota} placeholder="Escribe el registro..." onKeyDown={e=>e.key==="Enter"&&addNota()}/>
-        <Btn onClick={addNota} bg={B.navy} small>+</Btn>
+      <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
+        <Sel value={tipoN} onChange={setTipoN} options={[
+          {v:"llamada",  l:"● Llamada"},
+          {v:"whatsapp", l:"● WhatsApp"},
+          {v:"visita",   l:"● Visita"},
+          {v:"correo",   l:"● Correo"},
+          {v:"nota",     l:"● Nota"},
+        ]}/>
+        <div style={{flex:1, minWidth:180}}>
+          <Inp value={nota} onChange={setNota} placeholder="Escribe el registro…" onKeyDown={e=>e.key==="Enter"&&addNota()}/>
+        </div>
+        <button onClick={addNota}
+          style={{
+            display:"inline-flex", alignItems:"center", justifyContent:"center", gap:5,
+            padding:"0 14px", minHeight:44, borderRadius:8,
+            border:"none",
+            background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+            color:"#fff",
+            fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12.5,
+            cursor:"pointer",
+            boxShadow:"0 1px 2px rgba(10,31,68,0.10)",
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
+          onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
+          <IconPlus size={13} color="#fff"/>
+        </button>
       </div>
-      {(f.seguimientos||[]).length===0
-        ?<div style={{fontSize:12,color:"#9ca3af",textAlign:"center",padding:"24px 0"}}>Sin registros aún</div>
-        :<div style={{position:"relative",paddingLeft:22}}>
-          <div style={{position:"absolute",left:8,top:0,bottom:0,width:1,background:B.gray}}/>
+      {(f.seguimientos||[]).length === 0 ? (
+        <div style={{
+          fontSize:13, color:"rgba(10,31,68,0.30)",
+          textAlign:"center", padding:"32px 0",
+          fontStyle:"italic", letterSpacing:"0.01em",
+        }}>Sin registros aún</div>
+      ) : (
+        <div style={{position:"relative", paddingLeft:22}}>
+          <div style={{position:"absolute", left:8, top:6, bottom:6, width:1, background:"rgba(10,31,68,0.08)"}}/>
           {(f.seguimientos||[]).map((s,i)=>(
-            <div key={s.id||i} style={{position:"relative",marginBottom:12}}>
-              <div style={{position:"absolute",left:-18,top:10,width:9,height:9,borderRadius:"50%",background:tipoColor[s.tipo]||"#9ca3af",border:`2px solid ${B.white}`}}/>
-              <div style={{background:B.cream,borderRadius:8,padding:"9px 12px"}}>
-                <div style={{fontSize:10,color:"#9ca3af",marginBottom:3,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                  <span>{fmtF(s.fecha)} · {s.tipo}</span>
-                  {s.autor&&(<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 7px",borderRadius:20,background:s.rol==="asistente"?"#7c3aed14":"#1e40af14",color:s.rol==="asistente"?"#7c3aed":B.navy,fontSize:9,fontWeight:700}}>{s.rol==="asistente"?"🤝":"👤"} {s.autor}</span>)}
-                  {s._auto&&<span style={{fontSize:9,color:"#94a3b8",fontStyle:"italic"}}>automático</span>}
+            <div key={s.id||i} style={{position:"relative", marginBottom:12}}>
+              <div style={{
+                position:"absolute", left:-18, top:11,
+                width:9, height:9, borderRadius:"50%",
+                background: tipoColor[s.tipo] || "rgba(10,31,68,0.30)",
+                border:"2px solid #fff",
+                boxShadow:"0 0 0 1px rgba(10,31,68,0.08)",
+              }}/>
+              <div style={{
+                background:"rgba(248,246,242,0.6)",
+                border:"1px solid rgba(10,31,68,0.05)",
+                borderRadius:10,
+                padding:"10px 13px",
+              }}>
+                <div style={{
+                  fontSize:10, color:"rgba(10,31,68,0.45)",
+                  marginBottom:4, display:"flex", alignItems:"center", gap:7, flexWrap:"wrap",
+                  fontWeight:500, letterSpacing:"0.01em",
+                }}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                    <span style={{width:5,height:5,borderRadius:"50%",background:tipoColor[s.tipo]||"#9ca3af"}}/>
+                    {fmtF(s.fecha)} · {s.tipo}
+                  </span>
+                  {s.autor && (
+                    <span style={{
+                      display:"inline-flex", alignItems:"center", gap:4,
+                      padding:"1px 8px", borderRadius:12,
+                      background: s.rol === "asistente" ? "rgba(124,58,237,0.08)" : "rgba(10,31,68,0.06)",
+                      color: s.rol === "asistente" ? "#7c3aed" : B.navy,
+                      fontSize:10, fontWeight:500, textTransform:"none", letterSpacing:0,
+                    }}>
+                      {s.rol === "asistente" ? <IconUsers size={9}/> : <IconUser size={9}/>}
+                      {s.autor}
+                    </span>
+                  )}
+                  {s._auto && (
+                    <span style={{fontSize:10, color:"rgba(10,31,68,0.35)", fontStyle:"italic", textTransform:"none", letterSpacing:0}}>automático</span>
+                  )}
                 </div>
-                <div style={{fontSize:13,color:B.black}}>{s.texto}</div>
+                <div style={{fontSize:13, color:"rgba(10,31,68,0.85)", lineHeight:1.5}}>{s.texto}</div>
               </div>
             </div>
           ))}
         </div>
-      }
+      )}
     </div>}
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:22}}>
-      {!esAsistente?<Btn onClick={()=>setConfirmDel(true)} color={B.redBright} outline small>Eliminar lead</Btn>:<div style={{fontSize:10,color:"#94a3b8",fontStyle:"italic"}}>Asistente · solo puede registrar seguimientos</div>}
+
+    {/* Footer: eliminar lead + cancelar/guardar */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:24,gap:10,flexWrap:"wrap"}}>
+      {!esAsistente ? (
+        <button onClick={()=>setConfirmDel(true)}
+          style={{
+            display:"inline-flex", alignItems:"center", gap:6,
+            padding:"8px 13px", borderRadius:8,
+            border:`1px solid ${B.redBright}30`,
+            background:"transparent", color:B.redBright,
+            fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+            cursor:"pointer",
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.05)"; e.currentTarget.style.borderColor=B.redBright+"55";}}
+          onMouseLeave={e=>{e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor=B.redBright+"30";}}>
+          <IconTrash size={12} color={B.redBright}/>Eliminar lead
+        </button>
+      ) : (
+        <div style={{fontSize:10,color:"rgba(10,31,68,0.40)",fontStyle:"italic"}}>
+          Asistente · solo puede registrar seguimientos
+        </div>
+      )}
       <div style={{display:"flex",gap:8}}>
-        <Btn onClick={onClose} color="#6b7280" outline small>Cancelar</Btn>
-        <Btn onClick={guardar} bg={B.navy} small>Guardar</Btn>
+        <button onClick={onClose}
+          style={{
+            padding:"8px 14px", borderRadius:8,
+            border:"1px solid rgba(10,31,68,0.08)",
+            background:B.white, color:"rgba(10,31,68,0.65)",
+            fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+            cursor:"pointer",
+          }}>Cancelar</button>
+        <button onClick={guardar}
+          style={{
+            padding:"8px 16px", borderRadius:8, border:"none",
+            background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+            color:"#fff",
+            fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12.5,
+            cursor:"pointer",
+            boxShadow:"0 1px 2px rgba(10,31,68,0.10)",
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
+          onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
+          Guardar
+        </button>
       </div>
     </div>
-    {confirmDel&&<ConfirmModal titulo="¿Eliminar lead?" mensaje={`Vas a eliminar a "${lead.nombre}" permanentemente.`} icono="🗑️" textoConfirm="Sí, eliminar" colorConfirm={B.redBright} onConfirm={()=>{onDelete(lead.id);onClose();}} onCancel={()=>setConfirmDel(false)}/>}
+    {confirmDel && (
+      <ConfirmModal
+        titulo="¿Eliminar lead?"
+        mensaje={`Vas a eliminar a "${lead.nombre}" permanentemente.`}
+        icono="🗑️"
+        textoConfirm="Sí, eliminar"
+        colorConfirm={B.redBright}
+        onConfirm={()=>{onDelete(lead.id); onClose();}}
+        onCancel={()=>setConfirmDel(false)}
+      />
+    )}
     {wam&&<EnviarWhatsAppModal lead={f} usuario={usuario} onClose={()=>setWam(false)} onEnviado={registrarSeguimientoWhatsApp}/>}
   </MFModal>;
 }
