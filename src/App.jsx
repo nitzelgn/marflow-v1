@@ -326,15 +326,68 @@ function WolfMark({size=120, opacity=1}) {
   );
 }
 
+/* ═══════════════════════════════════════════
+   ICONOS minimalistas estilo Lucide / Feather
+   SVG inline para no agregar dependencias
+═══════════════════════════════════════════ */
+const IconEye = ({size=18, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+const IconEyeOff = ({size=18, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
+    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
+    <line x1="2" x2="22" y1="2" y2="22"/>
+  </svg>
+);
+const IconCheck = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 6 9 17l-5-5"/>
+  </svg>
+);
+const IconAlert = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" x2="12" y1="8" y2="12"/>
+    <line x1="12" x2="12.01" y1="16" y2="16"/>
+  </svg>
+);
+const IconArrowRight = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 12h14"/>
+    <path d="m12 5 7 7-7 7"/>
+  </svg>
+);
+const IconLoader = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{animation:"mfSpin .8s linear infinite"}}>
+    <line x1="12" y1="2" y2="6" x2="12"/>
+    <line x1="12" y1="18" y2="22" x2="12"/>
+    <line x1="4.93" y1="4.93" y2="7.76" x2="7.76"/>
+    <line x1="16.24" y1="16.24" y2="19.07" x2="19.07"/>
+    <line x1="2" y1="12" y2="12" x2="6"/>
+    <line x1="18" y1="12" y2="12" x2="22"/>
+    <line x1="4.93" y1="19.07" y2="16.24" x2="7.76"/>
+    <line x1="16.24" y1="7.76" y2="4.93" x2="19.07"/>
+  </svg>
+);
+
 function Auth({onLogin, mensajeInicial}) {
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
+  const [pass2,setPass2]=useState("");
   const [nombre,setNombre]=useState("");
+  const [telefono,setTelefono]=useState("");
+  const [estado,setEstado]=useState("");
   const [err,setErr]=useState("");
   const [info,setInfo]=useState(mensajeInicial||"");
   const [loading,setLoading]=useState(false);
   const [modo,setModo]=useState("login"); // 'login' | 'signup' | 'forgot'
   const [verPass,setVerPass]=useState(false);
+  const [verPass2,setVerPass2]=useState(false);
 
   async function login(){
     if(loading) return;
@@ -353,12 +406,28 @@ function Auth({onLogin, mensajeInicial}) {
       }
       // Modo: signup
       if (modo === "signup") {
-        if (!nombre.trim()) { setErr("Escribe tu nombre"); setLoading(false); return; }
-        if (pass.length < 8) { setErr("La contraseña debe tener al menos 8 caracteres"); setLoading(false); return; }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const passSegura = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/; // mín 8, al menos una letra y un número
+        if (!nombre.trim()) { setErr("Escribe tu nombre completo"); setLoading(false); return; }
+        if (!telefono.trim() || telefono.replace(/\D/g,"").length < 10) {
+          setErr("Escribe un teléfono válido (mínimo 10 dígitos)"); setLoading(false); return;
+        }
+        if (!emailRegex.test(email.trim())) { setErr("El correo no es válido"); setLoading(false); return; }
+        if (!passSegura.test(pass)) {
+          setErr("La contraseña debe tener mínimo 8 caracteres, con al menos una letra y un número");
+          setLoading(false); return;
+        }
+        if (pass !== pass2) { setErr("Las contraseñas no coinciden"); setLoading(false); return; }
+
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password: pass,
-          options: { data: { nombre: nombre.trim(), rol: "admin" } }
+          options: { data: {
+            nombre: nombre.trim(),
+            telefono: telefono.trim(),
+            estado: estado || null,
+            rol: "admin",
+          }}
         });
         if (error) { setErr(error.message); setLoading(false); return; }
         if (!data.session) {
@@ -382,7 +451,8 @@ function Auth({onLogin, mensajeInicial}) {
   }
 
   function cambiarModo(nuevo){
-    setModo(nuevo); setErr(""); setInfo(""); setPass(""); setNombre("");
+    setModo(nuevo); setErr(""); setInfo("");
+    setPass(""); setPass2(""); setNombre(""); setTelefono(""); setEstado("");
   }
 
   async function cargarPerfilYContinuar(userId) {
@@ -460,10 +530,29 @@ function Auth({onLogin, mensajeInicial}) {
     }
 
     .mf-auth-logo-wrap {
-      text-align: center; margin-bottom: 36px;
+      text-align: center;
+      margin-bottom: 32px;
       animation: mfFadeIn .9s ease;
     }
-    @media (min-width: 768px) { .mf-auth-logo-wrap { margin-bottom: 52px; } }
+    .mf-auth-logo-img {
+      height: 96px; width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 12px 28px rgba(10, 31, 68, 0.10));
+      user-select: none; -webkit-user-drag: none;
+    }
+    @media (min-width: 768px) {
+      .mf-auth-logo-wrap { margin-bottom: 44px; }
+      .mf-auth-logo-img { height: 120px; }
+    }
+
+    .mf-auth-select {
+      cursor: pointer;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%230A1F44' stroke-opacity='0.45' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 16px center;
+      padding-right: 40px;
+    }
+    .mf-auth-select:invalid { color: rgba(10,31,68,0.28); }
 
     .mf-auth-headline {
       font-family: 'Cormorant Garamond', serif;
@@ -684,8 +773,8 @@ function Auth({onLogin, mensajeInicial}) {
                : modo==="signup" ? "Crear tu cuenta"
                : "Bienvenida de vuelta";
   const subtitulo = modo==="forgot" ? "Te enviaremos un correo para que crees una contraseña nueva."
-                  : modo==="signup" ? "Únete a la plataforma para asesores de alto rendimiento."
-                  : "La plataforma exclusiva para asesores que cierran con consistencia.";
+                  : modo==="signup" ? "Únete a la plataforma inteligente para asesores de alto rendimiento."
+                  : "La plataforma inteligente para asesores de alto rendimiento.";
 
   return (
     <div className="mf-auth-page">
@@ -697,9 +786,14 @@ function Auth({onLogin, mensajeInicial}) {
       </div>
 
       <div className="mf-auth-inner">
-        {/* Logo */}
+        {/* Logo oficial */}
         <div className="mf-auth-logo-wrap">
-          <MarflowLogo height={44} dark={false}/>
+          <img
+            src="/icon-512.png"
+            alt="MarFlow"
+            className="mf-auth-logo-img"
+            draggable="false"
+          />
         </div>
 
         {/* Headline + subhead */}
@@ -709,21 +803,49 @@ function Auth({onLogin, mensajeInicial}) {
         {/* Card */}
         <div className="mf-auth-card">
           {modo==="signup" && (
-            <div className="mf-auth-field">
-              <label className="mf-auth-label"><span>Nombre completo</span></label>
-              <input
-                className="mf-auth-input"
-                value={nombre}
-                onChange={e=>setNombre(e.target.value)}
-                placeholder="Tu nombre"
-                onKeyDown={e=>e.key==="Enter"&&login()}
-                autoCapitalize="words"
-              />
-            </div>
+            <>
+              <div className="mf-auth-field">
+                <label className="mf-auth-label"><span>Nombre completo</span></label>
+                <input
+                  className="mf-auth-input"
+                  value={nombre}
+                  onChange={e=>setNombre(e.target.value)}
+                  placeholder="Tu nombre"
+                  onKeyDown={e=>e.key==="Enter"&&login()}
+                  autoCapitalize="words"
+                />
+              </div>
+
+              <div className="mf-auth-field">
+                <label className="mf-auth-label"><span>Estado</span></label>
+                <select
+                  className="mf-auth-input mf-auth-select"
+                  value={estado}
+                  onChange={e=>setEstado(e.target.value)}
+                >
+                  <option value="">Selecciona tu estado</option>
+                  {ESTADOS_MX.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              <div className="mf-auth-field">
+                <label className="mf-auth-label"><span>Teléfono</span></label>
+                <input
+                  className="mf-auth-input"
+                  type="tel"
+                  inputMode="numeric"
+                  value={telefono}
+                  onChange={e=>setTelefono(e.target.value)}
+                  placeholder="10 dígitos"
+                  onKeyDown={e=>e.key==="Enter"&&login()}
+                  autoComplete="tel"
+                />
+              </div>
+            </>
           )}
 
           <div className="mf-auth-field">
-            <label className="mf-auth-label"><span>Email</span></label>
+            <label className="mf-auth-label"><span>{modo==="signup"?"Correo electrónico":"Email"}</span></label>
             <input
               className="mf-auth-input"
               type="email"
@@ -732,13 +854,14 @@ function Auth({onLogin, mensajeInicial}) {
               placeholder="tu@email.com"
               onKeyDown={e=>e.key==="Enter"&&login()}
               autoCapitalize="none" autoCorrect="off" spellCheck={false}
+              autoComplete={modo==="signup"?"email":"username"}
             />
           </div>
 
           {modo!=="forgot" && (
             <div className="mf-auth-field">
               <label className="mf-auth-label">
-                <span>Contraseña{modo==="signup" && <span className="mf-auth-label-hint">(mín. 8 caracteres)</span>}</span>
+                <span>Contraseña{modo==="signup" && <span className="mf-auth-label-hint">(mín. 8, letras y números)</span>}</span>
                 {modo==="login" && (
                   <button type="button" onClick={()=>cambiarModo("forgot")} className="mf-auth-forgot">
                     ¿Olvidaste tu contraseña?
@@ -754,9 +877,31 @@ function Auth({onLogin, mensajeInicial}) {
                   placeholder="••••••••"
                   onKeyDown={e=>e.key==="Enter"&&login()}
                   style={{paddingRight:48}}
+                  autoComplete={modo==="signup"?"new-password":"current-password"}
                 />
                 <button type="button" onClick={()=>setVerPass(v=>!v)} aria-label={verPass?"Ocultar contraseña":"Mostrar contraseña"} className="mf-auth-pass-toggle">
-                  {verPass?"🙈":"👁️"}
+                  {verPass ? <IconEyeOff/> : <IconEye/>}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {modo==="signup" && (
+            <div className="mf-auth-field">
+              <label className="mf-auth-label"><span>Confirmar contraseña</span></label>
+              <div className="mf-auth-pass-wrap">
+                <input
+                  className="mf-auth-input"
+                  type={verPass2?"text":"password"}
+                  value={pass2}
+                  onChange={e=>setPass2(e.target.value)}
+                  placeholder="••••••••"
+                  onKeyDown={e=>e.key==="Enter"&&login()}
+                  style={{paddingRight:48}}
+                  autoComplete="new-password"
+                />
+                <button type="button" onClick={()=>setVerPass2(v=>!v)} aria-label={verPass2?"Ocultar":"Mostrar"} className="mf-auth-pass-toggle">
+                  {verPass2 ? <IconEyeOff/> : <IconEye/>}
                 </button>
               </div>
             </div>
@@ -764,13 +909,13 @@ function Auth({onLogin, mensajeInicial}) {
 
           {err && (
             <div className="mf-auth-alert err">
-              <span className="mf-auth-alert-icon">⚠</span>
+              <span className="mf-auth-alert-icon"><IconAlert size={16}/></span>
               <span>{err}</span>
             </div>
           )}
           {info && (
             <div className="mf-auth-alert info">
-              <span className="mf-auth-alert-icon">✓</span>
+              <span className="mf-auth-alert-icon"><IconCheck size={16}/></span>
               <span>{info}</span>
             </div>
           )}
@@ -778,10 +923,13 @@ function Auth({onLogin, mensajeInicial}) {
           <button className="mf-auth-btn" onClick={login} disabled={loading}>
             {loading
               ? (<span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:10}}>
-                  <span className="mf-auth-spinner"/>
-                  {modo==="signup"?"Creando cuenta...":modo==="forgot"?"Enviando...":"Verificando..."}
+                  <IconLoader size={15} color="#fff"/>
+                  {modo==="signup"?"Creando cuenta…":modo==="forgot"?"Enviando…":"Verificando…"}
                 </span>)
-              : (modo==="signup"?"Crear cuenta →":modo==="forgot"?"Enviar instrucciones →":"Iniciar sesión →")}
+              : (<span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                  {modo==="signup"?"Registrarme":modo==="forgot"?"Enviar instrucciones":"Iniciar sesión"}
+                  <IconArrowRight size={15} color="#fff"/>
+                </span>)}
           </button>
 
           <div className="mf-auth-divider">
@@ -793,7 +941,7 @@ function Auth({onLogin, mensajeInicial}) {
           </div>
 
           <button onClick={()=>cambiarModo(modo==="login"?"signup":"login")} className="mf-auth-btn-secondary">
-            {modo==="signup"?"Ya tengo cuenta · Iniciar sesión":modo==="forgot"?"Volver al inicio de sesión":"Soy nuevo · Crear cuenta"}
+            {modo==="signup"?"Iniciar sesión":modo==="forgot"?"Volver al inicio":"Registrarse"}
           </button>
         </div>
 
