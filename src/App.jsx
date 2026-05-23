@@ -507,6 +507,15 @@ const IconMinusCircle = ({size=14, color="currentColor"}) => (
     <line x1="8" x2="16" y1="12" y2="12"/>
   </svg>
 );
+const IconTrash = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 6h18"/>
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+    <line x1="10" x2="10" y1="11" y2="17"/>
+    <line x1="14" x2="14" y1="11" y2="17"/>
+  </svg>
+);
 
 function Auth({onLogin, mensajeInicial}) {
   const [email,setEmail]=useState("");
@@ -2991,65 +3000,434 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
     setConfirmandoBorrado(false);
   }
 
-  const LISTA_CSS=`.mf-table{width:100%;border-collapse:collapse;min-width:580px;}.mf-th{text-align:left;padding:10px 12px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;border-bottom:2px solid #E5E7EB;white-space:nowrap;background:#F8F6F2;position:sticky;top:0;z-index:1;}.mf-td{padding:10px 12px;font-size:13px;border-bottom:1px solid rgba(229,231,235,.5);vertical-align:middle;}.mf-tr{transition:background .12s;cursor:pointer;}.mf-tr:hover .mf-td{background:rgba(10,31,68,.025);}.mf-tr.rojo .mf-td{background:#fef2f2;}.mf-tr.seg-ant .mf-td{background:#fffbeb;}.mf-tel-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:20px;border:1px solid #E5E7EB;background:#fff;color:#0A1F44;font-family:'Poppins',sans-serif;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;}.mf-tel-btn:hover{border-color:#0A1F44;background:#0A1F44;color:#fff;}@media(max-width:640px){.mf-col-hide{display:none!important;}}`;
-  const fmtMes=m=>{const[y,mo]=m.split("-");return `${["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][parseInt(mo)-1]} ${y}`;};
-  return(<div>
+  const LISTA_CSS = `
+    .mf-table { width: 100%; border-collapse: collapse; min-width: 620px; font-family: 'Poppins', sans-serif; }
+    .mf-th {
+      text-align: left; padding: 12px 14px;
+      font-size: 10px; font-weight: 600;
+      color: rgba(10,31,68,0.50);
+      text-transform: uppercase; letter-spacing: 0.10em;
+      border-bottom: 1px solid rgba(10,31,68,0.06);
+      white-space: nowrap;
+      background: rgba(248,246,242,0.6);
+      position: sticky; top: 0; z-index: 1;
+    }
+    .mf-td {
+      padding: 12px 14px; font-size: 13px;
+      border-bottom: 1px solid rgba(10,31,68,0.04);
+      vertical-align: middle;
+      color: rgba(10,31,68,0.85);
+    }
+    .mf-tr {
+      transition: background-color var(--mf-t-fast) var(--mf-ease-out);
+      cursor: pointer;
+    }
+    .mf-tr:hover .mf-td { background: rgba(10,31,68,0.022); }
+    .mf-tr.rojo .mf-td { background: rgba(220,38,38,0.025); }
+    .mf-tr.seg-ant .mf-td { background: rgba(217,119,6,0.025); }
+    .mf-tel-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px; border-radius: 8px;
+      border: 1px solid rgba(10,31,68,0.08);
+      background: transparent;
+      color: rgba(10,31,68,0.85);
+      font-family: 'Poppins', sans-serif;
+      font-size: 12px; font-weight: 500;
+      cursor: pointer;
+      transition: all var(--mf-t-fast) var(--mf-ease-out);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .mf-tel-btn:hover {
+      border-color: rgba(198,169,107,0.40);
+      background: rgba(198,169,107,0.05);
+      color: #0A1F44;
+    }
+    @media (max-width: 640px) { .mf-col-hide { display: none !important; } }
+  `;
+  const fmtMes = m => { const [y, mo] = m.split("-"); return `${["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][parseInt(mo)-1]} ${y}`; };
+  const tempColorOf = (lead) => {
+    const t = getTempLead(lead);
+    if (!t) return null;
+    return t.nivel === "caliente" ? "#dc2626"
+         : t.nivel === "tibio"    ? "#d97706"
+         : "#3b82f6";
+  };
+
+  return (<div className="mf-fade-in">
     <style>{LISTA_CSS}</style>
-    <div style={{marginBottom:16}}>
-      <div style={{display:"flex",gap:0,background:B.white,border:`1px solid ${B.gray}`,borderRadius:12,padding:4,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
-        <button onClick={()=>setTab("actual")} style={{flexShrink:0,padding:"8px 16px",borderRadius:9,border:"none",background:tab==="actual"?B.navy:"transparent",color:tab==="actual"?B.white:"#64748b",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>📅 {fmtMes(mesHoy)}<span style={{marginLeft:6,padding:"1px 7px",borderRadius:20,background:tab==="actual"?"rgba(255,255,255,.2)":"rgba(10,31,68,.08)",fontSize:10,fontWeight:700}}>{leadsActual.length}</span></button>
-        <div style={{width:1,background:B.gray,margin:"4px 2px",flexShrink:0}}/>
-        {!esAsistente&&(<button onClick={()=>setTab("sig")} style={{flexShrink:0,padding:"8px 14px",borderRadius:9,border:"none",background:tab==="sig"?B.green:"transparent",color:tab==="sig"?B.white:"#64748b",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>📆 {fmtMes(mesSig)}<span style={{marginLeft:4,padding:"1px 6px",borderRadius:20,background:tab==="sig"?"rgba(255,255,255,.2)":"rgba(10,31,68,.08)",fontSize:10,fontWeight:700}}>{leadsSiguiente.length}</span></button>)}
-        <div style={{width:1,background:B.gray,margin:"4px 2px",flexShrink:0}}/>
-        {mesesDisponibles.filter(m=>m!==mesHoy&&m!==mesSig).map(m=>(<button key={m} onClick={()=>setTab(m)} style={{flexShrink:0,padding:"8px 14px",borderRadius:9,border:"none",background:tab===m?B.navyMid||"#122550":"transparent",color:tab===m?B.white:"#64748b",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>{fmtMes(m)}<span style={{marginLeft:4,padding:"1px 6px",borderRadius:20,background:tab===m?"rgba(255,255,255,.18)":"rgba(10,31,68,.08)",fontSize:10,fontWeight:700}}>{leads.filter(l=>(l.mesCreacion||l.ultimoContacto?.slice(0,7)||mesHoy)===m).length}</span></button>))}
+
+    {/* ═══ Tabs de mes — estilo Notion/Linear ═══ */}
+    <div style={{marginBottom: 18}}>
+      <div style={{
+        display: "flex", gap: 2,
+        background: "transparent",
+        padding: 0,
+        overflowX: "auto",
+        WebkitOverflowScrolling: "touch",
+        scrollbarWidth: "none",
+        borderBottom: "1px solid rgba(10,31,68,0.06)",
+      }}>
+        {[
+          { v: "actual", label: fmtMes(mesHoy), count: leadsActual.length },
+          ...(!esAsistente ? [{ v: "sig", label: fmtMes(mesSig), count: leadsSiguiente.length }] : []),
+          ...mesesDisponibles.filter(m => m !== mesHoy && m !== mesSig).map(m => ({
+            v: m, label: fmtMes(m),
+            count: leads.filter(l => (l.mesCreacion || l.ultimoContacto?.slice(0,7) || mesHoy) === m).length
+          })),
+        ].map(t => {
+          const active = tab === t.v;
+          return (
+            <button key={t.v} onClick={()=>setTab(t.v)}
+              style={{
+                flexShrink: 0,
+                position: "relative",
+                padding: "10px 14px 11px",
+                borderRadius: 0,
+                border: "none",
+                background: "transparent",
+                color: active ? B.navy : "rgba(10,31,68,0.50)",
+                fontFamily: "'Poppins', sans-serif",
+                fontWeight: active ? 600 : 500,
+                fontSize: 12.5,
+                letterSpacing: "0.005em",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                transition: "color var(--mf-t-fast) var(--mf-ease-out)",
+              }}
+              onMouseEnter={e=>{if(!active) e.currentTarget.style.color = "rgba(10,31,68,0.80)";}}
+              onMouseLeave={e=>{if(!active) e.currentTarget.style.color = "rgba(10,31,68,0.50)";}}>
+              {t.label}
+              <span style={{
+                marginLeft: 7,
+                padding: "1px 7px", borderRadius: 12,
+                background: active ? "rgba(10,31,68,0.06)" : "rgba(10,31,68,0.04)",
+                color: active ? B.navy : "rgba(10,31,68,0.45)",
+                fontSize: 10, fontWeight: 600,
+                fontVariantNumeric: "tabular-nums",
+              }}>{t.count}</span>
+              {active && (
+                <span style={{
+                  position: "absolute", left: 8, right: 8, bottom: -1, height: 2,
+                  background: B.gold, borderRadius: "2px 2px 0 0",
+                }}/>
+              )}
+            </button>
+          );
+        })}
       </div>
-      {tab==="actual"&&seguAnt>0&&(<div style={{marginTop:8,padding:"8px 14px",borderRadius:8,background:"#fffbeb",border:"1px solid #fde68a",fontSize:12,color:B.amber,fontWeight:500,display:"flex",alignItems:"center",gap:6}}><span>⟳</span><span>{seguAnt} lead{seguAnt!==1?"s":""} de meses anteriores en <strong>Seguimiento</strong> incluido{seguAnt!==1?"s":""}.</span></div>)}
-      {tab==="sig"&&!esAsistente&&(<div style={{marginTop:8,padding:"8px 14px",borderRadius:8,background:B.greenDim,border:`1px solid ${B.green}28`,fontSize:12,color:B.green,fontWeight:500,display:"flex",alignItems:"center",gap:6}}><span>📆</span><span>Leads del <strong>próximo mes</strong>.</span></div>)}
+
+      {tab === "actual" && seguAnt > 0 && (
+        <div style={{
+          marginTop: 12, padding: "10px 14px", borderRadius: 10,
+          background: "rgba(217,119,6,0.04)",
+          border: "1px solid rgba(217,119,6,0.15)",
+          fontSize: 12, color: B.amber, fontWeight: 500,
+          display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <IconRefresh size={14} color={B.amber}/>
+          <span>{seguAnt} lead{seguAnt!==1?"s":""} de meses anteriores en <strong>Seguimiento</strong> incluido{seguAnt!==1?"s":""}.</span>
+        </div>
+      )}
+      {tab === "sig" && !esAsistente && (
+        <div style={{
+          marginTop: 12, padding: "10px 14px", borderRadius: 10,
+          background: "rgba(22,101,52,0.04)",
+          border: "1px solid rgba(22,101,52,0.15)",
+          fontSize: 12, color: B.green, fontWeight: 500,
+          display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <IconCalendar size={14} color={B.green}/>
+          <span>Leads del <strong>próximo mes</strong>.</span>
+        </div>
+      )}
     </div>
-    <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
-      {[{l:"Total",v:total,c:B.navy},{l:"Activos",v:activos,c:B.green},{l:"🔥 Calientes",v:calientes,c:"#dc2626"},{l:"Sin seguimiento",v:sinSeg,c:B.redBright}].map((s,i)=>(<div key={i} style={{background:B.white,border:`1px solid ${B.gray}`,borderLeft:`3px solid ${s.c}`,borderRadius:9,padding:"10px 14px",boxShadow:B.shadow}}><div style={{fontSize:9,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".6px"}}>{s.l}</div><div style={{fontSize:22,fontWeight:800,color:s.c,lineHeight:1.2,marginTop:2}}>{s.v}</div></div>))}
+
+    {/* ═══ Stats minimalistas (mismo lenguaje que Dashboard) ═══ */}
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+      gap: 12, marginBottom: 18,
+    }}>
+      {[
+        { l: "Total", v: total, dot: null },
+        { l: "Activos", v: activos, dot: B.green },
+        { l: "Calientes", v: calientes, dot: "#dc2626" },
+        { l: "Sin seguimiento", v: sinSeg, dot: B.redBright },
+      ].map((s, i) => (
+        <div key={i} className={`mf-fade-up mf-stagger-${i+1}`}
+          style={{
+            background: B.white,
+            border: "1px solid rgba(10,31,68,0.06)",
+            borderRadius: 12,
+            padding: "14px 16px 12px",
+            boxShadow: "var(--mf-shadow-xs)",
+          }}>
+          <div style={{display: "flex", alignItems: "center", gap: 6, marginBottom: 6}}>
+            {s.dot && <span style={{width: 6, height: 6, borderRadius: "50%", background: s.dot}}/>}
+            <div style={{
+              fontSize: 10, fontWeight: 500,
+              color: "rgba(10,31,68,0.45)",
+              textTransform: "uppercase",
+              letterSpacing: "0.10em",
+            }}>{s.l}</div>
+          </div>
+          <div style={{
+            fontFamily: "'Cormorant Garamond', serif",
+            fontSize: 30, fontWeight: 500,
+            lineHeight: 1, letterSpacing: "-0.01em",
+            color: B.navy,
+            fontVariantNumeric: "tabular-nums",
+          }}>{s.v}</div>
+        </div>
+      ))}
     </div>
-    <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-      <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder="🔍 Nombre, teléfono o estado..." style={{flex:1,minWidth:0,padding:"11px 13px",borderRadius:8,border:`1.5px solid ${B.gray}`,background:B.white,fontFamily:"'Poppins',sans-serif",fontSize:16,outline:"none",minHeight:44,WebkitAppearance:"none"}} onFocus={e=>e.target.style.borderColor=B.gold} onBlur={e=>e.target.style.borderColor=B.gray}/>
+
+    {/* ═══ Toolbar: buscador + filtros + nuevo lead ═══ */}
+    <div style={{display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center"}}>
+      <div style={{position: "relative", flex: 1, minWidth: 200, display: "flex", alignItems: "center"}}>
+        <span style={{
+          position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
+          color: "rgba(10,31,68,0.35)", pointerEvents: "none", display: "inline-flex",
+        }}>
+          <IconSearch size={15}/>
+        </span>
+        <input value={busq} onChange={e=>setBusq(e.target.value)}
+          placeholder="Buscar por nombre, teléfono o estado…"
+          style={{
+            width: "100%", paddingLeft: 38, paddingRight: 14,
+            paddingTop: 10, paddingBottom: 10, minHeight: 38,
+            borderRadius: 10,
+            border: "1px solid rgba(10,31,68,0.08)",
+            background: B.white,
+            color: B.navy,
+            fontFamily: "'Poppins', sans-serif",
+            fontSize: 14, fontWeight: 400,
+            outline: "none", WebkitAppearance: "none",
+            boxShadow: "var(--mf-shadow-xs)",
+          }}
+          onFocus={e=>{e.target.style.borderColor="rgba(198,169,107,0.55)"; e.target.style.boxShadow="0 0 0 4px rgba(198,169,107,0.10)";}}
+          onBlur={e=>{e.target.style.borderColor="rgba(10,31,68,0.08)"; e.target.style.boxShadow="var(--mf-shadow-xs)";}}
+        />
+      </div>
       <Sel value={filtProd} onChange={setFiltProd} options={[{v:"",l:"Producto"},...PRODUCTOS_LEAD.map(p=>({v:p,l:p}))]}/>
       <Sel value={filtEtapa} onChange={setFiltEtapa} options={[{v:"",l:"Etapa"},...ETAPAS.map(e=>({v:e.id,l:e.label}))]}/>
-      <Sel value={filtTemp} onChange={setFiltTemp} options={[{v:"",l:"Temperatura"},{v:"caliente",l:"🔥 Caliente"},{v:"tibio",l:"🟡 Tibio"},{v:"frio",l:"❄️ Frío"}]}/>
-      {(busq||filtProd||filtEtapa||filtTemp)&&(<button onClick={()=>{setBusq("");setFiltProd("");setFiltEtapa("");setFiltTemp("");}} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${B.gray}`,background:B.white,color:"#64748b",fontFamily:"'Poppins',sans-serif",fontSize:11,cursor:"pointer"}}>✕ Limpiar</button>)}
-      <button onClick={()=>setNuevoM(true)} style={{padding:"8px 14px",borderRadius:8,border:"none",background:B.navy,color:"#fff",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>+ Lead</button>
+      <Sel value={filtTemp} onChange={setFiltTemp} options={[
+        {v:"",l:"Temperatura"},
+        {v:"caliente",l:"● Caliente"},
+        {v:"tibio",l:"● Tibio"},
+        {v:"frio",l:"● Frío"},
+      ]}/>
+      {(busq||filtProd||filtEtapa||filtTemp) && (
+        <button onClick={()=>{setBusq(""); setFiltProd(""); setFiltEtapa(""); setFiltTemp("");}}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            padding: "8px 12px", borderRadius: 8,
+            border: "1px solid rgba(10,31,68,0.08)",
+            background: B.white,
+            color: "rgba(10,31,68,0.65)",
+            fontFamily: "'Poppins', sans-serif",
+            fontSize: 12, fontWeight: 500,
+            cursor: "pointer",
+          }}>
+          <IconX size={12}/>Limpiar
+        </button>
+      )}
+      <button onClick={()=>setNuevoM(true)}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "8px 14px", borderRadius: 8,
+          border: "none",
+          background: "linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+          color: "#fff",
+          fontFamily: "'Poppins', sans-serif",
+          fontWeight: 600, fontSize: 12.5,
+          cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+          boxShadow: "0 1px 2px rgba(10,31,68,0.10)",
+        }}
+        onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
+        onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
+        <IconPlus size={13} color="#fff"/>Nuevo lead
+      </button>
     </div>
-    <div style={{background:B.white,borderRadius:12,border:`1px solid ${B.gray}`,boxShadow:B.shadow,overflow:"hidden"}}>
+
+    {/* ═══ Tabla premium ═══ */}
+    <div style={{
+      background: B.white,
+      borderRadius: 14,
+      border: "1px solid rgba(10,31,68,0.06)",
+      boxShadow: "var(--mf-shadow-xs)",
+      overflow: "hidden",
+    }}>
       <div className="mf-table-wrap">
         <table className="mf-table">
           <thead><tr>
-            <th className="mf-th" style={{width:36,textAlign:"center",padding:"10px 6px"}}>
-              <input type="checkbox" checked={todosVisSeleccionados} onChange={toggleSeleccionarTodos} aria-label="Seleccionar todos los visibles" style={{width:16,height:16,cursor:"pointer",accentColor:B.navy}}/>
+            <th className="mf-th" style={{width: 40, textAlign: "center", padding: "12px 8px"}}>
+              <input type="checkbox" checked={todosVisSeleccionados} onChange={toggleSeleccionarTodos}
+                aria-label="Seleccionar todos los visibles"
+                style={{width: 16, height: 16, cursor: "pointer", accentColor: B.navy}}/>
             </th>
-            <th className="mf-th">#</th><th className="mf-th">Nombre</th><th className="mf-th">Contacto</th><th className="mf-th mf-col-hide">Estado</th><th className="mf-th mf-col-hide">Producto</th><th className="mf-th">Etapa</th><th className="mf-th">T°</th><th className="mf-th mf-col-hide">Último contacto</th><th className="mf-th">Checklist</th>
+            <th className="mf-th" style={{width: 36}}>#</th>
+            <th className="mf-th">Nombre</th>
+            <th className="mf-th">Contacto</th>
+            <th className="mf-th mf-col-hide">Estado</th>
+            <th className="mf-th mf-col-hide">Producto</th>
+            <th className="mf-th">Etapa</th>
+            <th className="mf-th" style={{textAlign: "center", width: 56}}>T°</th>
+            <th className="mf-th mf-col-hide">Último contacto</th>
+            <th className="mf-th">Checklist</th>
           </tr></thead>
           <tbody>
-            {vis.length===0&&(<tr><td colSpan={10} className="mf-td" style={{textAlign:"center",color:"#94a3b8",padding:"40px 16px"}}>Sin leads en este período</td></tr>)}
-            {vis.map((lead,idx)=>{
-              const etapa=ETAPAS.find(e=>e.id===lead.etapa)||ETAPAS[0];const temp=getTempLead(lead);const alerts=getAlertas(lead);const sinSeg2=lead.sinSeguimiento||lead.checklist?.noInteres;const mc=lead.mesCreacion||lead.ultimoContacto?.slice(0,7)||mesHoy;const esSeguAnt=tab==="actual"&&mc<mesHoy&&lead.etapa==="seguimiento";const chkDone=Object.values(lead.checklist||{}).filter(Boolean).length;const chkTot=CHECKLIST_DEF.length;
-              const seleccionado=seleccionados.has(lead.id);
-              return(<tr key={lead.id} className={`mf-tr${sinSeg2?" rojo":esSeguAnt?" seg-ant":""}`} onClick={()=>setLeadAct(lead)} style={seleccionado?{background:B.gold+"12"}:{}}>
-                <td className="mf-td" style={{width:36,textAlign:"center",padding:"10px 6px"}} onClick={e=>e.stopPropagation()}>
-                  <input type="checkbox" checked={seleccionado} onChange={(e)=>toggleSeleccion(lead.id, e)} aria-label={`Seleccionar ${lead.nombre}`} style={{width:16,height:16,cursor:"pointer",accentColor:B.navy}}/>
-                </td>
-                <td className="mf-td" style={{color:"#94a3b8",fontSize:11,width:32}}>{idx+1}</td>
-                <td className="mf-td"><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:32,height:32,borderRadius:"50%",flexShrink:0,background:sinSeg2?B.redDim:esSeguAnt?"#fde68a44":B.navy+"12",border:`1.5px solid ${sinSeg2?B.redBright+"44":esSeguAnt?"#fcd34d":B.navy+"20"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:sinSeg2?B.redBright:esSeguAnt?B.amber:B.navy}}>{initials(lead.nombre)}</div><div style={{minWidth:0}}><div style={{fontWeight:700,color:sinSeg2?B.redBright:B.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}>{sinSeg2?"🚫 ":esSeguAnt?"⟳ ":""}{lead.nombre}</div><div style={{fontSize:10,color:"#94a3b8"}}>{lead.edad&&`${lead.edad} años`}{esSeguAnt&&<span style={{color:B.amber,fontWeight:600}}> · seguimiento anterior</span>}</div>{alerts.slice(0,1).map((a,i)=>(<div key={i} style={{fontSize:9,color:a.color,fontWeight:600}}>{a.msg}</div>))}</div></div></td>
-                <td className="mf-td" onClick={e=>e.stopPropagation()}><button className="mf-tel-btn" onClick={()=>setContactoL(lead)}>📞 {lead.telefono||"--"}</button></td>
-                <td className="mf-td mf-col-hide" style={{color:"#475569",fontSize:12}}>{lead.estado||"--"}</td>
-                <td className="mf-td mf-col-hide">{lead.producto&&<Tag color={B.navy} small>{lead.producto}</Tag>}</td>
-                <td className="mf-td"><Tag color={etapa.color} small>{etapa.icon} {etapa.label}</Tag></td>
-                <td className="mf-td" style={{fontSize:18,textAlign:"center"}}>{temp?.icon||<span style={{color:"#e5e7eb",fontSize:12}}>--</span>}</td>
-                <td className="mf-td mf-col-hide" style={{fontSize:11,color:"#94a3b8"}}>{fmtF(lead.ultimoContacto)}</td>
-                <td className="mf-td" onClick={e=>e.stopPropagation()}><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:48,height:5,background:B.gray,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",borderRadius:3,transition:"width .3s",width:`${Math.round(chkDone/chkTot*100)}%`,background:sinSeg2?B.redBright:chkDone>=5?B.green:chkDone>=3?B.amber:B.blue}}/></div><span style={{fontSize:10,color:"#94a3b8",fontWeight:600,whiteSpace:"nowrap"}}>{chkDone}/{chkTot}</span></div></td>
-              </tr>);
+            {vis.length === 0 && (
+              <tr><td colSpan={10} className="mf-td" style={{
+                textAlign: "center", color: "rgba(10,31,68,0.30)",
+                padding: "48px 16px", fontStyle: "italic", fontSize: 13,
+                letterSpacing: "0.01em",
+              }}>Sin leads en este período</td></tr>
+            )}
+            {vis.map((lead, idx) => {
+              const etapa = ETAPAS.find(e => e.id === lead.etapa) || ETAPAS[0];
+              const tempColor = tempColorOf(lead);
+              const alerts = getAlertas(lead);
+              const sinSeg2 = lead.sinSeguimiento || lead.checklist?.noInteres;
+              const mc = lead.mesCreacion || lead.ultimoContacto?.slice(0,7) || mesHoy;
+              const esSeguAnt = tab === "actual" && mc < mesHoy && lead.etapa === "seguimiento";
+              const chkDone = Object.values(lead.checklist || {}).filter(Boolean).length;
+              const chkTot = CHECKLIST_DEF.length;
+              const seleccionado = seleccionados.has(lead.id);
+              return (
+                <tr key={lead.id}
+                  className={`mf-tr${sinSeg2 ? " rojo" : esSeguAnt ? " seg-ant" : ""}`}
+                  onClick={()=>setLeadAct(lead)}
+                  style={seleccionado ? {background: "rgba(198,169,107,0.07)"} : {}}>
+                  <td className="mf-td" style={{width: 40, textAlign: "center", padding: "12px 8px"}}
+                    onClick={e=>e.stopPropagation()}>
+                    <input type="checkbox" checked={seleccionado}
+                      onChange={(e)=>toggleSeleccion(lead.id, e)}
+                      aria-label={`Seleccionar ${lead.nombre}`}
+                      style={{width: 16, height: 16, cursor: "pointer", accentColor: B.navy}}/>
+                  </td>
+                  <td className="mf-td" style={{color: "rgba(10,31,68,0.35)", fontSize: 11, width: 36, fontVariantNumeric: "tabular-nums"}}>{idx+1}</td>
+                  <td className="mf-td">
+                    <div style={{display: "flex", alignItems: "center", gap: 10}}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                        background: sinSeg2 ? "rgba(220,38,38,0.08)"
+                                  : esSeguAnt ? "rgba(217,119,6,0.10)"
+                                  : "rgba(10,31,68,0.06)",
+                        border: `1px solid ${sinSeg2 ? "rgba(220,38,38,0.18)"
+                                          : esSeguAnt ? "rgba(217,119,6,0.20)"
+                                          : "rgba(10,31,68,0.10)"}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 11, fontWeight: 600,
+                        color: sinSeg2 ? B.redBright : esSeguAnt ? B.amber : B.navy,
+                        letterSpacing: "-0.005em",
+                      }}>{initials(lead.nombre)}</div>
+                      <div style={{minWidth: 0}}>
+                        <div style={{
+                          display: "flex", alignItems: "center", gap: 6,
+                          fontWeight: 600, fontSize: 13.5,
+                          color: sinSeg2 ? B.redBright : B.navy,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          maxWidth: 200, letterSpacing: "-0.005em",
+                        }}>
+                          {sinSeg2 && <IconMinusCircle size={12} color={B.redBright}/>}
+                          {esSeguAnt && !sinSeg2 && <IconRefresh size={12} color={B.amber}/>}
+                          {lead.nombre}
+                        </div>
+                        <div style={{fontSize: 11, color: "rgba(10,31,68,0.45)", marginTop: 2}}>
+                          {lead.edad && `${lead.edad} años`}
+                          {esSeguAnt && <span style={{color: B.amber, fontWeight: 500}}> · seguimiento anterior</span>}
+                        </div>
+                        {alerts.slice(0,1).map((a,i)=>(
+                          <div key={i} style={{
+                            fontSize: 10, color: a.color, fontWeight: 500, marginTop: 2,
+                            display: "inline-flex", alignItems: "center", gap: 4,
+                          }}>
+                            <span style={{
+                              width: 4, height: 4, borderRadius: "50%", background: a.color,
+                              animation: a.tipo === "riesgo" ? "mfPulseDot 1.6s var(--mf-ease-out) infinite" : "none",
+                            }}/>
+                            {a.msg}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="mf-td" onClick={e=>e.stopPropagation()}>
+                    <button className="mf-tel-btn" onClick={()=>setContactoL(lead)}>
+                      <IconPhoneCall size={12}/>{lead.telefono || "—"}
+                    </button>
+                  </td>
+                  <td className="mf-td mf-col-hide" style={{color: "rgba(10,31,68,0.65)", fontSize: 12}}>{lead.estado || "—"}</td>
+                  <td className="mf-td mf-col-hide">
+                    {lead.producto ? (
+                      <span style={{
+                        fontSize: 10.5, fontWeight: 500,
+                        color: B.navy,
+                        background: "rgba(10,31,68,0.05)",
+                        padding: "3px 9px", borderRadius: 6,
+                        letterSpacing: "0.005em",
+                      }}>{lead.producto}</span>
+                    ) : "—"}
+                  </td>
+                  <td className="mf-td">
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      fontSize: 11.5, fontWeight: 500,
+                      color: etapa.color,
+                      background: etapa.color + "0c",
+                      border: `1px solid ${etapa.color}25`,
+                      padding: "3px 9px", borderRadius: 6,
+                      letterSpacing: "0.005em",
+                      whiteSpace: "nowrap",
+                    }}>
+                      <span style={{width: 5, height: 5, borderRadius: "50%", background: etapa.color}}/>
+                      {etapa.label.replace(/[¡⭐!]/g, "").trim()}
+                    </span>
+                  </td>
+                  <td className="mf-td" style={{textAlign: "center"}}>
+                    {tempColor ? (
+                      <span aria-label={getTempLead(lead)?.label} title={getTempLead(lead)?.label}
+                        style={{display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: tempColor}}/>
+                    ) : (
+                      <span style={{color: "rgba(10,31,68,0.15)", fontSize: 11}}>—</span>
+                    )}
+                  </td>
+                  <td className="mf-td mf-col-hide" style={{fontSize: 11, color: "rgba(10,31,68,0.45)", fontVariantNumeric: "tabular-nums"}}>{fmtF(lead.ultimoContacto)}</td>
+                  <td className="mf-td" onClick={e=>e.stopPropagation()}>
+                    <div style={{display: "flex", alignItems: "center", gap: 8}}>
+                      <div style={{width: 56, height: 4, background: "rgba(10,31,68,0.06)", borderRadius: 2, overflow: "hidden"}}>
+                        <div style={{
+                          height: "100%", borderRadius: 2,
+                          transition: "width var(--mf-t-slow) var(--mf-ease-out)",
+                          width: `${Math.round(chkDone/chkTot*100)}%`,
+                          background: sinSeg2 ? B.redBright
+                                    : chkDone >= 5 ? B.green
+                                    : chkDone >= 3 ? B.amber
+                                    : B.blue,
+                        }}/>
+                      </div>
+                      <span style={{
+                        fontSize: 10.5, color: "rgba(10,31,68,0.45)", fontWeight: 500,
+                        fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
+                      }}>{chkDone}/{chkTot}</span>
+                    </div>
+                  </td>
+                </tr>
+              );
             })}
           </tbody>
         </table>
       </div>
-      <div style={{padding:"10px 16px",borderTop:`1px solid ${B.gray}`,fontSize:11,color:"#94a3b8",fontWeight:500}}>{vis.length} lead{vis.length!==1?"s":""} · {tab==="actual"?`${fmtMes(mesHoy)} (mes actual)`:fmtMes(tab)}</div>
+      <div style={{
+        padding: "12px 18px",
+        borderTop: "1px solid rgba(10,31,68,0.06)",
+        fontSize: 11, color: "rgba(10,31,68,0.45)", fontWeight: 500,
+        letterSpacing: "0.01em",
+      }}>
+        {vis.length} lead{vis.length !== 1 ? "s" : ""} · {tab === "actual" ? `${fmtMes(mesHoy)} (mes actual)` : fmtMes(tab)}
+      </div>
     </div>
     {contactoL&&<ContactoModal lead={contactoL} onClose={()=>setContactoL(null)}/>}
     {leadAct&&<LeadModal lead={leadAct} onClose={()=>setLeadAct(null)} onSave={save} onDelete={del} cuentas={cuentas} usuario={usuario}/>}
@@ -3076,13 +3454,14 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
           </span>
         </div>
         <button onClick={()=>setConfirmandoBorrado(true)} style={{
-          padding:"9px 16px", borderRadius:9, border:"none",
+          padding:"9px 14px", borderRadius:9, border:"none",
           background:B.redBright, color:"#fff",
-          fontFamily:"'Poppins',sans-serif", fontWeight:700, fontSize:12,
-          cursor:"pointer", display:"inline-flex", alignItems:"center", gap:6,
-          boxShadow:`0 4px 14px ${B.redBright}66`,
+          fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12,
+          cursor:"pointer", display:"inline-flex", alignItems:"center", gap:7,
+          boxShadow:`0 4px 14px ${B.redBright}55`,
+          transition:"all var(--mf-t-fast) var(--mf-ease-out)",
         }}>
-          🗑 Eliminar
+          <IconTrash size={13} color="#fff"/>Eliminar
         </button>
         <button onClick={limpiarSeleccion} style={{
           padding:"9px 14px", borderRadius:9,
