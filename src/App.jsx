@@ -421,118 +421,392 @@ function Auth({onLogin, mensajeInicial}) {
   }
 
   const AUTH_CSS = `
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Cormorant+Garamond:wght@400;500;600;700&display=swap');
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-    .mf-input{width:100%;padding:14px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(198,169,107,0.2);border-radius:10px;color:#f0ece4;font-family:'Poppins',sans-serif;font-size:14px;outline:none;transition:border-color .2s,background .2s,box-shadow .2s;-webkit-appearance:none;}
-    .mf-input::placeholder{color:rgba(255,255,255,0.25);}
-    .mf-input:focus{border-color:rgba(198,169,107,0.7);background:rgba(255,255,255,0.07);box-shadow:0 0 0 3px rgba(198,169,107,0.1);}
-    .mf-btn-gold{width:100%;padding:15px;background:linear-gradient(135deg,#C6A96B 0%,#d4bc89 50%,#b8960e 100%);border:none;border-radius:10px;color:#0A1F44;font-family:'Poppins',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;}
-    .mf-btn-gold:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(198,169,107,.45);}
-    @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-    @media(min-width:900px){.mf-brand-panel{display:flex-direction:column!important;}.mf-desktop-layout{flex-direction:row!important;}}
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&display=swap');
+    *,*::before,*::after{box-sizing:border-box;}
+
+    .mf-auth-page {
+      min-height: 100vh; min-height: 100dvh;
+      background: #F8F6F2;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px 20px;
+      font-family: 'Poppins', sans-serif;
+      color: #0A1F44;
+      position: relative; overflow: hidden;
+    }
+    @media (min-width: 768px) { .mf-auth-page { padding: 40px; } }
+
+    .mf-auth-glow { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .mf-auth-glow-1, .mf-auth-glow-2 {
+      position: absolute; border-radius: 50%;
+      filter: blur(80px); pointer-events: none;
+    }
+    .mf-auth-glow-1 {
+      width: 480px; height: 480px;
+      top: -160px; left: -160px;
+      background: radial-gradient(circle, rgba(198,169,107,0.20), transparent 70%);
+      opacity: 0.7;
+    }
+    .mf-auth-glow-2 {
+      width: 620px; height: 620px;
+      bottom: -240px; right: -200px;
+      background: radial-gradient(circle, rgba(10,31,68,0.08), transparent 70%);
+      opacity: 0.8;
+    }
+
+    .mf-auth-inner {
+      width: 100%; max-width: 440px;
+      position: relative; z-index: 1;
+      animation: mfFadeUp .7s cubic-bezier(.16,1,.3,1);
+    }
+
+    .mf-auth-logo-wrap {
+      text-align: center; margin-bottom: 36px;
+      animation: mfFadeIn .9s ease;
+    }
+    @media (min-width: 768px) { .mf-auth-logo-wrap { margin-bottom: 52px; } }
+
+    .mf-auth-headline {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(32px, 5.5vw, 46px);
+      font-weight: 500;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      color: #0A1F44;
+      text-align: center;
+      margin: 0 0 14px;
+    }
+
+    .mf-auth-subhead {
+      text-align: center;
+      font-size: 14px;
+      font-weight: 400;
+      color: rgba(10,31,68,0.55);
+      line-height: 1.6;
+      max-width: 360px;
+      margin: 0 auto 36px;
+    }
+
+    .mf-auth-card {
+      background: rgba(255,255,255,0.7);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(10,31,68,0.06);
+      border-radius: 20px;
+      padding: 28px 22px;
+      box-shadow:
+        0 4px 32px rgba(10,31,68,0.04),
+        0 1px 2px rgba(10,31,68,0.03),
+        inset 0 1px 0 rgba(255,255,255,0.6);
+    }
+    @media (min-width: 768px) {
+      .mf-auth-card { padding: 38px 34px; border-radius: 24px; }
+    }
+
+    .mf-auth-field { margin-bottom: 18px; }
+    .mf-auth-field:last-of-type { margin-bottom: 6px; }
+
+    .mf-auth-label {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 11px; font-weight: 600;
+      color: rgba(10,31,68,0.55);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+    .mf-auth-label-hint {
+      font-size: 10px; font-weight: 400;
+      color: rgba(10,31,68,0.35);
+      text-transform: none;
+      letter-spacing: 0;
+      margin-left: 6px;
+    }
+
+    .mf-auth-input {
+      width: 100%;
+      padding: 13px 16px;
+      background: rgba(255,255,255,0.85);
+      border: 1px solid rgba(10,31,68,0.08);
+      border-radius: 12px;
+      color: #0A1F44;
+      font-family: 'Poppins', sans-serif;
+      font-size: 16px;
+      font-weight: 400;
+      outline: none;
+      transition: all .2s cubic-bezier(.4,0,.2,1);
+      -webkit-appearance: none;
+    }
+    .mf-auth-input::placeholder { color: rgba(10,31,68,0.28); }
+    .mf-auth-input:focus {
+      border-color: rgba(198,169,107,0.6);
+      background: #fff;
+      box-shadow: 0 0 0 4px rgba(198,169,107,0.10);
+    }
+
+    .mf-auth-forgot {
+      background: none; border: none; padding: 0;
+      color: rgba(10,31,68,0.55);
+      font-family: 'Poppins', sans-serif;
+      font-size: 11px; font-weight: 500;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: color .15s;
+      text-transform: none;
+    }
+    .mf-auth-forgot:hover { color: #C6A96B; }
+
+    .mf-auth-pass-wrap { position: relative; }
+    .mf-auth-pass-toggle {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      background: transparent; border: none; cursor: pointer;
+      padding: 8px; border-radius: 8px;
+      font-size: 17px; line-height: 1;
+      color: rgba(10,31,68,0.4);
+      transition: background .15s;
+    }
+    .mf-auth-pass-toggle:hover { background: rgba(10,31,68,0.05); }
+
+    .mf-auth-btn {
+      width: 100%;
+      padding: 15px 20px;
+      background: linear-gradient(135deg, #0A1F44 0%, #122550 100%);
+      border: none;
+      border-radius: 12px;
+      color: #fff;
+      font-family: 'Poppins', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: all .25s cubic-bezier(.4,0,.2,1);
+      margin-top: 14px;
+      box-shadow: 0 4px 14px rgba(10,31,68,0.12);
+    }
+    .mf-auth-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(10,31,68,0.22);
+    }
+    .mf-auth-btn:active:not(:disabled) { transform: translateY(0); }
+    .mf-auth-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+
+    .mf-auth-btn-secondary {
+      width: 100%;
+      padding: 13px 18px;
+      background: transparent;
+      border: 1px solid rgba(10,31,68,0.10);
+      border-radius: 12px;
+      color: rgba(10,31,68,0.75);
+      font-family: 'Poppins', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .mf-auth-btn-secondary:hover {
+      border-color: rgba(198,169,107,0.40);
+      background: rgba(198,169,107,0.05);
+      color: #0A1F44;
+    }
+
+    .mf-auth-alert {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 11px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .mf-auth-alert.err {
+      background: rgba(220,38,38,0.06);
+      border: 1px solid rgba(220,38,38,0.18);
+      color: #991b1b;
+    }
+    .mf-auth-alert.info {
+      background: rgba(22,101,52,0.06);
+      border: 1px solid rgba(22,101,52,0.18);
+      color: #166534;
+    }
+    .mf-auth-alert-icon { font-size: 14px; line-height: 1.4; flex-shrink: 0; }
+
+    .mf-auth-divider {
+      display: flex; align-items: center; gap: 14px;
+      margin: 22px 0 16px;
+    }
+    .mf-auth-divider-line {
+      flex: 1; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(10,31,68,0.10), transparent);
+    }
+    .mf-auth-divider-text {
+      font-size: 10px;
+      color: rgba(10,31,68,0.35);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .mf-auth-footer {
+      margin-top: 36px;
+      text-align: center;
+    }
+    .mf-auth-footer-dots {
+      display: flex; justify-content: center; gap: 6px;
+      margin-bottom: 14px;
+    }
+    .mf-auth-footer-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: rgba(10,31,68,0.15);
+    }
+    .mf-auth-footer-dot.active { background: #C6A96B; }
+    .mf-auth-footer-text {
+      font-size: 10px;
+      color: rgba(10,31,68,0.35);
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+
+    .mf-auth-spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: mfSpin .7s linear infinite;
+    }
+
+    @keyframes mfFadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes mfFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes mfSpin { to { transform: rotate(360deg); } }
   `;
 
+  const titulo = modo==="forgot" ? "Recuperar acceso"
+               : modo==="signup" ? "Crear tu cuenta"
+               : "Bienvenida de vuelta";
+  const subtitulo = modo==="forgot" ? "Te enviaremos un correo para que crees una contraseña nueva."
+                  : modo==="signup" ? "Únete a la plataforma para asesores de alto rendimiento."
+                  : "La plataforma exclusiva para asesores que cierran con consistencia.";
+
   return (
-    <div style={{minHeight:"100vh",background:"#060e1c",display:"flex",flexDirection:"row-reverse",fontFamily:"'Poppins',sans-serif",position:"relative",overflow:"hidden"}}>
+    <div className="mf-auth-page">
       <style>{AUTH_CSS}</style>
-      <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}>
-        <div style={{position:"absolute",top:-200,left:-200,width:600,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(198,169,107,0.07) 0%,transparent 70%)"}}/>
-        <div style={{position:"absolute",bottom:-150,right:-100,width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(10,31,68,0.8) 0%,transparent 70%)"}}/>
-        <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.03}} xmlns="http://www.w3.org/2000/svg">
-          <defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#C6A96B" strokeWidth="0.5"/></pattern></defs>
-          <rect width="100%" height="100%" fill="url(#grid)"/>
-        </svg>
+
+      <div className="mf-auth-glow">
+        <div className="mf-auth-glow-1"/>
+        <div className="mf-auth-glow-2"/>
       </div>
-      <div className="mf-desktop-layout" style={{flex:1,display:"flex",flexDirection:"row",position:"relative",zIndex:1,minHeight:"100vh"}}>
-        <div className="mf-brand-panel" style={{display:"flex",flex:"0 0 52%",flexDirection:"row-reverse",justifyContent:"space-between",padding:"52px 56px",background:"linear-gradient(145deg,#0A1F44 0%,#071428 60%,#020a18 100%)",borderRight:"1px solid rgba(198,169,107,0.1)",position:"relative",overflow:"hidden"}}>
-          <div style={{position:"absolute",right:-20,bottom:60,opacity:.04,transform:"scale(2.2) rotate(-5deg)",transformOrigin:"right bottom"}}><WolfMark size={260}/></div>
-          <svg style={{position:"absolute",bottom:0,left:0,right:0,opacity:.12}} viewBox="0 0 600 100" preserveAspectRatio="none" height="100">
-            <path d="M0 60 Q75 20 150 50 Q225 80 300 40 Q375 0 450 35 Q525 70 600 30 L600 100 L0 100Z" fill="#C6A96B"/>
-          </svg>
-          <div style={{animation:"fadeIn .8s ease"}}>
-            <div style={{marginBottom:20}}>
-              <div style={{fontSize:14,color:"rgba(240,236,228,0.5)",lineHeight:1.75,fontWeight:300,maxWidth:340}}>La plataforma inteligente que convierte seguimiento en resultados. Diseñada para asesores de alto rendimiento que operan con precisión y cierran con consistencia.</div>
-            </div>
-          </div>
-          <div style={{animation:"fadeUp .9s ease",animationDelay:".2s",animationFillMode:"both"}}>
-            <div style={{display:"grid",gap:20}}>
-              {[{icon:"*",t:"Mensajes y llamadas en un clic",d:"Segmenta y acciona con facilidad."},{icon:"📅",t:"Optimiza tus dias",d:"Trabajo, vida personal y viajes en una sola agenda inteligente"},{icon:"📊",t:"Decisiones en tiempo real",d:"Métricas claras para actuar sin adivinar"},{icon:"💰",t:"Ingresos protegidos",d:"Cobranza y renovaciones bajo control, sin fugas"}].map((f,i)=>(
-                <div key={f.t} style={{padding:"16px",borderRadius:10,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(198,169,107,0.1)"}}>
-                  <div style={{fontSize:20,marginBottom:8}}>{f.icon}</div>
-                  <div style={{fontSize:12,fontWeight:600,color:"#f0ece4",marginBottom:3}}>{f.t}</div>
-                  <div style={{fontSize:11,color:"rgba(240,236,228,0.4)",lineHeight:1.5,fontWeight:300}}>{f.d}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{marginTop:50,paddingTop:30,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div style={{fontSize:10,color:"rgba(198,169,107,0.5)",letterSpacing:2,textTransform:"uppercase"}}>© 2025 MarFlow · Todos los derechos reservados</div>
-            </div>
-          </div>
+
+      <div className="mf-auth-inner">
+        {/* Logo */}
+        <div className="mf-auth-logo-wrap">
+          <MarflowLogo height={44} dark={false}/>
         </div>
-        <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",background:"#060e1c",minHeight:"100vh",position:"relative"}}>
-          <div style={{width:"100%",maxWidth:380,animation:"fadeUp .5s ease",animationDelay:".1s",animationFillMode:"both",marginTop:40}}>
-            <div style={{textAlign:"center",marginBottom:14}}>
-              <img src="/LOGOT.png" alt="MARFLOW" style={{height:180,objectFit:"contain",marginBottom:24,filter:"drop-shadow(0 8px 24px rgba(198,169,107,0.45))"}}/>
-              <div style={{fontFamily:"Cormorant Garamond, serif",fontSize:30,fontWeight:600}}>
-                {modo==="forgot"?"Recuperar contraseña":modo==="signup"?"Crear cuenta":"Bienvenido"}
-              </div>
-              <div style={{fontSize:13,color:"rgba(240,236,228,0.4)",fontWeight:300,letterSpacing:0.2}}>
-                {modo==="forgot"?"Te enviaremos un link a tu correo":"Acceso exclusivo · Plataforma privada"}
-              </div>
+
+        {/* Headline + subhead */}
+        <h1 className="mf-auth-headline">{titulo}</h1>
+        <p className="mf-auth-subhead">{subtitulo}</p>
+
+        {/* Card */}
+        <div className="mf-auth-card">
+          {modo==="signup" && (
+            <div className="mf-auth-field">
+              <label className="mf-auth-label"><span>Nombre completo</span></label>
+              <input
+                className="mf-auth-input"
+                value={nombre}
+                onChange={e=>setNombre(e.target.value)}
+                placeholder="Tu nombre"
+                onKeyDown={e=>e.key==="Enter"&&login()}
+                autoCapitalize="words"
+              />
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:14,marginBottom:6}}>
-              {modo==="signup"&&(
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  <label style={{fontSize:10,fontWeight:600,color:"rgba(198,169,107,0.8)",textTransform:"uppercase",letterSpacing:"1px"}}>Nombre completo</label>
-                  <input className="mf-input" value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Tu nombre" onKeyDown={e=>e.key==="Enter"&&login()} autoCapitalize="words"/>
-                </div>
-              )}
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                <label style={{fontSize:10,fontWeight:600,color:"rgba(198,169,107,0.8)",textTransform:"uppercase",letterSpacing:"1px"}}>Email</label>
-                <input className="mf-input" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com" onKeyDown={e=>e.key==="Enter"&&login()} autoCapitalize="none" autoCorrect="off" spellCheck={false}/>
-              </div>
-              {modo!=="forgot"&&(
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <label style={{fontSize:10,fontWeight:600,color:"rgba(198,169,107,0.8)",textTransform:"uppercase",letterSpacing:"1px"}}>Contraseña {modo==="signup"&&<span style={{color:"rgba(240,236,228,0.35)",fontWeight:400,textTransform:"none",letterSpacing:0}}>(mín. 8 caracteres)</span>}</label>
-                    {modo==="login"&&(
-                      <button type="button" onClick={()=>cambiarModo("forgot")} style={{background:"none",border:"none",color:"rgba(198,169,107,0.7)",fontFamily:"'Poppins',sans-serif",fontSize:10,fontWeight:600,cursor:"pointer",textTransform:"uppercase",letterSpacing:".5px",padding:0,textDecoration:"underline"}}>
-                        ¿Olvidaste tu contraseña?
-                      </button>
-                    )}
-                  </div>
-                  <div style={{position:"relative"}}>
-                    <input className="mf-input" type={verPass?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==="Enter"&&login()} style={{paddingRight:46}}/>
-                    <button type="button" onClick={()=>setVerPass(v=>!v)} aria-label={verPass?"Ocultar contraseña":"Mostrar contraseña"} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",cursor:"pointer",padding:"6px 8px",borderRadius:6,color:"rgba(240,236,228,0.5)",fontSize:18,lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                      {verPass?"🙈":"👁️"}
-                    </button>
-                  </div>
-                </div>
-              )}
-              {err&&(<div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:8,background:"rgba(220,38,38,0.12)",border:"1px solid rgba(220,38,38,0.25)"}}><span style={{fontSize:14}}>⚠</span><span style={{fontSize:12,color:"#fca5a5",fontWeight:500}}>{err}</span></div>)}
-              {info&&(<div style={{display:"flex",alignItems:"flex-start",gap:8,padding:"10px 14px",borderRadius:8,background:"rgba(34,197,94,0.12)",border:"1px solid rgba(34,197,94,0.25)"}}><span style={{fontSize:14}}>✓</span><span style={{fontSize:12,color:"#86efac",fontWeight:500,lineHeight:1.5}}>{info}</span></div>)}
-              <button className="mf-btn-gold" onClick={login} disabled={loading} style={{marginTop:8,opacity:loading?.7:1}}>
-                {loading
-                  ? (<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(10,31,68,0.4)",borderTopColor:"#0A1F44",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>{modo==="signup"?"Creando cuenta...":modo==="forgot"?"Enviando...":"Verificando..."}</span>)
-                  : (modo==="signup"?"Crear cuenta →":modo==="forgot"?"Enviar instrucciones →":"Ingresar →")}
-              </button>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:12,margin:"24px 0"}}>
-              <div style={{flex:1,height:1,background:"rgba(198,169,107,0.12)"}}/>
-              <div style={{fontSize:10,color:"rgba(198,169,107,0.35)",letterSpacing:2,textTransform:"uppercase"}}>
-                {modo==="signup"?"o si ya tienes cuenta":modo==="forgot"?"o regresa al inicio":"o crea una cuenta"}
-              </div>
-              <div style={{flex:1,height:1,background:"rgba(198,169,107,0.12)"}}/>
-            </div>
-            <button onClick={()=>cambiarModo(modo==="login"?"signup":"login")} style={{width:"100%",padding:"12px",background:"transparent",border:"1px solid rgba(198,169,107,0.3)",borderRadius:10,color:"rgba(240,236,228,0.7)",fontFamily:"'Poppins',sans-serif",fontSize:13,fontWeight:500,cursor:"pointer",transition:"all .15s"}}>
-              {modo==="signup"?"Ya tengo cuenta · Iniciar sesión":modo==="forgot"?"Volver al inicio de sesión":"Soy nuevo · Crear cuenta"}
-            </button>
-            <div style={{marginTop:32,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(198,169,107,0.25)",letterSpacing:2,textTransform:"uppercase"}}>© 2025 MarFlow</div></div>
+          )}
+
+          <div className="mf-auth-field">
+            <label className="mf-auth-label"><span>Email</span></label>
+            <input
+              className="mf-auth-input"
+              type="email"
+              value={email}
+              onChange={e=>setEmail(e.target.value)}
+              placeholder="tu@email.com"
+              onKeyDown={e=>e.key==="Enter"&&login()}
+              autoCapitalize="none" autoCorrect="off" spellCheck={false}
+            />
           </div>
+
+          {modo!=="forgot" && (
+            <div className="mf-auth-field">
+              <label className="mf-auth-label">
+                <span>Contraseña{modo==="signup" && <span className="mf-auth-label-hint">(mín. 8 caracteres)</span>}</span>
+                {modo==="login" && (
+                  <button type="button" onClick={()=>cambiarModo("forgot")} className="mf-auth-forgot">
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                )}
+              </label>
+              <div className="mf-auth-pass-wrap">
+                <input
+                  className="mf-auth-input"
+                  type={verPass?"text":"password"}
+                  value={pass}
+                  onChange={e=>setPass(e.target.value)}
+                  placeholder="••••••••"
+                  onKeyDown={e=>e.key==="Enter"&&login()}
+                  style={{paddingRight:48}}
+                />
+                <button type="button" onClick={()=>setVerPass(v=>!v)} aria-label={verPass?"Ocultar contraseña":"Mostrar contraseña"} className="mf-auth-pass-toggle">
+                  {verPass?"🙈":"👁️"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {err && (
+            <div className="mf-auth-alert err">
+              <span className="mf-auth-alert-icon">⚠</span>
+              <span>{err}</span>
+            </div>
+          )}
+          {info && (
+            <div className="mf-auth-alert info">
+              <span className="mf-auth-alert-icon">✓</span>
+              <span>{info}</span>
+            </div>
+          )}
+
+          <button className="mf-auth-btn" onClick={login} disabled={loading}>
+            {loading
+              ? (<span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:10}}>
+                  <span className="mf-auth-spinner"/>
+                  {modo==="signup"?"Creando cuenta...":modo==="forgot"?"Enviando...":"Verificando..."}
+                </span>)
+              : (modo==="signup"?"Crear cuenta →":modo==="forgot"?"Enviar instrucciones →":"Iniciar sesión →")}
+          </button>
+
+          <div className="mf-auth-divider">
+            <div className="mf-auth-divider-line"/>
+            <div className="mf-auth-divider-text">
+              {modo==="signup"?"o si ya tienes cuenta":modo==="forgot"?"o regresa al inicio":"o crea una cuenta"}
+            </div>
+            <div className="mf-auth-divider-line"/>
+          </div>
+
+          <button onClick={()=>cambiarModo(modo==="login"?"signup":"login")} className="mf-auth-btn-secondary">
+            {modo==="signup"?"Ya tengo cuenta · Iniciar sesión":modo==="forgot"?"Volver al inicio de sesión":"Soy nuevo · Crear cuenta"}
+          </button>
+        </div>
+
+        {/* Footer */}
+        <div className="mf-auth-footer">
+          <div className="mf-auth-footer-dots">
+            <span className="mf-auth-footer-dot active"/>
+            <span className="mf-auth-footer-dot"/>
+            <span className="mf-auth-footer-dot"/>
+          </div>
+          <div className="mf-auth-footer-text">© 2026 MarFlow · Acceso privado</div>
         </div>
       </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
