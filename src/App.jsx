@@ -792,7 +792,7 @@ function Auth({onLogin, mensajeInicial}) {
 
   const titulo = modo==="forgot" ? "Recuperar acceso"
                : modo==="signup" ? "Crear tu cuenta"
-               : "Bienvenida de vuelta";
+               : "Bienvenido de vuelta";
   const subtitulo = modo==="forgot" ? "Te enviaremos un correo para que crees una contraseña nueva."
                   : modo==="signup" ? "Únete a la plataforma inteligente para asesores de alto rendimiento."
                   : "La plataforma inteligente para asesores de alto rendimiento.";
@@ -1365,14 +1365,135 @@ function Metricas({leads}) {
 /* ===========================================
    DASHBOARD — usa los 3 componentes nuevos
 =========================================== */
-function Dashboard({leads,setFiltroNav,setSeccion}) {
+function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
   const activos=leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa));
   const cierres=leads.filter(l=>l.etapa==="cierre");
   const riesgo=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="riesgo"));
   const sinC=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="sin_contacto"));
   function irA(f){setFiltroNav(f);setSeccion("pipeline");}
 
-  return <div style={{animation:"fadeUp .3s ease"}}>
+  // ── Saludo dinámico según la hora ──
+  const ahora = new Date();
+  const hora = ahora.getHours();
+  const saludo = hora < 12 ? "Buenos días"
+               : hora < 19 ? "Buenas tardes"
+               : "Buenas noches";
+  const primerNombre = (usuario?.nombre || "").trim().split(/\s+/)[0] || "asesor";
+  const fechaLarga = ahora.toLocaleDateString("es-MX", {
+    weekday: "long", day: "numeric", month: "long"
+  });
+  const fechaLargaCap = fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1);
+
+  // ── Insights (calculados sobre datos reales) ──
+  const hoyStr = hoy();
+  const sieteDiasAtras = new Date(Date.now() - 7*86400000).toISOString().split("T")[0];
+  // 1) Seguimientos pendientes hoy: leads activos con alertas tipo "riesgo" o "sin_contacto"
+  const segPendientes = activos.filter(l => {
+    const a = getAlertas(l);
+    return a.some(x => ["riesgo","sin_contacto","reactivar"].includes(x.tipo));
+  }).length;
+  // 2) Citas próximas (etapa cita + eventos tipo "cita" dentro de los próximos 7 días)
+  const eventosProx = (eventos||[]).filter(e => {
+    if (e.tipo !== "cita") return false;
+    return e.fecha >= hoyStr && e.fecha <= new Date(Date.now()+7*86400000).toISOString().split("T")[0];
+  }).length;
+  const citasProximas = leads.filter(l => l.etapa === "cita").length + eventosProx;
+  // 3) Cierres en proceso
+  const cierresEnProceso = leads.filter(l => l.etapa === "cierre").length;
+  // 4) Contactados esta semana (ultimoContacto >= hace 7 días)
+  const contactadosSemana = leads.filter(l => l.ultimoContacto && l.ultimoContacto >= sieteDiasAtras).length;
+
+  const insights = [
+    { v: segPendientes,    l: segPendientes === 1 ? "seguimiento pendiente hoy" : "seguimientos pendientes hoy", action: ()=>irA("seguimiento") },
+    { v: citasProximas,    l: citasProximas === 1 ? "cita próxima" : "citas próximas", action: ()=>irA("cita") },
+    { v: cierresEnProceso, l: cierresEnProceso === 1 ? "cierre en proceso" : "cierres en proceso", action: ()=>irA("cierre") },
+    { v: contactadosSemana,l: contactadosSemana === 1 ? "cliente contactado esta semana" : "clientes contactados esta semana", action: ()=>irA("activos") },
+  ];
+
+  return <div className="mf-fade-in">
+    {/* ═══ Hero: saludo premium banca privada ═══ */}
+    <div style={{padding:"8px 0 32px",marginBottom:8}}>
+      <div style={{fontSize:11,fontWeight:500,color:"rgba(10,31,68,0.45)",textTransform:"uppercase",letterSpacing:"0.18em",marginBottom:10}}>
+        {fechaLargaCap}
+      </div>
+      <h1 style={{
+        fontFamily:"'Cormorant Garamond', serif",
+        fontSize:"clamp(28px, 4.5vw, 40px)",
+        fontWeight:500,
+        lineHeight:1.1,
+        letterSpacing:"-0.02em",
+        color:B.navy,
+        margin:"0 0 8px",
+      }}>
+        {saludo}, {primerNombre}.
+      </h1>
+      <p style={{
+        fontSize:14,
+        color:"rgba(10,31,68,0.55)",
+        margin:0,
+        fontWeight:400,
+        lineHeight:1.5,
+      }}>
+        Tu resumen del día en MarFlow.
+      </p>
+    </div>
+
+    {/* ═══ Insights premium (4 hero stats minimalistas) ═══ */}
+    <div style={{
+      display:"grid",
+      gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",
+      gap:14,
+      marginBottom:32,
+    }}>
+      {insights.map((it, i) => (
+        <button
+          key={i}
+          onClick={it.action}
+          className={`mf-fade-up mf-stagger-${i+1}`}
+          style={{
+            textAlign:"left",
+            background:B.white,
+            border:`1px solid rgba(10,31,68,0.06)`,
+            borderRadius:16,
+            padding:"22px 22px 20px",
+            cursor:"pointer",
+            boxShadow:"var(--mf-shadow-xs)",
+            transition:"transform var(--mf-t-normal) var(--mf-ease-out), box-shadow var(--mf-t-normal) var(--mf-ease-out), border-color var(--mf-t-fast) var(--mf-ease-out)",
+            fontFamily:"'Poppins', sans-serif",
+            color:B.navy,
+          }}
+          onMouseEnter={e=>{
+            e.currentTarget.style.boxShadow = "var(--mf-shadow-md)";
+            e.currentTarget.style.transform = "translateY(-2px)";
+            e.currentTarget.style.borderColor = "rgba(198,169,107,0.20)";
+          }}
+          onMouseLeave={e=>{
+            e.currentTarget.style.boxShadow = "var(--mf-shadow-xs)";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.borderColor = "rgba(10,31,68,0.06)";
+          }}>
+          <div style={{
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:"clamp(40px, 5vw, 52px)",
+            fontWeight:500,
+            lineHeight:1,
+            letterSpacing:"-0.02em",
+            color:B.navy,
+            marginBottom:8,
+          }}>{it.v}</div>
+          <div style={{
+            fontSize:12,
+            color:"rgba(10,31,68,0.55)",
+            fontWeight:400,
+            lineHeight:1.45,
+          }}>{it.l}</div>
+        </button>
+      ))}
+    </div>
+
+    {/* Separador sutil */}
+    <div style={{height:1, background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.06), transparent)", margin:"4px 0 28px"}}/>
+
     {/* CAMBIO 1: VentaDelDia rediseñada — solo 2 bloques */}
     <VentaDelDia leads={leads}/>
 
@@ -3020,7 +3141,7 @@ export default function App() {
       )}
 
       <main className="mf-main">
-        {seccion==="dashboard"&&esAdmin&&<Dashboard leads={leads} setFiltroNav={setFiltroNav} setSeccion={setSeccion}/>}
+        {seccion==="dashboard"&&esAdmin&&<Dashboard leads={leads} eventos={eventos} usuario={usuario} setFiltroNav={setFiltroNav} setSeccion={setSeccion}/>}
         {seccion==="pipeline"&&esAdmin&&<Pipeline leads={leads} setLeads={setLeads} filtroNav={filtroNav} esAdmin={esAdmin} cuentas={cuentas} usuario={usuario}/>}
         {seccion==="lista"&&<ListaLeads leads={leads} setLeads={setLeads} cuentas={cuentas} usuario={usuario} esAsistente={esAsistente}/>}
         {seccion==="agenda"&&<Agenda eventos={eventos} setEventos={setEventos} leads={leads} esAsistente={esAsistente} usuario={usuario}/>}

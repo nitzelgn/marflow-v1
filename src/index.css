@@ -66,3 +66,83 @@ h1, h2, h3, h4, h5, h6, p {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* ════════════════════════════════════════════
+   MICROINTERACCIONES PREMIUM (Linear / Stripe / Apple)
+   - Easings refinados, timings cortos, movimientos mínimos
+   - GPU-accelerated (transform/opacity), no afecta rendimiento mobile
+   ════════════════════════════════════════════ */
+
+:root {
+  /* Easings */
+  --mf-ease-out: cubic-bezier(0.4, 0, 0.2, 1);          /* hover / focus / botones */
+  --mf-ease-spring: cubic-bezier(0.16, 1, 0.3, 1);      /* entradas (fade in suave) */
+  --mf-ease-fast: cubic-bezier(0.4, 0, 0.6, 1);         /* feedback rápido */
+
+  /* Timings */
+  --mf-t-fast: 150ms;
+  --mf-t-normal: 220ms;
+  --mf-t-slow: 380ms;
+
+  /* Sombras refinadas */
+  --mf-shadow-xs: 0 1px 2px rgba(10,31,68,0.04);
+  --mf-shadow-sm: 0 2px 8px rgba(10,31,68,0.06), 0 1px 2px rgba(10,31,68,0.04);
+  --mf-shadow-md: 0 8px 24px rgba(10,31,68,0.08), 0 2px 4px rgba(10,31,68,0.04);
+  --mf-shadow-lg: 0 16px 40px rgba(10,31,68,0.10), 0 4px 8px rgba(10,31,68,0.04);
+}
+
+/* Fade in común */
+@keyframes mfFadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes mfFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes mfSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes mfSpin { to { transform: rotate(360deg); } }
+
+/* Utilidades reusables */
+.mf-fade-in      { animation: mfFadeIn .35s var(--mf-ease-spring) both; }
+.mf-fade-up      { animation: mfFadeUp .4s var(--mf-ease-spring) both; }
+.mf-slide-up     { animation: mfSlideUp .45s var(--mf-ease-spring) both; }
+.mf-stagger-1    { animation-delay: .04s; }
+.mf-stagger-2    { animation-delay: .08s; }
+.mf-stagger-3    { animation-delay: .12s; }
+.mf-stagger-4    { animation-delay: .16s; }
+
+/* Transiciones globales sutiles en elementos interactivos */
+button, a, [role="button"] {
+  transition:
+    background-color var(--mf-t-fast) var(--mf-ease-out),
+    color var(--mf-t-fast) var(--mf-ease-out),
+    border-color var(--mf-t-fast) var(--mf-ease-out),
+    box-shadow var(--mf-t-normal) var(--mf-ease-out),
+    transform var(--mf-t-normal) var(--mf-ease-out);
+}
+
+input, select, textarea {
+  transition:
+    border-color var(--mf-t-normal) var(--mf-ease-out),
+    box-shadow var(--mf-t-normal) var(--mf-ease-out),
+    background-color var(--mf-t-normal) var(--mf-ease-out);
+}
+
+/* Tap highlight invisible en touch */
+button, a, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Respeta preferencia del sistema de reducir animaciones */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
