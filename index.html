@@ -1,10 +1,34 @@
 <!doctype html>
-<html lang="en">
+<html lang="es-MX">
   <head>
     <meta charset="UTF-8" />
+
+    <!-- Viewport: mobile-first, evita zoom accidental con inputs -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+
+    <!-- Título y descripción -->
+    <title>MarFlow · CRM para asesores</title>
+    <meta name="description" content="CRM inteligente para asesores de seguros." />
+
+    <!-- Color de la barra del navegador -->
+    <meta name="theme-color" content="#0A1F44" />
+
+    <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>marflow-v1</title>
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+
+    <!-- PWA manifest (Android / Chrome) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- iOS: agregar a pantalla de inicio -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MarFlow" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
+
+    <!-- Permitir que la app use todo el espacio en iPhones con notch -->
+    <meta name="format-detection" content="telephone=no" />
   </head>
   <body>
     <div id="root"></div>
