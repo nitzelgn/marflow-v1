@@ -374,6 +374,101 @@ const IconLoader = ({size=14, color="currentColor"}) => (
     <line x1="16.24" y1="7.76" y2="4.93" x2="19.07"/>
   </svg>
 );
+const IconChevronRight = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 18 15 12 9 6"/>
+  </svg>
+);
+const IconAlertCircle = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" x2="12" y1="8" y2="12"/>
+    <line x1="12" x2="12.01" y1="16" y2="16"/>
+  </svg>
+);
+const IconClock = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>
+);
+const IconCalendar = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+    <line x1="16" x2="16" y1="2" y2="6"/>
+    <line x1="8" x2="8" y1="2" y2="6"/>
+    <line x1="3" x2="21" y1="10" y2="10"/>
+  </svg>
+);
+const IconTrendingUp = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+    <polyline points="16 7 22 7 22 13"/>
+  </svg>
+);
+const IconRefresh = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 4 23 10 17 10"/>
+    <polyline points="1 20 1 14 7 14"/>
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+  </svg>
+);
+const IconStar = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+  </svg>
+);
+const IconUser = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+    <circle cx="12" cy="7" r="4"/>
+  </svg>
+);
+const IconUsers = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </svg>
+);
+const IconLayers = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+    <polyline points="2 17 12 22 22 17"/>
+    <polyline points="2 12 12 17 22 12"/>
+  </svg>
+);
+const IconBarChart = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" x2="12" y1="20" y2="10"/>
+    <line x1="18" x2="18" y1="20" y2="4"/>
+    <line x1="6" x2="6" y1="20" y2="16"/>
+  </svg>
+);
+const IconMail = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="20" height="16" x="2" y="4" rx="2"/>
+    <path d="m22 7-10 5L2 7"/>
+  </svg>
+);
+const IconDollar = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" x2="12" y1="2" y2="22"/>
+    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+  </svg>
+);
+const IconHome = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+    <polyline points="9 22 9 12 15 12 15 22"/>
+  </svg>
+);
+const IconPhoneCall = ({size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+  </svg>
+);
 
 function Auth({onLogin, mensajeInicial}) {
   const [email,setEmail]=useState("");
@@ -1365,11 +1460,30 @@ function Metricas({leads}) {
 /* ===========================================
    DASHBOARD — usa los 3 componentes nuevos
 =========================================== */
+// Microcopy editorial premium — se rota por día del año (estable durante el día)
+const MF_MICROCOPY = [
+  "La claridad reduce fricción.",
+  "Pequeñas acciones, grandes resultados.",
+  "Lo importante, primero.",
+  "Tu día, simplificado.",
+  "Decisiones limpias, ventas claras.",
+  "Disciplina silenciosa.",
+  "Orden antes que velocidad.",
+  "La organización también vende.",
+];
+function getMicrocopyDelDia() {
+  const ahora = new Date();
+  const inicioAño = new Date(ahora.getFullYear(), 0, 0);
+  const diff = ahora - inicioAño;
+  const diaDelAño = Math.floor(diff / 86400000);
+  return MF_MICROCOPY[diaDelAño % MF_MICROCOPY.length];
+}
+
 function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
   const activos=leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa));
-  const cierres=leads.filter(l=>l.etapa==="cierre");
   const riesgo=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="riesgo"));
   const sinC=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="sin_contacto"));
+  const reactivar=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="reactivar"));
   function irA(f){setFiltroNav(f);setSeccion("pipeline");}
 
   // ── Saludo dinámico según la hora ──
@@ -1379,122 +1493,156 @@ function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
                : hora < 19 ? "Buenas tardes"
                : "Buenas noches";
   const primerNombre = (usuario?.nombre || "").trim().split(/\s+/)[0] || "asesor";
-  const fechaLarga = ahora.toLocaleDateString("es-MX", {
-    weekday: "long", day: "numeric", month: "long"
-  });
+  const fechaLarga = ahora.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
   const fechaLargaCap = fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1);
+  const microcopy = getMicrocopyDelDia();
 
-  // ── Insights (calculados sobre datos reales) ──
+  // ── Insights calculados sobre datos reales ──
   const hoyStr = hoy();
-  const sieteDiasAtras = new Date(Date.now() - 7*86400000).toISOString().split("T")[0];
-  // 1) Seguimientos pendientes hoy: leads activos con alertas tipo "riesgo" o "sin_contacto"
+  const en7Dias = new Date(Date.now()+7*86400000).toISOString().split("T")[0];
+  const sieteDiasAtras = new Date(Date.now()-7*86400000).toISOString().split("T")[0];
+
   const segPendientes = activos.filter(l => {
     const a = getAlertas(l);
-    return a.some(x => ["riesgo","sin_contacto","reactivar"].includes(x.tipo));
+    return a.some(x => ["riesgo","sin_contacto"].includes(x.tipo));
   }).length;
-  // 2) Citas próximas (etapa cita + eventos tipo "cita" dentro de los próximos 7 días)
-  const eventosProx = (eventos||[]).filter(e => {
-    if (e.tipo !== "cita") return false;
-    return e.fecha >= hoyStr && e.fecha <= new Date(Date.now()+7*86400000).toISOString().split("T")[0];
-  }).length;
+  const sinRespuesta = sinC.length;
+  const enRiesgo = riesgo.length;
+  const aReactivar = reactivar.length;
+  const eventosProx = (eventos||[]).filter(e => e.tipo === "cita" && e.fecha >= hoyStr && e.fecha <= en7Dias).length;
   const citasProximas = leads.filter(l => l.etapa === "cita").length + eventosProx;
-  // 3) Cierres en proceso
   const cierresEnProceso = leads.filter(l => l.etapa === "cierre").length;
-  // 4) Contactados esta semana (ultimoContacto >= hace 7 días)
   const contactadosSemana = leads.filter(l => l.ultimoContacto && l.ultimoContacto >= sieteDiasAtras).length;
 
-  const insights = [
-    { v: segPendientes,    l: segPendientes === 1 ? "seguimiento pendiente hoy" : "seguimientos pendientes hoy", action: ()=>irA("seguimiento") },
-    { v: citasProximas,    l: citasProximas === 1 ? "cita próxima" : "citas próximas", action: ()=>irA("cita") },
-    { v: cierresEnProceso, l: cierresEnProceso === 1 ? "cierre en proceso" : "cierres en proceso", action: ()=>irA("cierre") },
-    { v: contactadosSemana,l: contactadosSemana === 1 ? "cliente contactado esta semana" : "clientes contactados esta semana", action: ()=>irA("activos") },
+  // Filas para las 2 cards principales
+  const filasAtencion = [
+    { v: segPendientes, l: segPendientes === 1 ? "Seguimiento pendiente" : "Seguimientos pendientes", icon: <IconClock size={15} color={B.navy}/>, action: ()=>irA("seguimiento") },
+    { v: enRiesgo,      l: enRiesgo === 1 ? "Cliente en riesgo" : "Clientes en riesgo",                icon: <IconAlertCircle size={15} color={B.redBright}/>, action: ()=>irA("seguimiento") },
+    { v: sinRespuesta,  l: sinRespuesta === 1 ? "Cliente sin respuesta" : "Clientes sin respuesta",    icon: <IconUser size={15} color={B.amber}/>, action: ()=>irA("activos") },
+    { v: aReactivar,    l: aReactivar === 1 ? "Lead a reactivar" : "Leads a reactivar",                icon: <IconRefresh size={15} color={B.purple}/>, action: ()=>irA("activos") },
   ];
+  const filasActividad = [
+    { v: contactadosSemana, l: contactadosSemana === 1 ? "Cliente contactado" : "Clientes contactados", icon: <IconPhoneCall size={15} color={B.navy}/> },
+    { v: cierresEnProceso,  l: cierresEnProceso === 1 ? "Cierre en proceso" : "Cierres en proceso",     icon: <IconStar size={15} color={B.gold}/>, action: ()=>irA("cierre") },
+    { v: citasProximas,     l: citasProximas === 1 ? "Cita próxima" : "Citas próximas",                 icon: <IconCalendar size={15} color={B.blue}/>, action: ()=>irA("cita") },
+  ];
+
+  // Fila item reutilizable (más compacta, con número grande + label sutil + chevron al final)
+  const FilaItem = ({ row }) => (
+    <button
+      onClick={row.action}
+      disabled={!row.action}
+      style={{
+        all:"unset",
+        display:"flex", alignItems:"center", gap:14,
+        padding:"14px 4px",
+        cursor: row.action ? "pointer" : "default",
+        borderBottom:`1px solid rgba(10,31,68,0.05)`,
+        transition:"background-color var(--mf-t-fast) var(--mf-ease-out)",
+        borderRadius:6,
+        width:"100%", boxSizing:"border-box",
+      }}
+      onMouseEnter={e=>{ if(row.action) e.currentTarget.style.backgroundColor = "rgba(10,31,68,0.025)"; }}
+      onMouseLeave={e=>{ e.currentTarget.style.backgroundColor = "transparent"; }}>
+      <div style={{
+        width:32, display:"flex", justifyContent:"center", flexShrink:0,
+        color: row.v > 0 ? B.navy : "rgba(10,31,68,0.35)",
+      }}>{row.icon}</div>
+      <div style={{
+        fontFamily:"'Cormorant Garamond', serif",
+        fontSize:24, fontWeight:500, lineHeight:1,
+        letterSpacing:"-0.01em",
+        color: row.v > 0 ? B.navy : "rgba(10,31,68,0.30)",
+        minWidth:30, textAlign:"left",
+      }}>{row.v}</div>
+      <div style={{
+        flex:1, minWidth:0,
+        fontSize:13, fontWeight:400,
+        color:"rgba(10,31,68,0.65)",
+        lineHeight:1.4,
+      }}>{row.l}</div>
+      {row.action && (
+        <div style={{color:"rgba(10,31,68,0.30)", flexShrink:0, display:"flex"}}>
+          <IconChevronRight size={14}/>
+        </div>
+      )}
+    </button>
+  );
+
+  const CardWrap = ({ title, subtitle, children, delay }) => (
+    <div className={`mf-fade-up mf-stagger-${delay}`}
+      style={{
+        background:B.white,
+        border:"1px solid rgba(10,31,68,0.06)",
+        borderRadius:16,
+        padding:"22px 24px 12px",
+        boxShadow:"var(--mf-shadow-xs)",
+        transition:"box-shadow var(--mf-t-normal) var(--mf-ease-out)",
+      }}>
+      <div style={{display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6}}>
+        <div style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:22, fontWeight:500,
+          letterSpacing:"-0.01em",
+          color:B.navy,
+        }}>{title}</div>
+        {subtitle && (
+          <div style={{fontSize:10, fontWeight:500, color:"rgba(10,31,68,0.40)", textTransform:"uppercase", letterSpacing:"0.15em"}}>
+            {subtitle}
+          </div>
+        )}
+      </div>
+      <div style={{display:"flex", flexDirection:"column"}}>
+        {children}
+      </div>
+    </div>
+  );
 
   return <div className="mf-fade-in">
     {/* ═══ Hero: saludo premium banca privada ═══ */}
-    <div style={{padding:"8px 0 32px",marginBottom:8}}>
-      <div style={{fontSize:11,fontWeight:500,color:"rgba(10,31,68,0.45)",textTransform:"uppercase",letterSpacing:"0.18em",marginBottom:10}}>
+    <div style={{padding:"4px 0 28px"}}>
+      <div style={{fontSize:10.5, fontWeight:500, color:"rgba(10,31,68,0.40)", textTransform:"uppercase", letterSpacing:"0.22em", marginBottom:10}}>
         {fechaLargaCap}
       </div>
       <h1 style={{
         fontFamily:"'Cormorant Garamond', serif",
-        fontSize:"clamp(28px, 4.5vw, 40px)",
-        fontWeight:500,
-        lineHeight:1.1,
-        letterSpacing:"-0.02em",
+        fontSize:"clamp(30px, 4.8vw, 42px)",
+        fontWeight:500, lineHeight:1.08,
+        letterSpacing:"-0.025em",
         color:B.navy,
-        margin:"0 0 8px",
+        margin:"0 0 10px",
       }}>
         {saludo}, {primerNombre}.
       </h1>
       <p style={{
         fontSize:14,
-        color:"rgba(10,31,68,0.55)",
-        margin:0,
-        fontWeight:400,
-        lineHeight:1.5,
+        color:"rgba(10,31,68,0.50)",
+        margin:0, fontWeight:400, lineHeight:1.5,
+        fontStyle:"italic",
       }}>
-        Tu resumen del día en MarFlow.
+        {microcopy}
       </p>
     </div>
 
-    {/* ═══ Insights premium (4 hero stats minimalistas) ═══ */}
+    {/* ═══ Dos cards principales agrupadas (estilo Linear / Stripe) ═══ */}
     <div style={{
       display:"grid",
-      gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",
-      gap:14,
-      marginBottom:32,
+      gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",
+      gap:18,
+      marginBottom:30,
     }}>
-      {insights.map((it, i) => (
-        <button
-          key={i}
-          onClick={it.action}
-          className={`mf-fade-up mf-stagger-${i+1}`}
-          style={{
-            textAlign:"left",
-            background:B.white,
-            border:`1px solid rgba(10,31,68,0.06)`,
-            borderRadius:16,
-            padding:"22px 22px 20px",
-            cursor:"pointer",
-            boxShadow:"var(--mf-shadow-xs)",
-            transition:"transform var(--mf-t-normal) var(--mf-ease-out), box-shadow var(--mf-t-normal) var(--mf-ease-out), border-color var(--mf-t-fast) var(--mf-ease-out)",
-            fontFamily:"'Poppins', sans-serif",
-            color:B.navy,
-          }}
-          onMouseEnter={e=>{
-            e.currentTarget.style.boxShadow = "var(--mf-shadow-md)";
-            e.currentTarget.style.transform = "translateY(-2px)";
-            e.currentTarget.style.borderColor = "rgba(198,169,107,0.20)";
-          }}
-          onMouseLeave={e=>{
-            e.currentTarget.style.boxShadow = "var(--mf-shadow-xs)";
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.borderColor = "rgba(10,31,68,0.06)";
-          }}>
-          <div style={{
-            fontFamily:"'Cormorant Garamond', serif",
-            fontSize:"clamp(40px, 5vw, 52px)",
-            fontWeight:500,
-            lineHeight:1,
-            letterSpacing:"-0.02em",
-            color:B.navy,
-            marginBottom:8,
-          }}>{it.v}</div>
-          <div style={{
-            fontSize:12,
-            color:"rgba(10,31,68,0.55)",
-            fontWeight:400,
-            lineHeight:1.45,
-          }}>{it.l}</div>
-        </button>
-      ))}
+      <CardWrap title="Atención hoy" subtitle="Prioridad" delay={1}>
+        {filasAtencion.map((f, i) => <FilaItem key={i} row={f}/>)}
+      </CardWrap>
+
+      <CardWrap title="Actividad semanal" subtitle="7 días" delay={2}>
+        {filasActividad.map((f, i) => <FilaItem key={i} row={f}/>)}
+      </CardWrap>
     </div>
 
-    {/* Separador sutil */}
-    <div style={{height:1, background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.06), transparent)", margin:"4px 0 28px"}}/>
+    {/* Separador editorial muy sutil */}
+    <div style={{height:1, background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.06), transparent)", margin:"2px 0 24px"}}/>
 
-    {/* CAMBIO 1: VentaDelDia rediseñada — solo 2 bloques */}
     <VentaDelDia leads={leads}/>
 
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:18}}>
@@ -3042,14 +3190,14 @@ export default function App() {
   const alertaCount=leads.filter(l=>!l.sinSeguimiento&&getAlertas(l).some(a=>["riesgo","sin_contacto"].includes(a.tipo))&&!["otro","cierre"].includes(l.etapa)).length;
 
   const NAV=[
-    ...(esAdmin?[{id:"dashboard",icon:"*",l:"Dashboard"}]:[]),
-    ...(esAdmin?[{id:"pipeline",icon:"#",l:"Pipeline"}]:[]),
-    {id:"lista",icon:"☰",l:"Leads"},
-    {id:"agenda",icon:"📅",l:"Agenda"},
-    ...(esAdmin?[{id:"metricas",icon:"📊",l:"Métricas"}]:[]),
-    ...(esAdmin?[{id:"mensajes",icon:"✉",l:"Mensajes"}]:[]),
-    ...(esAdmin?[{id:"cobranza",icon:"💰",l:"Cobranza"}]:[]),
-    ...(esAdmin?[{id:"usuarios",icon:"👤",l:"Usuarios"}]:[]),
+    ...(esAdmin?[{id:"dashboard",icon:<IconHome size={14}/>,l:"Dashboard"}]:[]),
+    ...(esAdmin?[{id:"pipeline",icon:<IconLayers size={14}/>,l:"Pipeline"}]:[]),
+    {id:"lista",icon:<IconUsers size={14}/>,l:"Leads"},
+    {id:"agenda",icon:<IconCalendar size={14}/>,l:"Agenda"},
+    ...(esAdmin?[{id:"metricas",icon:<IconBarChart size={14}/>,l:"Métricas"}]:[]),
+    ...(esAdmin?[{id:"mensajes",icon:<IconMail size={14}/>,l:"Mensajes"}]:[]),
+    ...(esAdmin?[{id:"cobranza",icon:<IconDollar size={14}/>,l:"Cobranza"}]:[]),
+    ...(esAdmin?[{id:"usuarios",icon:<IconUser size={14}/>,l:"Usuarios"}]:[]),
   ];
 
   const APP_CSS=`
@@ -3060,13 +3208,18 @@ export default function App() {
     select{font-size:14px;}
     .mf-app{width:100%;max-width:100vw;min-height:100%;min-height:-webkit-fill-available;overflow-x:hidden;overflow-y:auto;position:relative;}
     .mf-header{position:sticky;top:0;z-index:400;width:100%;max-width:100vw;background:#0A1F44;border-bottom:1px solid rgba(198,169,107,0.15);box-shadow:0 2px 16px rgba(10,31,68,.3);}
-    .mf-header-row1{display:flex;align-items:center;justify-content:space-between;padding:0 14px;height:60px;gap:8px;width:100%;}
-    .mf-header-row2{display:flex;align-items:center;padding:0 10px 9px;gap:2px;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:#0A1F44;}
+    .mf-header{background:linear-gradient(180deg,#0A1F44 0%,#0c2249 100%)!important;border-bottom:1px solid rgba(198,169,107,0.10)!important;box-shadow:0 1px 0 rgba(10,31,68,.04)!important;}
+    .mf-header-row1{display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:52px;gap:10px;width:100%;}
+    .mf-header-row2{display:flex;align-items:center;padding:0 12px 8px;gap:3px;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:transparent;}
     .mf-header-row2::-webkit-scrollbar{display:none;}
-    .mf-nav-btn{flex-shrink:0;display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:6px 12px;border-radius:18px;border:none;font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;cursor:pointer;transition:all 0.15s ease;white-space:nowrap;-webkit-tap-highlight-color:transparent;position:relative;user-select:none;-webkit-user-select:none;}
-    .mf-nav-btn.active{background:#C6A96B;color:#0A1F44;box-shadow:0 2px 8px rgba(198,169,107,.35);}
+    .mf-nav-btn{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:6px 12px;border-radius:8px;border:none;font-family:'Poppins',sans-serif;font-weight:500;font-size:12px;letter-spacing:0.01em;cursor:pointer;transition:background-color var(--mf-t-fast) var(--mf-ease-out),color var(--mf-t-fast) var(--mf-ease-out);white-space:nowrap;-webkit-tap-highlight-color:transparent;position:relative;user-select:none;-webkit-user-select:none;}
+    .mf-nav-btn.active{background:rgba(255,255,255,0.10);color:#fff;}
+    .mf-nav-btn.active::after{content:"";position:absolute;left:12px;right:12px;bottom:-9px;height:2px;background:#C6A96B;border-radius:2px 2px 0 0;}
     .mf-nav-btn.inactive{background:transparent;color:rgba(255,255,255,0.55);}
-    .mf-nav-btn.inactive:active{background:rgba(255,255,255,0.1);color:#fff;}
+    .mf-nav-btn.inactive:hover{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.85);}
+    .mf-nav-btn.inactive:active{background:rgba(255,255,255,0.10);color:#fff;}
+    .mf-nav-btn svg{flex-shrink:0;opacity:0.85;}
+    .mf-nav-btn.active svg{opacity:1;}
     .mf-main{width:100%;max-width:100vw;padding:12px;overflow-x:hidden;}
     @media(min-width:480px){.mf-main{padding:16px;}}
     @media(min-width:768px){.mf-main{padding:20px;}}
