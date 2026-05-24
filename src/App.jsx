@@ -318,6 +318,36 @@ function ContactoModal({lead,onClose}) {
   </MFModal>;
 }
 
+/* ═══════════════════════════════════════════
+   MARFLOW WORDMARK — logotype oficial recreado en código
+   "MAR" en blanco + "FLOW" en gold champagne
+   Sans-serif geométrica fina con letter-spacing amplio
+═══════════════════════════════════════════ */
+function MarflowWordmark({ height = 18, colorMar = "#FFFFFF", colorFlow = "#C6A96B" }) {
+  return (
+    <div
+      role="img"
+      aria-label="MARFLOW"
+      style={{
+        display: "inline-flex",
+        alignItems: "baseline",
+        fontFamily: "'Helvetica Neue', 'Inter', 'SF Pro Display', system-ui, -apple-system, sans-serif",
+        fontWeight: 300,
+        fontSize: height,
+        lineHeight: 1,
+        letterSpacing: `${(height * 0.16).toFixed(2)}px`,
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        whiteSpace: "nowrap",
+        textRendering: "geometricPrecision",
+      }}
+    >
+      <span style={{ color: colorMar }}>MAR</span>
+      <span style={{ color: colorFlow }}>FLOW</span>
+    </div>
+  );
+}
+
 function WolfMark({size=120, opacity=1}) {
   return (
     <svg width={size} height={size} viewBox="0 0 0 0" fill="none" style={{opacity}}>
@@ -6281,25 +6311,7 @@ export default function App() {
 
       <header className="mf-header">
         <div className="mf-header-row1" style={{background:"#0A1F44"}}>
-          <div style={{display:"inline-flex",alignItems:"center",gap:10}}>
-            <img
-              src="/icon-512.png"
-              alt="MarFlow"
-              style={{
-                height: 32, width: 32,
-                objectFit: "contain",
-                filter: "drop-shadow(0 4px 12px rgba(198,169,107,0.30))",
-                userSelect: "none", WebkitUserDrag: "none",
-              }}
-              draggable="false"
-            />
-            <span style={{
-              fontFamily: "'Cormorant Garamond', serif",
-              fontSize: 19, fontWeight: 500,
-              letterSpacing: "-0.01em",
-              color: "#f0ece4",
-            }}>MarFlow</span>
-          </div>
+          <MarflowWordmark height={18}/>
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
             <div style={{position:"relative"}}>
               <button onClick={()=>setNotifOpen(o=>!o)} style={{width:36,height:36,borderRadius:"50%",border:`1px solid ${notifOpen?B.gold:"rgba(255,255,255,0.3)"}`,background:notifOpen?B.gold+"22":"rgba(255,255,255,0.1)",color:notifOpen?B.gold:"#fff",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .18s",flexShrink:0,position:"relative"}}>
