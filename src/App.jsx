@@ -550,6 +550,25 @@ const IconClock2 = ({size=14, color="currentColor"}) => (
     <polyline points="12 6 12 12 16 14"/>
   </svg>
 );
+const IconEdit = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+);
+const IconBell = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+  </svg>
+);
+const IconLink2 = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 17H7A5 5 0 0 1 7 7h2"/>
+    <path d="M15 7h2a5 5 0 1 1 0 10h-2"/>
+    <line x1="8" x2="16" y1="12" y2="12"/>
+  </svg>
+);
 
 function Auth({onLogin, mensajeInicial}) {
   const [email,setEmail]=useState("");
@@ -4055,107 +4074,546 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
         </div>
       </div>
       {modalDia&&diaClick&&(
-        <MFModal onClose={()=>{setModalDia(false);setDiaClick(null);}} width={440}>
-          <div style={{marginBottom:20}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <MFModal onClose={()=>{setModalDia(false);setDiaClick(null);}} width={460}>
+          {/* Header editorial — día grande en serif */}
+          <div style={{marginBottom:22}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
               <div>
-                <div style={{fontSize:13,fontWeight:600,color:"#64748b",textTransform:"uppercase",letterSpacing:"1px",marginBottom:4}}>{["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][(new Date(`${anio}-${String(mes+1).padStart(2,"0")}-${String(diaClick).padStart(2,"0")}`).getDay()+6)%7]}</div>
-                <div style={{fontSize:36,fontWeight:800,color:B.navy,lineHeight:1,letterSpacing:"-1px"}}>{diaClick}</div>
-                <div style={{fontSize:14,color:"#64748b",marginTop:2}}>{MESES[mes]} {anio}</div>
+                <div style={{
+                  fontSize:10.5, fontWeight:500,
+                  color:"rgba(10,31,68,0.45)",
+                  textTransform:"uppercase", letterSpacing:"0.22em",
+                  marginBottom:8,
+                }}>
+                  {["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][(new Date(`${anio}-${String(mes+1).padStart(2,"0")}-${String(diaClick).padStart(2,"0")}`).getDay()+6)%7]}
+                </div>
+                <div style={{
+                  display:"flex", alignItems:"baseline", gap:10,
+                }}>
+                  <div style={{
+                    fontFamily:"'Cormorant Garamond', serif",
+                    fontSize:52, fontWeight:500,
+                    color:B.navy, lineHeight:1,
+                    letterSpacing:"-0.03em",
+                    fontVariantNumeric:"tabular-nums",
+                  }}>{diaClick}</div>
+                  <div style={{
+                    fontFamily:"'Cormorant Garamond', serif",
+                    fontSize:20, fontWeight:400,
+                    color:"rgba(10,31,68,0.50)",
+                    letterSpacing:"-0.01em",
+                    lineHeight:1.1,
+                  }}>{MESES[mes]} {anio}</div>
+                </div>
               </div>
-              <button onClick={()=>{setModalDia(false);setDiaClick(null);}} style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:22,lineHeight:1,padding:4}}>✕</button>
+              <button onClick={()=>{setModalDia(false);setDiaClick(null);}}
+                style={{
+                  width:30, height:30, borderRadius:8,
+                  background:"transparent",
+                  border:"1px solid rgba(10,31,68,0.08)",
+                  color:"rgba(10,31,68,0.50)",
+                  cursor:"pointer",
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.color=B.navy;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.color="rgba(10,31,68,0.50)";}}>
+                <IconX size={14}/>
+              </button>
             </div>
-            <div style={{height:1,background:`linear-gradient(90deg,transparent,${B.gold}55,transparent)`,marginTop:16}}/>
+            <div style={{height:1, background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.08), transparent)", marginTop:18}}/>
           </div>
-          {diasConEvs.length===0&&(<div style={{textAlign:"center",padding:"32px 0"}}><div style={{fontSize:28,marginBottom:8}}>📅</div><div style={{fontSize:14,color:"#94a3b8",fontWeight:500}}>Sin eventos este día</div></div>)}
-          <div style={{display:"flex",flexDirection:"column",gap:0}}>
-            {diasConEvs.map((ev,idx)=>(
-              <div key={ev.id} style={{display:"flex",gap:12,padding:"14px 0",borderBottom:idx<diasConEvs.length-1?`1px solid ${B.gray}22`:"none"}}>
-                <div style={{width:60,flexShrink:0,paddingTop:2}}>
-                  {!ev._privado&&ev.horaInicio?(<><div style={{fontSize:12,fontWeight:600,color:B.navy}}>{ev.horaInicio}</div>{ev.horaFin&&<div style={{fontSize:10,color:"#94a3b8",marginTop:1}}>{ev.horaFin}</div>}</>):(<div style={{fontSize:11,color:"#94a3b8"}}>Todo el día</div>)}
+
+          {/* Empty state editorial */}
+          {diasConEvs.length === 0 && (
+            <div style={{textAlign:"center", padding:"32px 0 16px"}}>
+              <div style={{
+                width:48, height:48, borderRadius:"50%",
+                background:"rgba(248,246,242,0.8)",
+                border:"1px solid rgba(10,31,68,0.06)",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                margin:"0 auto 12px",
+                color:"rgba(10,31,68,0.35)",
+              }}>
+                <IconCalendar size={20} color="rgba(10,31,68,0.35)"/>
+              </div>
+              <div style={{
+                fontSize:13, color:"rgba(10,31,68,0.45)",
+                fontStyle:"italic", letterSpacing:"0.01em",
+              }}>Sin eventos este día</div>
+            </div>
+          )}
+
+          {/* Lista de eventos */}
+          <div style={{display:"flex", flexDirection:"column", gap:0}}>
+            {diasConEvs.map((ev, idx) => (
+              <div key={ev.id} style={{
+                display:"flex", gap:14, padding:"14px 0",
+                borderBottom: idx < diasConEvs.length - 1 ? "1px solid rgba(10,31,68,0.05)" : "none",
+              }}>
+                {/* Hora */}
+                <div style={{width:62, flexShrink:0, paddingTop:2}}>
+                  {!ev._privado && ev.horaInicio ? (
+                    <>
+                      <div style={{
+                        fontSize:12.5, fontWeight:500, color:B.navy,
+                        fontVariantNumeric:"tabular-nums",
+                      }}>{ev.horaInicio}</div>
+                      {ev.horaFin && (
+                        <div style={{
+                          fontSize:10.5, color:"rgba(10,31,68,0.40)", marginTop:1,
+                          fontVariantNumeric:"tabular-nums",
+                        }}>{ev.horaFin}</div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{
+                      fontSize:10, color:"rgba(10,31,68,0.35)",
+                      fontStyle:"italic", letterSpacing:"0.01em",
+                    }}>Todo el día</div>
+                  )}
                 </div>
-                <div style={{width:3,borderRadius:2,background:tipoC(ev.tipo),flexShrink:0,alignSelf:"stretch",minHeight:40}}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:700,color:ev._privado?"#94a3b8":B.navy,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ev.titulo}</div>
-                  {!ev._privado&&(<>
-                    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:ev.nota||ev.agendadoPor?6:0}}>
-                      <Tag color={tipoC(ev.tipo)} small>{tipoL(ev.tipo).replace(" 🔒","").replace(" ✈️"," ✈")}</Tag>
-                      {ev.tipo==="trabajo"&&ev.subtipo&&<Tag color={B.navy} small>{SUBTIPO_LABEL[ev.subtipo]||ev.subtipo}</Tag>}
-                      {ev.repeticion&&ev.repeticion!=="none"&&<Tag color={B.gold} small>↻ {REPETICION.find(r=>r.v===ev.repeticion)?.l}</Tag>}
-                      {ev.fechaFin&&ev.fechaFin!==ev.fechaInicio&&<Tag color="#7c3aed" small>📅 Hasta {fmtF(ev.fechaFin)}</Tag>}
-                    </div>
-                    {ev.agendadoPor&&(<div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#64748b",marginBottom:4}}><span style={{width:18,height:18,borderRadius:"50%",background:B.navy+"20",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:B.navy,flexShrink:0}}>{initials(ev.agendadoPor)}</span><span>Agendado por <strong style={{color:B.navy}}>{ev.agendadoPor}</strong></span></div>)}
-                    {ev.nota&&<div style={{fontSize:11,color:"#64748b",lineHeight:1.6,marginTop:2}}>{ev.nota}</div>}
-                  </>)}
+
+                {/* Línea de color del tipo */}
+                <div style={{
+                  width:2, borderRadius:1, background:tipoC(ev.tipo),
+                  flexShrink:0, alignSelf:"stretch", minHeight:40, opacity:0.6,
+                }}/>
+
+                {/* Contenido */}
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{
+                    fontSize:14, fontWeight:600,
+                    color: ev._privado ? "rgba(10,31,68,0.40)" : B.navy,
+                    marginBottom: ev._privado ? 0 : 5,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                    letterSpacing:"-0.005em",
+                  }}>{ev.titulo}</div>
+                  {!ev._privado && (
+                    <>
+                      <div style={{display:"flex", gap:5, flexWrap:"wrap", marginBottom: (ev.nota || ev.agendadoPor) ? 6 : 0}}>
+                        <span style={{
+                          display:"inline-flex", alignItems:"center", gap:5,
+                          fontSize:10.5, fontWeight:500,
+                          color:tipoC(ev.tipo),
+                          background:tipoC(ev.tipo)+"0e",
+                          border:`1px solid ${tipoC(ev.tipo)}25`,
+                          padding:"2px 8px", borderRadius:6,
+                          letterSpacing:"0.005em",
+                        }}>
+                          <span style={{width:5,height:5,borderRadius:"50%",background:tipoC(ev.tipo)}}/>
+                          {tipoL(ev.tipo).replace(" 🔒","").replace(" ✈️","").trim()}
+                        </span>
+                        {ev.tipo === "trabajo" && ev.subtipo && (
+                          <span style={{
+                            fontSize:10.5, fontWeight:500,
+                            color:"rgba(10,31,68,0.65)",
+                            background:"rgba(10,31,68,0.04)",
+                            padding:"2px 8px", borderRadius:6,
+                          }}>{SUBTIPO_LABEL[ev.subtipo] || ev.subtipo}</span>
+                        )}
+                        {ev.repeticion && ev.repeticion !== "none" && (
+                          <span style={{
+                            display:"inline-flex", alignItems:"center", gap:4,
+                            fontSize:10.5, fontWeight:500,
+                            color:B.gold,
+                            background:"rgba(198,169,107,0.08)",
+                            border:"1px solid rgba(198,169,107,0.20)",
+                            padding:"2px 8px", borderRadius:6,
+                          }}>
+                            <IconRefresh size={10} color={B.gold}/>
+                            {REPETICION.find(r => r.v === ev.repeticion)?.l}
+                          </span>
+                        )}
+                        {ev.fechaFin && ev.fechaFin !== ev.fechaInicio && (
+                          <span style={{
+                            display:"inline-flex", alignItems:"center", gap:4,
+                            fontSize:10.5, fontWeight:500,
+                            color:"#7c3aed",
+                            background:"rgba(124,58,237,0.06)",
+                            border:"1px solid rgba(124,58,237,0.18)",
+                            padding:"2px 8px", borderRadius:6,
+                          }}>
+                            <IconCalendar size={10} color="#7c3aed"/>
+                            Hasta {fmtF(ev.fechaFin)}
+                          </span>
+                        )}
+                      </div>
+                      {ev.agendadoPor && (
+                        <div style={{
+                          display:"flex", alignItems:"center", gap:6,
+                          fontSize:11, color:"rgba(10,31,68,0.55)", marginBottom:4,
+                        }}>
+                          <span style={{
+                            width:18, height:18, borderRadius:"50%",
+                            background:"rgba(10,31,68,0.06)",
+                            border:"1px solid rgba(10,31,68,0.10)",
+                            display:"inline-flex", alignItems:"center", justifyContent:"center",
+                            fontSize:8, fontWeight:600, color:B.navy, flexShrink:0,
+                          }}>{initials(ev.agendadoPor)}</span>
+                          <span>Agendado por <span style={{color:B.navy, fontWeight:500}}>{ev.agendadoPor}</span></span>
+                        </div>
+                      )}
+                      {ev.nota && (
+                        <div style={{
+                          fontSize:11.5, color:"rgba(10,31,68,0.55)",
+                          lineHeight:1.6, marginTop:2,
+                        }}>{ev.nota}</div>
+                      )}
+                    </>
+                  )}
                 </div>
-                {!ev._privado&&(!esAsistente||ev.agendadoPor===usuario?.nombre)&&(
-                  <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
-                    <button onClick={()=>{abrirEditar(ev);setModalDia(false);}} style={{width:28,height:28,borderRadius:7,border:`1px solid ${B.gray}`,background:B.white,color:"#64748b",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=B.navy;e.currentTarget.style.color=B.navy;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=B.gray;e.currentTarget.style.color="#64748b";}}>✏️</button>
-                    <button onClick={()=>setConfirmEvDel(ev.id)} style={{width:28,height:28,borderRadius:7,border:`1px solid ${B.gray}`,background:B.white,color:"#64748b",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=B.redBright;e.currentTarget.style.color=B.redBright;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=B.gray;e.currentTarget.style.color="#64748b";}}>✕</button>
+
+                {/* Acciones */}
+                {!ev._privado && (!esAsistente || ev.agendadoPor === usuario?.nombre) && (
+                  <div style={{display:"flex", flexDirection:"column", gap:5, flexShrink:0}}>
+                    <button onClick={()=>{abrirEditar(ev); setModalDia(false);}}
+                      aria-label="Editar"
+                      style={{
+                        width:28, height:28, borderRadius:7,
+                        border:"1px solid rgba(10,31,68,0.08)",
+                        background:"transparent",
+                        color:"rgba(10,31,68,0.55)",
+                        cursor:"pointer",
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                      }}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.40)"; e.currentTarget.style.background="rgba(198,169,107,0.05)"; e.currentTarget.style.color=B.navy;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background="transparent"; e.currentTarget.style.color="rgba(10,31,68,0.55)";}}>
+                      <IconEdit size={12}/>
+                    </button>
+                    <button onClick={()=>setConfirmEvDel(ev.id)}
+                      aria-label="Eliminar"
+                      style={{
+                        width:28, height:28, borderRadius:7,
+                        border:"1px solid rgba(10,31,68,0.08)",
+                        background:"transparent",
+                        color:"rgba(10,31,68,0.55)",
+                        cursor:"pointer",
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                      }}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(220,38,38,0.25)"; e.currentTarget.style.background="rgba(220,38,38,0.04)"; e.currentTarget.style.color=B.redBright;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background="transparent"; e.currentTarget.style.color="rgba(10,31,68,0.55)";}}>
+                      <IconTrash size={12}/>
+                    </button>
                   </div>
                 )}
               </div>
             ))}
           </div>
-          <button onClick={()=>{abrirNuevo(strD(diaClick));setModalDia(false);}} style={{width:"100%",marginTop:16,padding:"12px",borderRadius:10,border:`1.5px dashed ${B.gray}`,background:"transparent",color:B.navy,fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onMouseEnter={e=>{e.currentTarget.style.borderColor=B.gold;e.currentTarget.style.background=B.goldDim;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=B.gray;e.currentTarget.style.background="transparent";}}>
-            <span style={{fontSize:16}}>+</span> Agregar evento
+
+          {/* Botón agregar evento — dashed elegante */}
+          <button onClick={()=>{abrirNuevo(strD(diaClick)); setModalDia(false);}}
+            style={{
+              width:"100%", marginTop:18, padding:"13px",
+              borderRadius:10,
+              border:"1.5px dashed rgba(10,31,68,0.15)",
+              background:"transparent",
+              color:"rgba(10,31,68,0.65)",
+              fontFamily:"'Poppins',sans-serif",
+              fontWeight:500, fontSize:12.5,
+              cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              letterSpacing:"0.005em",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.50)"; e.currentTarget.style.background="rgba(198,169,107,0.04)"; e.currentTarget.style.color=B.navy;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.15)"; e.currentTarget.style.background="transparent"; e.currentTarget.style.color="rgba(10,31,68,0.65)";}}>
+            <IconPlus size={13}/> Agregar evento
           </button>
         </MFModal>
       )}
-      {modalEv&&(
-        <MFModal onClose={()=>setModalEv(false)} width={500}>
-          <MHead title={editId?"Editar evento":"Nuevo evento"} onClose={()=>setModalEv(false)}/>
-          <div style={{display:"flex",flexDirection:"column",gap:13}}>
+      {modalEv && (
+        <MFModal onClose={()=>setModalEv(false)} width={520}>
+          <MHead title={editId ? "Editar evento" : "Nuevo evento"} onClose={()=>setModalEv(false)}/>
+          <div style={{display:"flex", flexDirection:"column", gap:14}}>
             <FL label="Título"><Inp value={form.titulo} onChange={v=>sf("titulo",v)} placeholder="Descripción del evento"/></FL>
+
             <FL label="Tipo de evento">
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {TIPO_EVENTO.filter(t=>!esAsistente||!t.soloAdmin).map(t=>(<button key={t.id} onClick={()=>sf("tipo",t.id)} style={{padding:"6px 13px",borderRadius:20,border:`1.5px solid ${form.tipo===t.id?t.color:B.gray}`,background:form.tipo===t.id?t.color+"16":B.cream,color:form.tipo===t.id?t.color:"#64748b",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:11,cursor:"pointer"}}>{t.label}</button>))}
+              <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+                {TIPO_EVENTO.filter(t=>!esAsistente||!t.soloAdmin).map(t=>{
+                  const active = form.tipo === t.id;
+                  return (
+                    <button key={t.id} onClick={()=>sf("tipo",t.id)}
+                      style={{
+                        display:"inline-flex", alignItems:"center", gap:6,
+                        padding:"7px 13px", borderRadius:9,
+                        border:`1px solid ${active ? t.color+"55" : "rgba(10,31,68,0.08)"}`,
+                        background: active ? t.color+"0e" : B.white,
+                        color: active ? t.color : "rgba(10,31,68,0.65)",
+                        fontFamily:"'Poppins',sans-serif",
+                        fontWeight: active ? 600 : 500,
+                        fontSize:11.5,
+                        cursor:"pointer",
+                        transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                        letterSpacing:"0.005em",
+                      }}>
+                      <span style={{width:6,height:6,borderRadius:"50%",background:t.color}}/>
+                      {t.label.replace(" 🔒","").replace(" ✈️","").trim()}
+                    </button>
+                  );
+                })}
               </div>
-              {form.tipo==="personal"&&<div style={{fontSize:11,color:"#94a3b8",marginTop:5,fontStyle:"italic"}}>🔒 Asistentes solo verán "Ocupado"</div>}
+              {form.tipo === "personal" && (
+                <div style={{
+                  display:"inline-flex", alignItems:"center", gap:6,
+                  fontSize:11, color:"rgba(10,31,68,0.55)",
+                  marginTop:8, fontStyle:"italic",
+                }}>
+                  <IconLock size={11} color="rgba(10,31,68,0.55)"/>
+                  Tus asistentes solo verán "Ocupado".
+                </div>
+              )}
             </FL>
-            {(form.tipo==="trabajo"||form.tipo==="cita")&&(
-              <FL label={form.tipo==="trabajo"?"Tipo de actividad":"Tipo de cita"}>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {TIPO_EVENTO.find(t=>t.id===form.tipo)?.subtipos.map(v=>(<button key={v} onClick={()=>sf("subtipo",v)} style={{padding:"6px 14px",borderRadius:20,border:`1.5px solid ${form.subtipo===v?TIPO_EVENTO.find(t=>t.id===form.tipo)?.color:B.gray}`,background:form.subtipo===v?TIPO_EVENTO.find(t=>t.id===form.tipo)?.color+"14":B.cream,color:form.subtipo===v?TIPO_EVENTO.find(t=>t.id===form.tipo)?.color:"#64748b",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer"}}>{SUBTIPO_LABEL[v]||v}</button>))}
+
+            {(form.tipo === "trabajo" || form.tipo === "cita") && (
+              <FL label={form.tipo === "trabajo" ? "Tipo de actividad" : "Tipo de cita"}>
+                <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+                  {TIPO_EVENTO.find(t=>t.id===form.tipo)?.subtipos.map(v=>{
+                    const tipoColor = TIPO_EVENTO.find(t=>t.id===form.tipo)?.color;
+                    const active = form.subtipo === v;
+                    return (
+                      <button key={v} onClick={()=>sf("subtipo",v)}
+                        style={{
+                          padding:"6px 13px", borderRadius:9,
+                          border:`1px solid ${active ? tipoColor+"55" : "rgba(10,31,68,0.08)"}`,
+                          background: active ? tipoColor+"0c" : B.white,
+                          color: active ? tipoColor : "rgba(10,31,68,0.65)",
+                          fontFamily:"'Poppins',sans-serif",
+                          fontWeight: active ? 600 : 500, fontSize:11.5,
+                          cursor:"pointer",
+                          transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                        }}>
+                        {SUBTIPO_LABEL[v] || v}
+                      </button>
+                    );
+                  })}
                 </div>
               </FL>
             )}
-            {form.tipo==="cita"&&(
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,background:form.recordatorioCot?"#fffbeb":"#f8f8f8",border:`1.5px solid ${form.recordatorioCot?"#fbbf24":B.gray}`,cursor:"pointer"}} onClick={()=>sf("recordatorioCot",!form.recordatorioCot)}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <span style={{fontSize:18}}>📄</span>
-                  <div><div style={{fontSize:12,fontWeight:700,color:B.navy}}>Recordatorio: Enviar cotización</div><div style={{fontSize:10,color:"#64748b"}}>Te aparecerá un pop-up recordatorio</div></div>
+
+            {/* Recordatorio cotización — toggle elegante */}
+            {form.tipo === "cita" && (
+              <div onClick={()=>sf("recordatorioCot",!form.recordatorioCot)}
+                style={{
+                  display:"flex", alignItems:"center", justifyContent:"space-between",
+                  padding:"13px 15px", borderRadius:11,
+                  background: form.recordatorioCot ? "rgba(198,169,107,0.06)" : "rgba(248,246,242,0.6)",
+                  border:`1px solid ${form.recordatorioCot ? "rgba(198,169,107,0.30)" : "rgba(10,31,68,0.06)"}`,
+                  cursor:"pointer",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}>
+                <div style={{display:"flex", alignItems:"center", gap:11}}>
+                  <div style={{
+                    width:32, height:32, borderRadius:8,
+                    background: form.recordatorioCot ? "rgba(198,169,107,0.15)" : "rgba(10,31,68,0.05)",
+                    border:`1px solid ${form.recordatorioCot ? "rgba(198,169,107,0.25)" : "rgba(10,31,68,0.08)"}`,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    color: form.recordatorioCot ? B.gold : "rgba(10,31,68,0.45)",
+                    flexShrink:0,
+                  }}>
+                    <IconBell size={15}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:12.5, fontWeight:600, color:B.navy, letterSpacing:"0.005em"}}>Recordatorio: enviar cotización</div>
+                    <div style={{fontSize:10.5, color:"rgba(10,31,68,0.50)", marginTop:2}}>Aparecerá un aviso 30 min después de guardar</div>
+                  </div>
                 </div>
-                <div style={{width:42,height:24,borderRadius:12,background:form.recordatorioCot?"#f59e0b":B.gray,position:"relative"}}>
-                  <div style={{position:"absolute",top:3,left:form.recordatorioCot?20:3,width:18,height:18,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+                <div style={{
+                  width:38, height:22, borderRadius:11,
+                  background: form.recordatorioCot ? B.gold : "rgba(10,31,68,0.15)",
+                  position:"relative",
+                  transition:"background var(--mf-t-fast) var(--mf-ease-out)",
+                  flexShrink:0,
+                }}>
+                  <div style={{
+                    position:"absolute", top:2,
+                    left: form.recordatorioCot ? 18 : 2,
+                    width:18, height:18, borderRadius:"50%",
+                    background:"#fff",
+                    transition:"left var(--mf-t-fast) var(--mf-ease-out)",
+                    boxShadow:"0 1px 3px rgba(10,31,68,0.20)",
+                  }}/>
                 </div>
               </div>
             )}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10}}>
+
+            <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))", gap:10}}>
               <FL label="Fecha inicio"><Inp type="date" value={form.fechaInicio} onChange={v=>sf("fechaInicio",v)}/></FL>
               <FL label="Fecha fin (opcional)"><Inp type="date" value={form.fechaFin} onChange={v=>sf("fechaFin",v)}/></FL>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10}}>
+            <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))", gap:10}}>
               <FL label="Hora inicio"><HoraSelect value={form.horaInicio} onChange={v=>sf("horaInicio",v)}/></FL>
               <FL label="Hora fin"><HoraSelect value={form.horaFin} onChange={v=>sf("horaFin",v)}/></FL>
             </div>
             <FL label="Repetición"><Sel value={form.repeticion} onChange={v=>sf("repeticion",v)} options={REPETICION}/></FL>
-            {form.tipo==="cita"&&(
+
+            {form.tipo === "cita" && (
               <FL label="Vincular cliente">
-                <Sel value={form.leadId} onChange={v=>sf("leadId",v)} options={[{v:"",l:"-- Seleccionar cliente --"},...leads.map(l=>({v:l.id,l:`${l.nombre} · ${l.producto}`}))]}/>
-                {form.leadId&&leads.find(l=>l.id===form.leadId)&&(<div style={{marginTop:6,padding:"8px 12px",borderRadius:8,background:B.greenDim,border:`1px solid ${B.green}22`,display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:13}}>👤</span><div><div style={{fontSize:12,fontWeight:700,color:B.green}}>{leads.find(l=>l.id===form.leadId)?.nombre}</div><div style={{fontSize:10,color:"#64748b"}}>{leads.find(l=>l.id===form.leadId)?.producto}</div></div></div>)}
+                <Sel value={form.leadId} onChange={v=>sf("leadId",v)}
+                  options={[{v:"",l:"— Seleccionar cliente —"}, ...leads.map(l=>({v:l.id, l:`${l.nombre} · ${l.producto}`}))]}/>
+                {form.leadId && leads.find(l=>l.id===form.leadId) && (
+                  <div style={{
+                    marginTop:8, padding:"10px 13px", borderRadius:9,
+                    background:"rgba(22,101,52,0.04)",
+                    border:"1px solid rgba(22,101,52,0.18)",
+                    display:"flex", alignItems:"center", gap:10,
+                  }}>
+                    <div style={{
+                      width:28, height:28, borderRadius:"50%",
+                      background:"rgba(22,101,52,0.10)",
+                      border:"1px solid rgba(22,101,52,0.20)",
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      fontSize:10, fontWeight:600, color:B.green,
+                      flexShrink:0,
+                    }}>{initials(leads.find(l=>l.id===form.leadId)?.nombre || "")}</div>
+                    <div>
+                      <div style={{fontSize:12.5, fontWeight:600, color:B.green, letterSpacing:"0.005em"}}>{leads.find(l=>l.id===form.leadId)?.nombre}</div>
+                      <div style={{fontSize:10.5, color:"rgba(10,31,68,0.55)", marginTop:1}}>{leads.find(l=>l.id===form.leadId)?.producto}</div>
+                    </div>
+                  </div>
+                )}
               </FL>
             )}
+
             <FL label="Notas"><Inp value={form.nota} onChange={v=>sf("nota",v)} rows={2} placeholder="Detalles del evento..."/></FL>
           </div>
-          {editId&&<div style={{marginTop:12}}><Btn onClick={()=>setConfirmEvDel(editId)} color={B.redBright} outline small>Eliminar evento</Btn></div>}
-          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:20}}>
-            <Btn onClick={()=>setModalEv(false)} color="#64748b" outline small>Cancelar</Btn>
-            <Btn onClick={guardar} bg={B.navy} small>Guardar evento</Btn>
+
+          {/* Footer: eliminar (si edit) + cancelar/guardar */}
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:22, gap:10, flexWrap:"wrap"}}>
+            {editId ? (
+              <button onClick={()=>setConfirmEvDel(editId)}
+                style={{
+                  display:"inline-flex", alignItems:"center", gap:6,
+                  padding:"8px 13px", borderRadius:8,
+                  border:`1px solid ${B.redBright}30`,
+                  background:"transparent", color:B.redBright,
+                  fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+                  cursor:"pointer",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}
+                onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.05)"; e.currentTarget.style.borderColor=B.redBright+"55";}}
+                onMouseLeave={e=>{e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor=B.redBright+"30";}}>
+                <IconTrash size={12} color={B.redBright}/>Eliminar evento
+              </button>
+            ) : <div/>}
+            <div style={{display:"flex", gap:8}}>
+              <button onClick={()=>setModalEv(false)}
+                style={{
+                  padding:"8px 14px", borderRadius:8,
+                  border:"1px solid rgba(10,31,68,0.08)",
+                  background:B.white, color:"rgba(10,31,68,0.65)",
+                  fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+                  cursor:"pointer",
+                }}>Cancelar</button>
+              <button onClick={guardar}
+                style={{
+                  padding:"8px 16px", borderRadius:8, border:"none",
+                  background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+                  color:"#fff",
+                  fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12.5,
+                  cursor:"pointer",
+                  boxShadow:"0 1px 2px rgba(10,31,68,0.10)",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}
+                onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
+                onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
+                Guardar evento
+              </button>
+            </div>
           </div>
         </MFModal>
       )}
-      {popupCot&&(<div style={{position:"fixed",inset:0,background:"rgba(10,31,68,.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><div style={{background:B.white,borderRadius:18,padding:32,maxWidth:380,width:"100%",boxShadow:B.shadowLg,animation:"fadeUp .25s ease",textAlign:"center"}}><div style={{fontSize:44,marginBottom:12}}>📄</div><div style={{fontSize:18,fontWeight:800,color:B.navy,marginBottom:8}}>Recordatorio</div><div style={{fontSize:14,color:"#475569",lineHeight:1.6,marginBottom:6}}>Tienes pendiente enviar la <strong>cotización</strong></div>{popupCot.leadNombre&&<div style={{fontSize:13,color:B.green,fontWeight:600,marginBottom:6}}>👤 {popupCot.leadNombre}</div>}<div style={{fontSize:13,color:"#64748b",marginBottom:24}}>{popupCot.titulo}</div><div style={{display:"flex",gap:10,justifyContent:"center"}}><button onClick={()=>setPopupCot(null)} style={{padding:"10px 24px",borderRadius:10,border:`1.5px solid ${B.gray}`,background:B.cream,color:B.navy,fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:13,cursor:"pointer"}}>Ya lo hice ✓</button><button onClick={()=>setPopupCot(null)} style={{padding:"10px 24px",borderRadius:10,border:"none",background:B.navy,color:"#fff",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:13,cursor:"pointer"}}>Entendido</button></div></div></div>)}
+      {popupCot && (
+        <div style={{
+          position:"fixed", inset:0, zIndex:1200,
+          background:"rgba(10,31,68,0.40)",
+          backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)",
+          display:"flex", alignItems:"center", justifyContent:"center", padding:20,
+          animation:"mfFadeIn .25s var(--mf-ease-out)",
+        }} onClick={(e)=>{if(e.target===e.currentTarget) setPopupCot(null);}}>
+          <div style={{
+            background:"#F8F6F2",
+            borderRadius:20,
+            padding:"32px 28px 26px",
+            maxWidth:400, width:"100%",
+            boxShadow:"0 24px 60px rgba(10,31,68,0.25)",
+            border:"1px solid rgba(10,31,68,0.05)",
+            animation:"mfFadeUp .35s var(--mf-ease-spring)",
+            textAlign:"center",
+            fontFamily:"'Poppins', sans-serif",
+          }}>
+            <div style={{
+              width:56, height:56, borderRadius:"50%",
+              background:"rgba(198,169,107,0.10)",
+              border:"1px solid rgba(198,169,107,0.25)",
+              margin:"0 auto 18px",
+              display:"flex", alignItems:"center", justifyContent:"center",
+            }}>
+              <IconBell size={26} color="#C6A96B"/>
+            </div>
+            <h2 style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:24, fontWeight:500,
+              color:"#0A1F44", letterSpacing:"-0.01em",
+              margin:"0 0 8px",
+            }}>Recordatorio</h2>
+            <p style={{
+              fontSize:13.5, color:"rgba(10,31,68,0.65)",
+              lineHeight:1.55, margin:"0 0 12px",
+            }}>Tienes pendiente enviar la <strong style={{color:B.navy}}>cotización</strong>.</p>
+            {popupCot.leadNombre && (
+              <div style={{
+                display:"inline-flex", alignItems:"center", gap:7,
+                fontSize:12.5, color:B.green, fontWeight:600,
+                background:"rgba(22,101,52,0.06)",
+                border:"1px solid rgba(22,101,52,0.18)",
+                padding:"5px 11px", borderRadius:8,
+                marginBottom:8,
+              }}>
+                <IconUser size={11} color={B.green}/>
+                {popupCot.leadNombre}
+              </div>
+            )}
+            <div style={{
+              fontSize:12.5, color:"rgba(10,31,68,0.55)",
+              marginBottom:22, lineHeight:1.5,
+            }}>{popupCot.titulo}</div>
+            <div style={{display:"flex", gap:10, flexDirection:"column"}}>
+              <button onClick={()=>setPopupCot(null)}
+                style={{
+                  padding:"13px 18px", borderRadius:12, border:"none",
+                  background:"linear-gradient(135deg, #C6A96B 0%, #d4bc89 100%)",
+                  color:"#0A1F44",
+                  fontFamily:"'Poppins',sans-serif",
+                  fontWeight:600, fontSize:13.5,
+                  cursor:"pointer",
+                  boxShadow:"0 4px 14px rgba(198,169,107,0.35)",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                  display:"inline-flex", alignItems:"center", justifyContent:"center", gap:7,
+                }}
+                onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";}}
+                onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";}}>
+                <IconCheck size={14}/> Ya lo hice
+              </button>
+              <button onClick={()=>setPopupCot(null)}
+                style={{
+                  padding:"11px 18px", borderRadius:12,
+                  border:"1px solid rgba(10,31,68,0.10)",
+                  background:"transparent",
+                  color:"rgba(10,31,68,0.65)",
+                  fontFamily:"'Poppins',sans-serif",
+                  fontWeight:500, fontSize:12.5,
+                  cursor:"pointer",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}>
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {confirmEvDel&&<ConfirmModal titulo="¿Eliminar este evento?" mensaje="Esta acción no se puede deshacer." icono="🗓️" textoConfirm="Sí, eliminar" colorConfirm={B.redBright} onConfirm={()=>{elimEv(confirmEvDel);setConfirmEvDel(null);setModalEv(false);}} onCancel={()=>setConfirmEvDel(null)}/>}
     </div>
   );
