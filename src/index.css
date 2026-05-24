@@ -109,6 +109,10 @@ h1, h2, h3, h4, h5, h6, p {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.85); }
 }
+@keyframes mfSlideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
 
 /* Utilidades reusables */
 .mf-fade-in      { animation: mfFadeIn .35s var(--mf-ease-spring) both; }

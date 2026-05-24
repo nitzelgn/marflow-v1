@@ -1661,6 +1661,57 @@ function IdleWarningModal({ onContinue, onLogout, countdownSeconds = 60 }) {
 }
 
 /* ═══════════════════════════════════════════
+   TOAST PREMIUM — feedback no intrusivo de operaciones
+═══════════════════════════════════════════ */
+function Toast({ id, type = "success", message, onClose }) {
+  const [exiting, setExiting] = useState(false);
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setExiting(true), 2700);
+    const t2 = setTimeout(onClose, 3000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const variants = {
+    success: { dot: "#16a34a", text: "#166534", icon: <IconCheck size={14} color="#166534"/> },
+    error:   { dot: "#dc2626", text: "#991b1b", icon: <IconAlert size={14} color="#991b1b"/> },
+    info:    { dot: "#0A1F44", text: "#0A1F44", icon: <IconAlertCircle size={14} color="#0A1F44"/> },
+  };
+  const v = variants[type] || variants.success;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "12px 16px",
+        background: "rgba(255,255,255,0.95)",
+        backdropFilter: "blur(12px) saturate(180%)",
+        WebkitBackdropFilter: "blur(12px) saturate(180%)",
+        border: "1px solid rgba(10,31,68,0.08)",
+        borderLeft: `3px solid ${v.dot}`,
+        borderRadius: 12,
+        boxShadow: "0 12px 32px rgba(10,31,68,0.14), 0 2px 8px rgba(10,31,68,0.06)",
+        fontFamily: "'Poppins', sans-serif",
+        fontSize: 13,
+        color: v.text,
+        maxWidth: 380,
+        minWidth: 240,
+        cursor: "pointer",
+        opacity: exiting ? 0 : 1,
+        transform: exiting ? "translateX(20px)" : "translateX(0)",
+        animation: exiting ? "none" : "mfSlideInRight 0.35s var(--mf-ease-spring)",
+        transition: "opacity 0.3s var(--mf-ease-out), transform 0.3s var(--mf-ease-out)",
+      }}
+    >
+      {v.icon}
+      <span style={{ flex: 1, lineHeight: 1.45, letterSpacing: "0.005em" }}>{message}</span>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
    LOGOUT CONFIRMATION MODAL — pregunta antes de cerrar sesión
 ═══════════════════════════════════════════ */
 function LogoutConfirmModal({ onConfirm, onCancel, usuario }) {
@@ -3765,7 +3816,8 @@ function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
     if (n === 0) { setPreview(null); return; }
     setLeads(p => [...p, ...preview.nuevos]);
     setPreview(null);
-    setTimeout(() => alert(`✅ ${n} ${n === 1 ? "lead importado" : "leads importados"}`), 100);
+    // El toast de éxito lo lanza sincronizarLeadsConDB automáticamente al detectar inserts.
+    // No mostramos alert aquí porque sería redundante.
   }
 
   async function exportar(){
@@ -5927,6 +5979,18 @@ export default function App() {
   const [bioLocked,setBioLocked]=useState(false);
   const [idleTimeoutMin,setIdleTimeoutMin]=useState(()=>getIdleTimeoutMin());
   const [confirmingLogout,setConfirmingLogout]=useState(false);
+  const [toasts,setToasts]=useState([]);
+  const toastIdRef = useRef(0);
+
+  // Helper global de toasts (estable, accesible desde cualquier callback)
+  const showToast = useRef(null);
+  showToast.current = (message, type = "success") => {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { id, message, type }]);
+  };
+  function removeToast(id) {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }
 
   // Cargar perfil desde la tabla cuentas (con auto-create si el trigger falló)
   async function cargarPerfil(userId) {
@@ -6107,7 +6171,20 @@ export default function App() {
       errores.push(`Excepción: ${e.message || e}`);
     }
     if (errores.length) {
-      alert("⚠️ No se pudieron guardar los cambios en Supabase:\n\n" + errores.join("\n") + "\n\nRevisa la consola (Cmd+Option+I) para más detalle.");
+      showToast.current?.(
+        `No se pudieron guardar los cambios (${errores[0].split(":")[0]})`,
+        "error"
+      );
+    } else {
+      const totalCambios = inserted.length + deleted.length + updated.length;
+      if (totalCambios > 0) {
+        const msg = inserted.length > 0
+          ? (inserted.length === 1 ? "Lead guardado correctamente" : `${inserted.length} leads guardados correctamente`)
+          : deleted.length > 0
+          ? (deleted.length === 1 ? "Lead eliminado" : `${deleted.length} leads eliminados`)
+          : (updated.length === 1 ? "Cambios guardados" : `${updated.length} leads actualizados`);
+        showToast.current?.(msg, "success");
+      }
     }
     return { ok: errores.length === 0, errores };
   }
@@ -6149,7 +6226,18 @@ export default function App() {
       errores.push(`Excepción: ${e.message || e}`);
     }
     if (errores.length) {
-      alert("⚠️ No se pudieron guardar los eventos en Supabase:\n\n" + errores.join("\n") + "\n\nRevisa la consola (Cmd+Option+I) para más detalle.");
+      showToast.current?.(
+        `No se pudo guardar el evento (${errores[0].split(":")[0]})`,
+        "error"
+      );
+    } else {
+      const totalCambios = inserted.length + deleted.length + updated.length;
+      if (totalCambios > 0) {
+        const msg = inserted.length > 0 ? "Evento guardado correctamente"
+                  : deleted.length > 0 ? "Evento eliminado"
+                  : "Evento actualizado";
+        showToast.current?.(msg, "success");
+      }
     }
   }
 
@@ -6198,6 +6286,51 @@ export default function App() {
       clearInterval(checkInterval);
     };
   }, [usuario, bioLocked, idleWarning, idleTimeoutMin]);
+
+  // ── Real-time subscription: refresca leads/eventos cuando cambian en Supabase ──
+  // Útil cuando: (1) tu asistente en otro device hace cambios, (2) abres la app
+  // en dos pestañas, (3) cambios desde Supabase Dashboard.
+  // Para tus propios cambios local, ya tienes optimistic update; el refetch
+  // simplemente confirma con la verdad del server.
+  useEffect(() => {
+    if (!usuario) return;
+    const adminId = usuario.rol === "asistente" ? usuario.adminId : usuario.id;
+    if (!adminId) return;
+
+    const debounceRef = { leadsTimer: null, eventosTimer: null };
+    const refetchLeadsSoon = () => {
+      if (debounceRef.leadsTimer) clearTimeout(debounceRef.leadsTimer);
+      debounceRef.leadsTimer = setTimeout(() => cargarLeadsDeDB(adminId), 400);
+    };
+    const refetchEventosSoon = () => {
+      if (debounceRef.eventosTimer) clearTimeout(debounceRef.eventosTimer);
+      debounceRef.eventosTimer = setTimeout(() => cargarEventosDeDB(adminId), 400);
+    };
+
+    const channel = supabase
+      .channel(`mf-realtime-${adminId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "leads", filter: `admin_id=eq.${adminId}` },
+        refetchLeadsSoon)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "seguimientos" },
+        refetchLeadsSoon) // sin filter porque seguimientos no tiene admin_id directo; RLS protege visibilidad
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "eventos", filter: `admin_id=eq.${adminId}` },
+        refetchEventosSoon)
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn("Realtime subscription:", status);
+        }
+      });
+
+    return () => {
+      if (debounceRef.leadsTimer) clearTimeout(debounceRef.leadsTimer);
+      if (debounceRef.eventosTimer) clearTimeout(debounceRef.eventosTimer);
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuario]);
 
   // ── Bloqueo biométrico al cargar (si está activado y no se verificó en esta sesión) ──
   useEffect(() => {
@@ -6426,6 +6559,28 @@ export default function App() {
             await supabase.auth.signOut();
           }}
         />
+      )}
+
+      {/* Stack de toasts (flotante abajo derecha) */}
+      {toasts.length > 0 && (
+        <div
+          aria-live="polite"
+          style={{
+            position: "fixed",
+            bottom: "max(24px, calc(24px + env(safe-area-inset-bottom)))",
+            right: 24,
+            zIndex: 1400,
+            display: "flex", flexDirection: "column", gap: 10,
+            maxWidth: "calc(100vw - 48px)",
+            pointerEvents: "none",
+          }}
+        >
+          {toasts.map(t => (
+            <div key={t.id} style={{ pointerEvents: "auto" }}>
+              <Toast {...t} onClose={() => removeToast(t.id)}/>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
