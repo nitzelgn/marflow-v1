@@ -2624,6 +2624,10 @@ function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
   const fechaLargaCap = fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1);
   const microcopy = getMicrocopyDelDia();
 
+  // Variables usadas por las cards inferiores (En riesgo / Sin contacto / Atención inmediata)
+  const riesgo = leads.filter(l => getAlertas(l).some(a => a.tipo === "riesgo"));
+  const sinC   = leads.filter(l => getAlertas(l).some(a => a.tipo === "sin_contacto"));
+
   // ── 4 Prioridades de hoy (lógica sector asegurador/patrimonial) ──
   const prioridades = [
     {
