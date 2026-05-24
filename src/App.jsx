@@ -2011,51 +2011,271 @@ function ActividadReciente({leads}) {
    MÉTRICAS
 =========================================== */
 function Metricas({leads}) {
-  const total=leads.length||1;
-  const activos=leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa)).length;
-  const cierres=leads.filter(l=>l.etapa==="cierre").length;
-  const perdidos=leads.filter(l=>l.etapa==="otro"||l.sinSeguimiento).length;
-  const contactados=leads.filter(l=>(l.checklist?.wa1||l.checklist?.call1)&&!l.sinSeguimiento).length;
-  const conv=Math.round((cierres/total)*100);
-  const contRatio=Math.round((contactados/total)*100);
-  const calientes=leads.filter(l=>getTempLead(l)?.nivel==="caliente").length;
-  const tibios=leads.filter(l=>getTempLead(l)?.nivel==="tibio").length;
-  const frios=leads.filter(l=>getTempLead(l)?.nivel==="frio").length;
-  return <div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:16}}>
-      {[{l:"Conversión",v:`${conv}%`,c:B.gold,icon:"📈"},{l:"Contactados",v:`${contRatio}%`,c:B.blue,icon:"📞"},{l:"Activos",v:activos,c:B.navy,icon:"*"},{l:"Cierres",v:cierres,c:B.green,icon:"✓"},{l:"Sin seguimiento",v:perdidos,c:B.redBright,icon:"🚫"}].map((s,i)=>(
-        <div key={i} style={{background:B.white,border:`1px solid ${B.gray}`,borderLeft:`4px solid ${s.c}`,borderRadius:12,padding:"14px 16px",boxShadow:B.shadow}}>
-          <div style={{fontSize:10,fontWeight:600,color:"#6b7280",textTransform:"uppercase",letterSpacing:".6px",marginBottom:6}}>{s.l}</div>
-          <div style={{fontSize:30,fontWeight:800,color:s.c,lineHeight:1,marginBottom:2}}>{s.v}</div>
-          <div style={{fontSize:18}}>{s.icon}</div>
-        </div>
-      ))}
-    </div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12}}>
-      <div style={{background:B.white,border:`1px solid ${B.gray}`,borderRadius:12,padding:"18px 20px",boxShadow:B.shadow}}>
-        <div style={{fontSize:14,fontWeight:700,color:B.navy,marginBottom:14}}>Temperatura de leads</div>
-        {[{l:"🔥 Calientes",v:calientes,c:"#dc2626"},{l:"🟡 Tibios",v:tibios,c:"#d97706"},{l:"❄️ Fríos",v:frios,c:"#3b82f6"}].map(t=>(
-          <div key={t.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <span style={{fontSize:13,color:B.black}}>{t.l}</span>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{width:90,height:6,background:B.gray,borderRadius:3}}><div style={{height:"100%",width:`${Math.round(t.v/total*100)}%`,background:t.c,borderRadius:3,transition:"width .5s"}}/></div>
-              <span style={{fontSize:13,fontWeight:700,color:t.c,minWidth:20,textAlign:"right"}}>{t.v}</span>
+  const total = leads.length || 1;
+  const activos = leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa)).length;
+  const cierres = leads.filter(l=>l.etapa==="cierre").length;
+  const perdidos = leads.filter(l=>l.etapa==="otro"||l.sinSeguimiento).length;
+  const contactados = leads.filter(l=>(l.checklist?.wa1||l.checklist?.call1)&&!l.sinSeguimiento).length;
+  const conv = Math.round((cierres/total)*100);
+  const contRatio = Math.round((contactados/total)*100);
+  const calientes = leads.filter(l=>getTempLead(l)?.nivel==="caliente").length;
+  const tibios = leads.filter(l=>getTempLead(l)?.nivel==="tibio").length;
+  const frios = leads.filter(l=>getTempLead(l)?.nivel==="frio").length;
+
+  // KPIs principales
+  const kpis = [
+    { l:"Conversión",      v:`${conv}%`,        sub:"Cierres / total",       dot:B.gold,      icon:<IconTrendingUp size={13} color="rgba(10,31,68,0.40)"/> },
+    { l:"Contactados",     v:`${contRatio}%`,   sub:"Han recibido contacto", dot:B.blue,      icon:<IconPhoneCall  size={13} color="rgba(10,31,68,0.40)"/> },
+    { l:"Activos",         v:activos,           sub:"En seguimiento",        dot:B.navy,      icon:<IconLayers     size={13} color="rgba(10,31,68,0.40)"/> },
+    { l:"Cierres",         v:cierres,           sub:"Ventas concretadas",    dot:B.green,     icon:<IconStar       size={13} color="rgba(10,31,68,0.40)"/> },
+    { l:"Sin seguimiento", v:perdidos,          sub:"Perdidos o descartados",dot:B.redBright, icon:<IconMinusCircle size={13} color="rgba(10,31,68,0.40)"/> },
+  ];
+
+  const temps = [
+    { l:"Calientes", v:calientes, c:"#dc2626" },
+    { l:"Tibios",    v:tibios,    c:"#d97706" },
+    { l:"Fríos",     v:frios,     c:"#3b82f6" },
+  ];
+
+  return (
+    <div className="mf-fade-in" style={{maxWidth:1200, margin:"0 auto"}}>
+      {/* ═══ Hero editorial ═══ */}
+      <div style={{marginBottom:32}}>
+        <div style={{
+          fontSize:10.5, fontWeight:500,
+          color:"rgba(10,31,68,0.45)",
+          textTransform:"uppercase", letterSpacing:"0.22em",
+          marginBottom:10,
+        }}>Análisis · Tu cartera</div>
+        <h1 style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:"clamp(30px, 4.8vw, 42px)",
+          fontWeight:500, lineHeight:1.08,
+          letterSpacing:"-0.025em",
+          color:B.navy,
+          margin:"0 0 10px",
+        }}>Métricas</h1>
+        <p style={{
+          fontSize:14,
+          color:"rgba(10,31,68,0.50)",
+          margin:0, fontWeight:400, lineHeight:1.5,
+          fontStyle:"italic",
+        }}>Lo que los números dicen sobre tu pipeline.</p>
+      </div>
+
+      {/* ═══ 5 KPIs principales — estilo banca privada ═══ */}
+      <div style={{
+        display:"grid",
+        gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",
+        gap:14,
+        marginBottom:32,
+      }}>
+        {kpis.map((s,i) => (
+          <div key={i} className={`mf-fade-up mf-stagger-${(i%4)+1}`}
+            style={{
+              background:B.white,
+              border:"1px solid rgba(10,31,68,0.06)",
+              borderRadius:16,
+              padding:"22px 22px 18px",
+              boxShadow:"var(--mf-shadow-xs)",
+              transition:"box-shadow var(--mf-t-normal) var(--mf-ease-out), transform var(--mf-t-normal) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.boxShadow="var(--mf-shadow-md)"; e.currentTarget.style.transform="translateY(-2px)";}}
+            onMouseLeave={e=>{e.currentTarget.style.boxShadow="var(--mf-shadow-xs)"; e.currentTarget.style.transform="translateY(0)";}}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
+              <div style={{display:"flex", alignItems:"center", gap:7}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:s.dot}}/>
+                <span style={{
+                  fontSize:10, fontWeight:600,
+                  color:"rgba(10,31,68,0.50)",
+                  textTransform:"uppercase", letterSpacing:"0.12em",
+                }}>{s.l}</span>
+              </div>
+              {s.icon}
             </div>
+            <div style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:"clamp(36px, 4.5vw, 48px)",
+              fontWeight:500, lineHeight:1,
+              letterSpacing:"-0.02em",
+              color:B.navy,
+              fontVariantNumeric:"tabular-nums",
+              marginBottom:8,
+            }}>{s.v}</div>
+            <div style={{
+              fontSize:11.5, color:"rgba(10,31,68,0.45)",
+              letterSpacing:"0.005em",
+            }}>{s.sub}</div>
           </div>
         ))}
-        <div style={{marginTop:8,paddingTop:12,borderTop:`1px solid ${B.gray}`,fontSize:11,color:"#9ca3af"}}>Total leads: {leads.length}</div>
       </div>
-      <div style={{background:B.white,border:`1px solid ${B.gray}`,borderRadius:12,padding:"18px 20px",boxShadow:B.shadow}}>
-        <div style={{fontSize:14,fontWeight:700,color:B.navy,marginBottom:14}}>Pipeline por etapa</div>
-        {ETAPAS.map(et=>{const cnt=leads.filter(l=>l.etapa===et.id).length;return(
-          <div key={et.id} style={{marginBottom:9}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:11,color:B.black}}>{et.icon} {et.label}</span><span style={{fontSize:11,fontWeight:700,color:et.color}}>{cnt}</span></div>
-            <div style={{height:3,background:B.gray,borderRadius:2}}><div style={{height:"100%",width:`${Math.round(cnt/total*100)}%`,background:et.color,borderRadius:2,transition:"width .5s"}}/></div>
+
+      {/* Separador editorial muy sutil */}
+      <div style={{
+        height:1,
+        background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.06), transparent)",
+        margin:"4px 0 28px",
+      }}/>
+
+      {/* ═══ 2 cards de detalle ═══ */}
+      <div style={{
+        display:"grid",
+        gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",
+        gap:18,
+      }}>
+        {/* Temperatura de leads */}
+        <div className="mf-fade-up mf-stagger-1" style={{
+          background:B.white,
+          border:"1px solid rgba(10,31,68,0.06)",
+          borderRadius:16,
+          padding:"22px 24px",
+          boxShadow:"var(--mf-shadow-xs)",
+        }}>
+          <div style={{display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:18}}>
+            <div style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:22, fontWeight:500,
+              letterSpacing:"-0.01em",
+              color:B.navy,
+            }}>Temperatura de leads</div>
+            <div style={{
+              fontSize:10, fontWeight:500,
+              color:"rgba(10,31,68,0.40)",
+              textTransform:"uppercase", letterSpacing:"0.15em",
+            }}>Calidad</div>
           </div>
-        );})}
+          {temps.map(t => {
+            const pct = Math.round((t.v/total)*100);
+            return (
+              <div key={t.l} style={{marginBottom:16}}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:6}}>
+                  <span style={{
+                    display:"inline-flex", alignItems:"center", gap:8,
+                    fontSize:13, fontWeight:500,
+                    color:"rgba(10,31,68,0.85)",
+                  }}>
+                    <span style={{width:7,height:7,borderRadius:"50%",background:t.c}}/>
+                    {t.l}
+                  </span>
+                  <span style={{
+                    fontFamily:"'Cormorant Garamond', serif",
+                    fontSize:20, fontWeight:500,
+                    color:B.navy, lineHeight:1,
+                    fontVariantNumeric:"tabular-nums",
+                  }}>{t.v}</span>
+                </div>
+                <div style={{
+                  height:3, background:"rgba(10,31,68,0.05)", borderRadius:2,
+                  overflow:"hidden",
+                }}>
+                  <div style={{
+                    height:"100%", width:`${pct}%`,
+                    background:t.c, borderRadius:2,
+                    transition:"width var(--mf-t-slow) var(--mf-ease-out)",
+                  }}/>
+                </div>
+              </div>
+            );
+          })}
+          <div style={{
+            marginTop:14, paddingTop:14,
+            borderTop:"1px solid rgba(10,31,68,0.06)",
+            display:"flex", justifyContent:"space-between", alignItems:"center",
+            fontSize:11, color:"rgba(10,31,68,0.45)",
+          }}>
+            <span style={{letterSpacing:"0.01em"}}>Total leads</span>
+            <span style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:18, fontWeight:500,
+              color:B.navy, lineHeight:1,
+              fontVariantNumeric:"tabular-nums",
+            }}>{leads.length}</span>
+          </div>
+        </div>
+
+        {/* Pipeline por etapa */}
+        <div className="mf-fade-up mf-stagger-2" style={{
+          background:B.white,
+          border:"1px solid rgba(10,31,68,0.06)",
+          borderRadius:16,
+          padding:"22px 24px",
+          boxShadow:"var(--mf-shadow-xs)",
+        }}>
+          <div style={{display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:18}}>
+            <div style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:22, fontWeight:500,
+              letterSpacing:"-0.01em",
+              color:B.navy,
+            }}>Distribución por etapa</div>
+            <div style={{
+              fontSize:10, fontWeight:500,
+              color:"rgba(10,31,68,0.40)",
+              textTransform:"uppercase", letterSpacing:"0.15em",
+            }}>Pipeline</div>
+          </div>
+          {ETAPAS.map(et => {
+            const cnt = leads.filter(l => l.etapa === et.id).length;
+            const pct = Math.round((cnt/total)*100);
+            return (
+              <div key={et.id} style={{marginBottom:12}}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:5}}>
+                  <span style={{
+                    display:"inline-flex", alignItems:"center", gap:8,
+                    fontSize:12.5, fontWeight:500,
+                    color:"rgba(10,31,68,0.80)",
+                  }}>
+                    <span style={{width:6,height:6,borderRadius:"50%",background:et.color}}/>
+                    {et.label.replace(/[¡⭐!]/g,"").trim()}
+                  </span>
+                  <span style={{
+                    fontSize:13, fontWeight:500,
+                    color:cnt > 0 ? B.navy : "rgba(10,31,68,0.30)",
+                    fontVariantNumeric:"tabular-nums",
+                  }}>{cnt}</span>
+                </div>
+                <div style={{
+                  height:3, background:"rgba(10,31,68,0.05)", borderRadius:2,
+                  overflow:"hidden",
+                }}>
+                  <div style={{
+                    height:"100%", width:`${pct}%`,
+                    background:et.color, borderRadius:2,
+                    transition:"width var(--mf-t-slow) var(--mf-ease-out)",
+                    opacity: cnt > 0 ? 0.85 : 0,
+                  }}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Nota footer editorial */}
+      <div style={{
+        marginTop:32, padding:"18px 22px",
+        background:"rgba(248,246,242,0.6)",
+        border:"1px solid rgba(10,31,68,0.04)",
+        borderRadius:14,
+        display:"flex", alignItems:"flex-start", gap:12,
+      }}>
+        <div style={{flexShrink:0, color:"rgba(198,169,107,0.65)", marginTop:2}}>
+          <IconBarChart size={18} color="rgba(198,169,107,0.65)"/>
+        </div>
+        <div>
+          <div style={{
+            fontSize:12, fontWeight:600,
+            color:"rgba(10,31,68,0.75)",
+            marginBottom:3, letterSpacing:"0.005em",
+          }}>Estas son tus métricas actuales</div>
+          <div style={{
+            fontSize:12, color:"rgba(10,31,68,0.55)",
+            lineHeight:1.6, fontStyle:"italic",
+          }}>Próximamente: histórico mensual, mejor día de la semana, horario óptimo de respuesta del cliente y tendencias.</div>
+        </div>
       </div>
     </div>
-  </div>;
+  );
 }
 
 /* ===========================================
