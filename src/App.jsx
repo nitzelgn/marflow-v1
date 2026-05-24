@@ -2624,23 +2624,6 @@ function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
   const fechaLargaCap = fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1);
   const microcopy = getMicrocopyDelDia();
 
-  // ── Insights calculados sobre datos reales ──
-  const hoyStr = hoy();
-  const en7Dias = new Date(Date.now()+7*86400000).toISOString().split("T")[0];
-  const sieteDiasAtras = new Date(Date.now()-7*86400000).toISOString().split("T")[0];
-
-  const segPendientes = activos.filter(l => {
-    const a = getAlertas(l);
-    return a.some(x => ["riesgo","sin_contacto"].includes(x.tipo));
-  }).length;
-  const sinRespuesta = sinC.length;
-  const enRiesgo = riesgo.length;
-  const aReactivar = reactivar.length;
-  const eventosProx = (eventos||[]).filter(e => e.tipo === "cita" && e.fecha >= hoyStr && e.fecha <= en7Dias).length;
-  const citasProximas = leads.filter(l => l.etapa === "cita").length + eventosProx;
-  const cierresEnProceso = leads.filter(l => l.etapa === "cierre").length;
-  const contactadosSemana = leads.filter(l => l.ultimoContacto && l.ultimoContacto >= sieteDiasAtras).length;
-
   // ── 4 Prioridades de hoy (lógica sector asegurador/patrimonial) ──
   const prioridades = [
     {
