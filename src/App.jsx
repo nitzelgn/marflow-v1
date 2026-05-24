@@ -2602,10 +2602,26 @@ function getMicrocopyDelDia() {
   return MF_MICROCOPY[diaDelAño % MF_MICROCOPY.length];
 }
 
-function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
+function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFiltroNav, setSeccion}) {
   const activos=leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa));
   const cierres=leads.filter(l=>l.etapa==="cierre");
   function irA(f){setFiltroNav(f);setSeccion("pipeline");}
+
+  // Drawer de pendientes + lead seleccionado (modal completo)
+  const [drawerPend, setDrawerPend] = React.useState(false);
+  const [leadActDash, setLeadActDash] = React.useState(null);
+  function saveDash(d){ setLeads(p => p.find(l=>l.id===d.id) ? p.map(l=>l.id===d.id?d:l) : [...p, d]); }
+  function delDash(id){ setLeads(p => p.filter(l=>l.id!==id)); }
+  function togglePendDash(leadId, pendId){
+    setLeads(p => p.map(l => l.id !== leadId ? l : {
+      ...l,
+      pendientes: (l.pendientes || []).map(pp => pp.id !== pendId ? pp : {
+        ...pp,
+        hecho: !pp.hecho,
+        fechaCompletado: !pp.hecho ? hoy() : null,
+      }),
+    }));
+  }
 
   // ── Prioridades de hoy (lógica sector asegurador/patrimonial) ──
   const cotizandoRiesgos = enCotizacionRiesgos(leads);
@@ -2664,7 +2680,7 @@ function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
       sub: "Tareas operativas abiertas en tus leads",
       color: B.navy,
       icon: <IconClock size={16} color={B.navy}/>,
-      action: ()=>{ setFiltroNav("activos"); setSeccion("lista"); },
+      action: ()=>{ setDrawerPend(true); },
     },
   ];
 
@@ -2853,6 +2869,149 @@ function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
       {/* CAMBIO 3: Actividad Reciente con seguimientos reales */}
       <ActividadReciente leads={leads}/>
     </div>
+
+    {/* ═══ Drawer de Pendientes (lista compacta nombre + pendientes) ═══ */}
+    {drawerPend && (
+      <div
+        onClick={(e)=>{ if(e.target===e.currentTarget) setDrawerPend(false); }}
+        style={{
+          position:"fixed", inset:0, zIndex:1100,
+          background:"rgba(10,31,68,0.40)",
+          backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)",
+          display:"flex", justifyContent:"flex-end",
+          animation:"mfFadeIn .25s var(--mf-ease-out)",
+        }}>
+        <div style={{
+          width:"min(440px, 100%)",
+          height:"100%",
+          background:"#F8F6F2",
+          boxShadow:"-12px 0 40px rgba(10,31,68,0.18)",
+          display:"flex", flexDirection:"column",
+          animation:"mfSlideInRight .35s var(--mf-ease-spring)",
+        }}>
+          {/* Header drawer */}
+          <div style={{
+            padding:"22px 24px 18px",
+            borderBottom:"1px solid rgba(10,31,68,0.06)",
+            display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:14,
+          }}>
+            <div>
+              <div style={{
+                fontSize:10, fontWeight:500,
+                color:"rgba(10,31,68,0.40)",
+                textTransform:"uppercase", letterSpacing:"0.22em",
+                marginBottom:6,
+              }}>Tareas operativas</div>
+              <div style={{
+                fontFamily:"'Cormorant Garamond', serif",
+                fontSize:26, fontWeight:500,
+                letterSpacing:"-0.015em", color:B.navy, lineHeight:1.1,
+              }}>Pendientes</div>
+            </div>
+            <button onClick={()=>setDrawerPend(false)} style={{
+              width:32, height:32, borderRadius:8,
+              border:"1px solid rgba(10,31,68,0.08)",
+              background:B.white, cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              color:"rgba(10,31,68,0.55)",
+            }}><IconX size={14} color="currentColor"/></button>
+          </div>
+
+          {/* Lista scroll */}
+          <div style={{flex:1, overflowY:"auto", padding:"14px 18px 24px"}}>
+            {(() => {
+              const conPend = leadsConPendientes(leads);
+              if (conPend.length === 0) {
+                return <div style={{
+                  textAlign:"center", padding:"60px 20px",
+                  color:"rgba(10,31,68,0.50)", fontSize:13,
+                }}>
+                  <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:20, color:B.navy, marginBottom:6}}>Sin pendientes</div>
+                  Todo al día.
+                </div>;
+              }
+              return conPend.map(l => {
+                const abiertos = (l.pendientes || []).filter(p => !p.hecho);
+                if (abiertos.length === 0) return null;
+                return (
+                  <div key={l.id} style={{
+                    background:B.white,
+                    border:"1px solid rgba(10,31,68,0.06)",
+                    borderRadius:14,
+                    padding:"14px 16px",
+                    marginBottom:10,
+                    boxShadow:"var(--mf-shadow-xs)",
+                  }}>
+                    {/* Nombre cliente → abre LeadModal */}
+                    <button onClick={()=>{ setLeadActDash(l); setDrawerPend(false); }} style={{
+                      all:"unset", cursor:"pointer", display:"flex", alignItems:"center", gap:8,
+                      marginBottom:10, width:"100%",
+                    }}>
+                      <div style={{
+                        width:28, height:28, borderRadius:"50%",
+                        background:`${B.navy}10`,
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        fontSize:10.5, fontWeight:700, color:B.navy,
+                        letterSpacing:"0.04em",
+                      }}>{initials(l.nombre)}</div>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{
+                          fontSize:13.5, fontWeight:600, color:B.navy,
+                          letterSpacing:"-0.005em",
+                          whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                        }}>{l.nombre}</div>
+                        <div style={{fontSize:10.5, color:"rgba(10,31,68,0.45)", textTransform:"uppercase", letterSpacing:"0.1em"}}>
+                          {abiertos.length} pendiente{abiertos.length===1?"":"s"}
+                        </div>
+                      </div>
+                      <IconChevronRight size={14} color="rgba(10,31,68,0.35)"/>
+                    </button>
+
+                    {/* Pendientes del lead */}
+                    <div style={{display:"flex", flexDirection:"column", gap:6, paddingLeft:36}}>
+                      {abiertos.map(p => {
+                        const tipoObj = PENDIENTE_TIPOS.find(t => t.v === p.tipo);
+                        return (
+                          <button key={p.id} onClick={()=>togglePendDash(l.id, p.id)} style={{
+                            all:"unset", cursor:"pointer",
+                            display:"flex", alignItems:"flex-start", gap:8,
+                            padding:"6px 8px", borderRadius:8,
+                            background:"rgba(10,31,68,0.02)",
+                          }}>
+                            <div style={{
+                              width:15, height:15, borderRadius:4, marginTop:1,
+                              border:"1.5px solid rgba(10,31,68,0.25)",
+                              flexShrink:0,
+                            }}/>
+                            <div style={{flex:1, minWidth:0}}>
+                              <div style={{fontSize:12.5, color:B.navy, lineHeight:1.35}}>
+                                {tipoObj?.l || p.tipo}{p.texto ? ` · ${p.texto}` : ""}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* LeadModal abierto desde el drawer (info completa del cliente) */}
+    {leadActDash && (
+      <LeadModal
+        lead={leadActDash}
+        onClose={()=>setLeadActDash(null)}
+        onSave={saveDash}
+        onDelete={delDash}
+        cuentas={cuentas}
+        usuario={usuario}
+      />
+    )}
   </div>;
 }
 
@@ -6754,7 +6913,7 @@ export default function App() {
       )}
 
       <main className="mf-main">
-        {seccion==="dashboard"&&esAdmin&&<Dashboard leads={leads} eventos={eventos} usuario={usuario} setFiltroNav={setFiltroNav} setSeccion={setSeccion}/>}
+        {seccion==="dashboard"&&esAdmin&&<Dashboard leads={leads} setLeads={setLeads} eventos={eventos} usuario={usuario} cuentas={cuentas} setFiltroNav={setFiltroNav} setSeccion={setSeccion}/>}
         {seccion==="pipeline"&&esAdmin&&<Pipeline leads={leads} setLeads={setLeads} filtroNav={filtroNav} esAdmin={esAdmin} cuentas={cuentas} usuario={usuario}/>}
         {seccion==="lista"&&<ListaLeads leads={leads} setLeads={setLeads} cuentas={cuentas} usuario={usuario} esAsistente={esAsistente}/>}
         {seccion==="agenda"&&<Agenda eventos={eventos} setEventos={setEventos} leads={leads} esAsistente={esAsistente} usuario={usuario}/>}
