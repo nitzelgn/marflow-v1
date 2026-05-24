@@ -2608,8 +2608,8 @@ function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFil
   function irA(f){setFiltroNav(f);setSeccion("pipeline");}
 
   // Drawer de pendientes + lead seleccionado (modal completo)
-  const [drawerPend, setDrawerPend] = React.useState(false);
-  const [leadActDash, setLeadActDash] = React.useState(null);
+  const [drawerPend, setDrawerPend] = useState(false);
+  const [leadActDash, setLeadActDash] = useState(null);
   function saveDash(d){ setLeads(p => p.find(l=>l.id===d.id) ? p.map(l=>l.id===d.id?d:l) : [...p, d]); }
   function delDash(id){ setLeads(p => p.filter(l=>l.id!==id)); }
   function togglePendDash(leadId, pendId){
