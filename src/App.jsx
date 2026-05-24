@@ -5190,20 +5190,536 @@ function Mensajes() {
 }
 
 function Cobranza() {
-  const [datos,setDatos]=useState([]);const [cargando,setCargando]=useState(false);const [filtProd,setFiltProd]=useState("");const [tab,setTab]=useState("dashboard");const fileRef=useRef();
-  const ahora=new Date();const mesBd=`${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,"0")}`;const mesSig=new Date(ahora.getFullYear(),ahora.getMonth()+1,1);const mesSigBd=`${mesSig.getFullYear()}-${String(mesSig.getMonth()+1).padStart(2,"0")}`;
+  const [datos,setDatos] = useState([]);
+  const [cargando,setCargando] = useState(false);
+  const [filtProd,setFiltProd] = useState("");
+  const [tab,setTab] = useState("dashboard");
+  const fileRef = useRef();
+  const ahora = new Date();
+  const mesBd = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,"0")}`;
+  const mesSig = new Date(ahora.getFullYear(),ahora.getMonth()+1,1);
+  const mesSigBd = `${mesSig.getFullYear()}-${String(mesSig.getMonth()+1).padStart(2,"0")}`;
+
   function normFecha(v){if(!v)return null;const s=String(v).trim();if(/^\d{5}$/.test(s)){const d=new Date((Number(s)-25569)*86400000);return d.toISOString().split("T")[0];}if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){const[d,m,y]=s.split("/");return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;}if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;try{const d=new Date(s);if(!isNaN(d.getTime()))return d.toISOString().split("T")[0];}catch{}return null;}
+
   async function cargarExcel(e){const file=e.target.files?.[0];if(!file)return;setCargando(true);try{const{default:XLSX}=await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");const ab=await file.arrayBuffer();const wb=XLSX.read(ab);const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{defval:""});const mapped=rows.map(r=>{const poliza=String(r["Póliza"]||r["Poliza"]||r["No. Póliza"]||r["POLIZA"]||r["poliza"]||"").trim();const nombre=String(r["Nombre"]||r["Cliente"]||r["NOMBRE"]||r["nombre"]||"").trim();const producto=String(r["Producto"]||r["PRODUCTO"]||r["producto"]||r["Ramo"]||"").trim();const vencStr=r["Vencimiento"]||r["Fecha Vencimiento"]||r["FechaVencimiento"]||r["VENCIMIENTO"]||r["Renovación"]||r["Renovacion"]||"";const vencimiento=normFecha(vencStr);const diasAtraso=Number(r["Días Atraso"]||r["Dias Atraso"]||r["DiasAtraso"]||r["dias_atraso"]||0)||0;const estatus=String(r["Estatus"]||r["Status"]||r["ESTATUS"]||"Al corriente").trim();const telefono=String(r["Teléfono"]||r["Telefono"]||r["TEL"]||"").trim();return{poliza,nombre,producto,vencimiento,diasAtraso,estatus,telefono};}).filter(r=>r.nombre||r.poliza);setDatos(mapped);setTab("dashboard");}catch{alert("Error al leer el archivo.");}setCargando(false);e.target.value="";}
+
   async function exportarFiltrado(lista,nombre){try{const{default:XLSX}=await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");const data=lista.map(r=>({Póliza:r.poliza,Cliente:r.nombre,Producto:r.producto,"Fecha vencimiento":fmtF(r.vencimiento),"Días atraso":r.diasAtraso,Estatus:r.estatus,Teléfono:r.telefono}));const ws=XLSX.utils.json_to_sheet(data);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Cobranza MarFlow");XLSX.writeFile(wb,`marflow_cobranza_${nombre}_${hoy()}.xlsx`);}catch{alert("Error al exportar.");}}
-  const datosFilt=datos.filter(d=>!filtProd||d.producto.toLowerCase().includes(filtProd.toLowerCase()));
-  const renovMes=datosFilt.filter(d=>d.vencimiento&&d.vencimiento.startsWith(mesBd));
-  const renovSig=datosFilt.filter(d=>d.vencimiento&&d.vencimiento.startsWith(mesSigBd));
-  const atraso35=datosFilt.filter(d=>d.diasAtraso>35);
-  const alCorriente=datosFilt.filter(d=>d.diasAtraso===0||d.estatus.toLowerCase().includes("corriente")||d.estatus.toLowerCase().includes("vigente"));
-  const statusColor=d=>{if(d.diasAtraso>35)return{bg:B.redLight,border:B.redBright+"44",text:B.redBright,badge:"🔴 Crítico"};if(d.diasAtraso>0&&d.diasAtraso<=35)return{bg:B.amberLight||"#fffbeb",border:B.amber+"44",text:B.amber,badge:"🟡 Atraso"};return{bg:B.greenLight||"#dcfce7",border:B.green+"44",text:B.green,badge:"🟢 Al corriente"};};
-  function Tabla({lista,cols,titulo,color,onExport}){if(lista.length===0)return <div style={{fontSize:12,color:"#9ca3af",textAlign:"center",padding:"20px 0"}}>Sin registros</div>;return <><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><div style={{fontSize:13,fontWeight:700,color}}>{titulo} · {lista.length} registro{lista.length!==1?"s":""}</div><Btn onClick={onExport} color={B.navy} outline small>📥 Exportar</Btn></div><div className="mf-table-wrap"><table style={{width:"100%",borderCollapse:"collapse",minWidth:550}}><thead><tr style={{background:B.cream}}>{cols.map(c=><th key={c} style={{textAlign:"left",padding:"9px 12px",fontSize:10,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:".7px",borderBottom:`1px solid ${B.gray}`}}>{c}</th>)}</tr></thead><tbody>{lista.map((r,i)=>{const sc=statusColor(r);return <tr key={i} style={{background:sc.bg,borderBottom:`1px solid ${B.gray}22`}}><td style={{padding:"10px 12px",fontSize:12,fontWeight:600,color:B.navy}}>{r.poliza||"--"}</td><td style={{padding:"10px 12px",fontSize:12,color:B.black}}>{r.nombre}</td><td style={{padding:"10px 12px"}}><Tag color={B.navy} small>{r.producto||"--"}</Tag></td><td style={{padding:"10px 12px",fontSize:12,color:"#6b7280"}}>{fmtF(r.vencimiento)}</td>{cols.includes("Días atraso")&&<td style={{padding:"10px 12px"}}><span style={{fontWeight:700,color:sc.text,fontSize:12}}>{r.diasAtraso>0?`${r.diasAtraso}d`:"--"}</span></td>}{cols.includes("Estatus")&&<td style={{padding:"10px 12px"}}><Tag color={sc.text} small>{sc.badge}</Tag></td>}{cols.includes("Contacto")&&<td style={{padding:"10px 12px"}}>{r.telefono?<a href={`https://wa.me/52${r.telefono.replace(/\D/g,"")}`} target="_blank" rel="noreferrer" style={{textDecoration:"none",fontSize:11,color:"#25d366",fontWeight:600}}>💬 WA</a>:<span style={{color:"#9ca3af",fontSize:11}}>--</span>}</td>}</tr>;})}</tbody></table></div></>;}
-  if(datos.length===0)return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 20px",textAlign:"center"}}><div style={{width:80,height:80,borderRadius:"50%",background:B.goldDim,border:`2px solid ${B.goldBorder}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,marginBottom:20}}>💰</div><div style={{fontSize:20,fontWeight:700,color:B.navy,marginBottom:8}}>Módulo de Cobranza</div><div style={{fontSize:13,color:"#6b7280",maxWidth:420,lineHeight:1.7,marginBottom:28}}>Sube tu archivo Excel de cobranza para ver renovaciones, atrasos y alertas automáticas.</div><input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={cargarExcel}/><Btn onClick={()=>fileRef.current?.click()} bg={B.navy} style={{padding:"12px 28px",fontSize:14}} disabled={cargando}>{cargando?"Procesando...":"📂 Subir Excel de cobranza"}</Btn></div>);
-  return <div><div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}><input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={cargarExcel}/><Btn onClick={()=>fileRef.current?.click()} color={B.green} outline small>📂 Actualizar Excel</Btn><input value={filtProd} onChange={e=>setFiltProd(e.target.value)} placeholder="Filtrar por producto..." style={{padding:"11px 13px",borderRadius:8,border:`1.5px solid ${B.gray}`,background:B.white,color:B.black,fontFamily:"'Poppins',sans-serif",fontSize:16,outline:"none",minHeight:44,WebkitAppearance:"none",flex:1,minWidth:0}} onFocus={e=>e.target.style.borderColor=B.gold} onBlur={e=>e.target.style.borderColor=B.gray}/><div style={{fontSize:12,color:"#9ca3af"}}>{datosFilt.length} registros</div></div><div style={{display:"flex",gap:4,marginBottom:20,background:B.white,border:`1px solid ${B.gray}`,borderRadius:12,padding:5}}>{[{v:"dashboard",l:"📊 Dashboard"},{v:"renovMes",l:`🔄 Reno. este mes (${renovMes.length})`},{v:"renovSig",l:`📅 Reno. próx. mes (${renovSig.length})`},{v:"atraso",l:`⚠️ Atraso +35d (${atraso35.length})`},{v:"todos",l:"📋 Todos"}].map(t=>(<button key={t.v} onClick={()=>setTab(t.v)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",background:tab===t.v?B.navy:B.cream,color:tab===t.v?B.white:"#6b7280",fontFamily:"Poppins",fontWeight:600,fontSize:11,cursor:"pointer"}}>{t.l}</button>))}</div>{tab==="dashboard"&&<div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:12,marginBottom:18}}>{[{l:"Total registros",v:datosFilt.length,c:B.navy,icon:"📋"},{l:"Renovaciones este mes",v:renovMes.length,c:B.amber,icon:"🔄"},{l:"Renovaciones próx. mes",v:renovSig.length,c:B.blue,icon:"📅"},{l:"Atraso crítico +35d",v:atraso35.length,c:B.redBright,icon:"🔴"},{l:"Al corriente",v:alCorriente.length,c:B.green,icon:"🟢"}].map((s,i)=>(<div key={i} style={{background:B.white,border:`1px solid ${B.gray}`,borderLeft:`4px solid ${s.c}`,borderRadius:12,padding:"14px 16px",boxShadow:B.shadow}}><div style={{fontSize:10,fontWeight:600,color:"#6b7280",textTransform:"uppercase",letterSpacing:".6px",marginBottom:6}}>{s.l}</div><div style={{fontSize:30,fontWeight:800,color:s.c,lineHeight:1,marginBottom:2}}>{s.v}</div><div style={{fontSize:18}}>{s.icon}</div></div>))}</div>{atraso35.length>0&&<div style={{background:B.redLight,border:`1.5px solid ${B.redBright}33`,borderRadius:12,padding:"16px 20px",marginBottom:16}}><div style={{fontSize:14,fontWeight:700,color:B.redBright,marginBottom:10}}>🔴 Cobranza crítica ({atraso35.slice(0,5).length})</div>{atraso35.slice(0,5).map((r,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${B.redBright}22`}}><div><div style={{fontSize:12,fontWeight:700,color:B.navy}}>{r.nombre}</div><div style={{fontSize:11,color:B.redBright,fontWeight:600}}>{r.diasAtraso}d · {r.producto}</div></div>{r.telefono&&<a href={`https://wa.me/52${r.telefono.replace(/\D/g,"")}`} target="_blank" rel="noreferrer" style={{width:30,height:30,borderRadius:"50%",background:"#dcfce7",border:"1px solid #bbf7d0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,textDecoration:"none"}}>💬</a>}</div>))}</div>}{renovMes.length>0&&<div style={{background:B.amberLight||"#fffbeb",border:`1.5px solid ${B.amber}33`,borderRadius:12,padding:"16px 20px"}}><div style={{fontSize:14,fontWeight:700,color:B.amber,marginBottom:10}}>🔄 Renovaciones {MESES[ahora.getMonth()]} ({renovMes.slice(0,5).length})</div>{renovMes.slice(0,5).map((r,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${B.amber}22`}}><div><div style={{fontSize:12,fontWeight:700,color:B.navy}}>{r.nombre}</div><div style={{fontSize:11,color:B.amber}}>{r.producto} · Vence: {fmtF(r.vencimiento)}</div></div>{r.telefono&&<a href={`https://wa.me/52${r.telefono.replace(/\D/g,"")}`} target="_blank" rel="noreferrer" style={{width:28,height:28,borderRadius:"50%",background:"#dcfce7",border:"1px solid #bbf7d0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,textDecoration:"none"}}>💬</a>}</div>))}</div>}</div>}{tab==="renovMes"&&<div style={{background:B.white,border:`1px solid ${B.gray}`,borderRadius:12,padding:"18px 20px",boxShadow:B.shadow}}><Tabla lista={renovMes} cols={["Póliza","Cliente","Producto","Vencimiento","Estatus","Contacto"]} titulo={`Renovaciones ${MESES[ahora.getMonth()]}`} color={B.amber} onExport={()=>exportarFiltrado(renovMes,"reno_mes_actual")}/></div>}{tab==="renovSig"&&<div style={{background:B.white,border:`1px solid ${B.gray}`,borderRadius:12,padding:"18px 20px",boxShadow:B.shadow}}><Tabla lista={renovSig} cols={["Póliza","Cliente","Producto","Vencimiento","Estatus","Contacto"]} titulo={`Renovaciones ${MESES[mesSig.getMonth()]}`} color={B.blue} onExport={()=>exportarFiltrado(renovSig,"reno_mes_siguiente")}/></div>}{tab==="atraso"&&<div style={{background:B.white,border:`1px solid ${B.gray}`,borderRadius:12,padding:"18px 20px",boxShadow:B.shadow}}><Tabla lista={atraso35} cols={["Póliza","Cliente","Producto","Vencimiento","Días atraso","Estatus","Contacto"]} titulo="Cobranza +35 días de atraso" color={B.redBright} onExport={()=>exportarFiltrado(atraso35,"cobranza_critica")}/></div>}{tab==="todos"&&<div style={{background:B.white,border:`1px solid ${B.gray}`,borderRadius:12,padding:"18px 20px",boxShadow:B.shadow}}><Tabla lista={datosFilt} cols={["Póliza","Cliente","Producto","Vencimiento","Días atraso","Estatus","Contacto"]} titulo="Todos los registros" color={B.navy} onExport={()=>exportarFiltrado(datosFilt,"todos")}/></div>}</div>;
+
+  const datosFilt = datos.filter(d=>!filtProd||d.producto.toLowerCase().includes(filtProd.toLowerCase()));
+  const renovMes = datosFilt.filter(d=>d.vencimiento&&d.vencimiento.startsWith(mesBd));
+  const renovSig = datosFilt.filter(d=>d.vencimiento&&d.vencimiento.startsWith(mesSigBd));
+  const atraso35 = datosFilt.filter(d=>d.diasAtraso>35);
+  const alCorriente = datosFilt.filter(d=>d.diasAtraso===0||d.estatus.toLowerCase().includes("corriente")||d.estatus.toLowerCase().includes("vigente"));
+
+  // Estatus: dot color + label sin emoji
+  const statusOf = (d) => {
+    if (d.diasAtraso > 35) return { color: B.redBright, label: "Crítico", bg: "rgba(220,38,38,0.025)" };
+    if (d.diasAtraso > 0)  return { color: B.amber,     label: "Atraso",  bg: "rgba(217,119,6,0.025)" };
+    return { color: B.green, label: "Al corriente", bg: "rgba(22,101,52,0.020)" };
+  };
+
+  // Botón WhatsApp minimalista (SVG inline)
+  const WAButton = ({ tel, small }) => {
+    if (!tel) return <span style={{color:"rgba(10,31,68,0.30)", fontSize:11}}>—</span>;
+    const size = small ? 26 : 30;
+    return (
+      <a href={`https://wa.me/52${tel.replace(/\D/g,"")}`} target="_blank" rel="noreferrer"
+        style={{
+          width: size, height: size, borderRadius: "50%",
+          background: "rgba(37,211,102,0.10)",
+          border: "1px solid rgba(37,211,102,0.30)",
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          textDecoration: "none",
+          transition: "all var(--mf-t-fast) var(--mf-ease-out)",
+          flexShrink: 0,
+        }}
+        onMouseEnter={e=>{e.currentTarget.style.background="rgba(37,211,102,0.18)"; e.currentTarget.style.transform="translateY(-1px)";}}
+        onMouseLeave={e=>{e.currentTarget.style.background="rgba(37,211,102,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
+        <svg width={small?11:13} height={small?11:13} viewBox="0 0 24 24" fill="#25d366">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+        </svg>
+      </a>
+    );
+  };
+
+  // Tabla minimalista editorial
+  function Tabla({ lista, cols, titulo, color, onExport }) {
+    if (lista.length === 0) {
+      return (
+        <div style={{
+          fontSize:13, color:"rgba(10,31,68,0.30)", textAlign:"center", padding:"32px 0",
+          fontStyle:"italic", letterSpacing:"0.01em",
+        }}>Sin registros</div>
+      );
+    }
+    return (
+      <>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:14}}>
+          <div>
+            <div style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:20, fontWeight:500,
+              color, letterSpacing:"-0.01em",
+            }}>{titulo}</div>
+            <div style={{
+              fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:2,
+              fontVariantNumeric:"tabular-nums",
+            }}>{lista.length} registro{lista.length!==1?"s":""}</div>
+          </div>
+          <button onClick={onExport}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:6,
+              padding:"8px 12px", borderRadius:8,
+              border:"1px solid rgba(10,31,68,0.08)",
+              background:B.white, color:"rgba(10,31,68,0.85)",
+              fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+              cursor:"pointer",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
+            <IconDownload size={13}/>Exportar
+          </button>
+        </div>
+        <div style={{overflowX:"auto", WebkitOverflowScrolling:"touch"}}>
+          <table style={{width:"100%", borderCollapse:"collapse", minWidth:560, fontFamily:"'Poppins',sans-serif"}}>
+            <thead>
+              <tr style={{background:"rgba(248,246,242,0.6)"}}>
+                {cols.map(c => (
+                  <th key={c} style={{
+                    textAlign:"left", padding:"11px 14px",
+                    fontSize:10, fontWeight:600,
+                    color:"rgba(10,31,68,0.50)",
+                    textTransform:"uppercase", letterSpacing:"0.10em",
+                    borderBottom:"1px solid rgba(10,31,68,0.06)",
+                    whiteSpace:"nowrap",
+                  }}>{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {lista.map((r, i) => {
+                const s = statusOf(r);
+                return (
+                  <tr key={i} style={{
+                    background: s.bg,
+                    borderBottom: "1px solid rgba(10,31,68,0.04)",
+                    transition: "background-color var(--mf-t-fast) var(--mf-ease-out)",
+                  }}>
+                    <td style={{padding:"11px 14px", fontSize:12.5, fontWeight:500, color:B.navy, fontVariantNumeric:"tabular-nums"}}>{r.poliza || "—"}</td>
+                    <td style={{padding:"11px 14px", fontSize:13, color:"rgba(10,31,68,0.85)", fontWeight:500}}>{r.nombre}</td>
+                    <td style={{padding:"11px 14px"}}>
+                      {r.producto ? (
+                        <span style={{
+                          fontSize:10.5, fontWeight:500, color:B.navy,
+                          background:"rgba(10,31,68,0.05)",
+                          padding:"3px 9px", borderRadius:6,
+                          letterSpacing:"0.005em",
+                        }}>{r.producto}</span>
+                      ) : "—"}
+                    </td>
+                    <td style={{padding:"11px 14px", fontSize:12, color:"rgba(10,31,68,0.65)", fontVariantNumeric:"tabular-nums"}}>{fmtF(r.vencimiento)}</td>
+                    {cols.includes("Días atraso") && (
+                      <td style={{padding:"11px 14px"}}>
+                        {r.diasAtraso > 0 ? (
+                          <span style={{
+                            fontFamily:"'Cormorant Garamond', serif",
+                            fontSize:18, fontWeight:500, color:s.color,
+                            fontVariantNumeric:"tabular-nums", lineHeight:1,
+                          }}>{r.diasAtraso}<span style={{fontSize:11, color:"rgba(10,31,68,0.40)", marginLeft:2}}>d</span></span>
+                        ) : (
+                          <span style={{color:"rgba(10,31,68,0.30)", fontSize:12}}>—</span>
+                        )}
+                      </td>
+                    )}
+                    {cols.includes("Estatus") && (
+                      <td style={{padding:"11px 14px"}}>
+                        <span style={{
+                          display:"inline-flex", alignItems:"center", gap:6,
+                          fontSize:11.5, fontWeight:500,
+                          color:s.color,
+                          background:s.color + "0c",
+                          border:`1px solid ${s.color}25`,
+                          padding:"2px 9px", borderRadius:6,
+                          letterSpacing:"0.005em", whiteSpace:"nowrap",
+                        }}>
+                          <span style={{width:5, height:5, borderRadius:"50%", background:s.color}}/>
+                          {s.label}
+                        </span>
+                      </td>
+                    )}
+                    {cols.includes("Contacto") && (
+                      <td style={{padding:"11px 14px"}}>
+                        <WAButton tel={r.telefono} small/>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
+  }
+
+  // ── Estado vacío premium ──
+  if (datos.length === 0) {
+    return (
+      <div className="mf-fade-in" style={{
+        display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+        padding:"60px 20px", textAlign:"center", maxWidth:480, margin:"0 auto",
+      }}>
+        <div style={{
+          width:72, height:72, borderRadius:"50%",
+          background:"rgba(198,169,107,0.08)",
+          border:"1px solid rgba(198,169,107,0.20)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          marginBottom:24,
+        }}>
+          <IconDollar size={32} color="#C6A96B"/>
+        </div>
+        <div style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:32, fontWeight:500,
+          color:B.navy, letterSpacing:"-0.02em",
+          lineHeight:1.1, marginBottom:10,
+        }}>Cobranza</div>
+        <div style={{
+          fontSize:14, color:"rgba(10,31,68,0.55)",
+          maxWidth:380, lineHeight:1.6, marginBottom:32,
+          fontStyle:"italic",
+        }}>Sube tu archivo Excel para visualizar renovaciones, atrasos y alertas automáticas.</div>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={cargarExcel}/>
+        <button onClick={()=>fileRef.current?.click()} disabled={cargando}
+          style={{
+            display:"inline-flex", alignItems:"center", gap:8,
+            padding:"13px 24px", borderRadius:10, border:"none",
+            background: "linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+            color:"#fff",
+            fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:13.5,
+            cursor: cargando ? "not-allowed" : "pointer",
+            opacity: cargando ? 0.7 : 1,
+            boxShadow:"0 4px 14px rgba(10,31,68,0.18)",
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+          }}
+          onMouseEnter={e=>{if(!cargando){e.currentTarget.style.boxShadow="0 8px 24px rgba(10,31,68,0.25)"; e.currentTarget.style.transform="translateY(-1px)";}}}
+          onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.18)"; e.currentTarget.style.transform="translateY(0)";}}>
+          {cargando ? <><IconLoader size={14} color="#fff"/>Procesando…</> : <><IconUpload size={14} color="#fff"/>Subir Excel</>}
+        </button>
+      </div>
+    );
+  }
+
+  // KPIs hero estilo banca privada
+  const kpis = [
+    { l:"Total registros",      v:datosFilt.length, dot:B.navy      },
+    { l:"Renovaciones este mes", v:renovMes.length, dot:B.amber     },
+    { l:"Renovaciones próx. mes",v:renovSig.length, dot:B.blue      },
+    { l:"Atraso crítico +35d",  v:atraso35.length,  dot:B.redBright },
+    { l:"Al corriente",         v:alCorriente.length,dot:B.green    },
+  ];
+
+  const tabs = [
+    { v:"dashboard", l:"Resumen",                             count:null },
+    { v:"renovMes",  l:`Renov. ${MESES[ahora.getMonth()].slice(0,3)}.`,    count:renovMes.length },
+    { v:"renovSig",  l:`Renov. ${MESES[mesSig.getMonth()].slice(0,3)}.`,   count:renovSig.length },
+    { v:"atraso",    l:"Atrasos +35d",                        count:atraso35.length },
+    { v:"todos",     l:"Todos",                                count:datosFilt.length },
+  ];
+
+  return (
+    <div className="mf-fade-in" style={{maxWidth:1280, margin:"0 auto"}}>
+      {/* ═══ Hero editorial ═══ */}
+      <div style={{marginBottom:24}}>
+        <div style={{
+          fontSize:10.5, fontWeight:500,
+          color:"rgba(10,31,68,0.45)",
+          textTransform:"uppercase", letterSpacing:"0.22em",
+          marginBottom:10,
+        }}>Análisis · Cartera de pólizas</div>
+        <h1 style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:"clamp(30px, 4.8vw, 42px)",
+          fontWeight:500, lineHeight:1.08,
+          letterSpacing:"-0.025em",
+          color:B.navy,
+          margin:"0 0 10px",
+        }}>Cobranza</h1>
+        <p style={{
+          fontSize:14, color:"rgba(10,31,68,0.50)",
+          margin:0, fontWeight:400, lineHeight:1.5,
+          fontStyle:"italic",
+        }}>Renovaciones próximas, pólizas vigentes y atrasos por atender.</p>
+      </div>
+
+      {/* ═══ Toolbar premium ═══ */}
+      <div style={{display:"flex", gap:10, marginBottom:18, flexWrap:"wrap", alignItems:"center"}}>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={cargarExcel}/>
+        <button onClick={()=>fileRef.current?.click()} disabled={cargando}
+          style={{
+            display:"inline-flex", alignItems:"center", gap:6,
+            padding:"8px 12px", minHeight:36, borderRadius:8,
+            border:"1px solid rgba(10,31,68,0.08)",
+            background:B.white, color:"rgba(10,31,68,0.85)",
+            fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12.5,
+            cursor:"pointer",
+            boxShadow:"var(--mf-shadow-xs)",
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            opacity: cargando ? 0.7 : 1,
+          }}
+          onMouseEnter={e=>{if(!cargando){e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
+          {cargando ? <IconLoader size={13}/> : <IconUpload size={13}/>}
+          {cargando ? "Procesando…" : "Actualizar Excel"}
+        </button>
+        <div style={{position:"relative", flex:1, minWidth:200, display:"flex", alignItems:"center"}}>
+          <span style={{position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"rgba(10,31,68,0.35)", pointerEvents:"none", display:"inline-flex"}}>
+            <IconSearch size={15}/>
+          </span>
+          <input value={filtProd} onChange={e=>setFiltProd(e.target.value)}
+            placeholder="Filtrar por producto…"
+            style={{
+              width:"100%", paddingLeft:38, paddingRight:14,
+              paddingTop:10, paddingBottom:10, minHeight:38,
+              borderRadius:10,
+              border:"1px solid rgba(10,31,68,0.08)",
+              background:B.white, color:B.navy,
+              fontFamily:"'Poppins',sans-serif", fontSize:14, fontWeight:400,
+              outline:"none", WebkitAppearance:"none",
+              boxShadow:"var(--mf-shadow-xs)",
+            }}
+            onFocus={e=>{e.target.style.borderColor="rgba(198,169,107,0.55)"; e.target.style.boxShadow="0 0 0 4px rgba(198,169,107,0.10)";}}
+            onBlur={e=>{e.target.style.borderColor="rgba(10,31,68,0.08)"; e.target.style.boxShadow="var(--mf-shadow-xs)";}}
+          />
+        </div>
+        <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap"}}>
+          {datosFilt.length} registros
+        </div>
+      </div>
+
+      {/* ═══ Tabs estilo Notion/Linear ═══ */}
+      <div style={{display:"flex", gap:2, marginBottom:22, borderBottom:"1px solid rgba(10,31,68,0.06)", overflowX:"auto", WebkitOverflowScrolling:"touch", scrollbarWidth:"none"}}>
+        {tabs.map(t => {
+          const active = tab === t.v;
+          return (
+            <button key={t.v} onClick={()=>setTab(t.v)}
+              style={{
+                flexShrink:0, position:"relative",
+                padding:"10px 14px 11px",
+                border:"none", background:"transparent",
+                color: active ? B.navy : "rgba(10,31,68,0.50)",
+                fontFamily:"'Poppins',sans-serif",
+                fontWeight: active ? 600 : 500, fontSize:12.5,
+                letterSpacing:"0.005em", cursor:"pointer",
+                whiteSpace:"nowrap",
+                transition:"color var(--mf-t-fast) var(--mf-ease-out)",
+              }}
+              onMouseEnter={e=>{if(!active) e.currentTarget.style.color="rgba(10,31,68,0.80)";}}
+              onMouseLeave={e=>{if(!active) e.currentTarget.style.color="rgba(10,31,68,0.50)";}}>
+              {t.l}
+              {t.count != null && (
+                <span style={{
+                  marginLeft:7, padding:"1px 7px", borderRadius:12,
+                  background: active ? "rgba(10,31,68,0.06)" : "rgba(10,31,68,0.04)",
+                  color: active ? B.navy : "rgba(10,31,68,0.45)",
+                  fontSize:10, fontWeight:600, fontVariantNumeric:"tabular-nums",
+                }}>{t.count}</span>
+              )}
+              {active && (
+                <span style={{position:"absolute", left:8, right:8, bottom:-1, height:2, background:B.gold, borderRadius:"2px 2px 0 0"}}/>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ═══ Resumen (Dashboard tab) ═══ */}
+      {tab === "dashboard" && (
+        <div>
+          {/* 5 KPIs hero */}
+          <div style={{
+            display:"grid",
+            gridTemplateColumns:"repeat(auto-fit, minmax(170px, 1fr))",
+            gap:14, marginBottom:24,
+          }}>
+            {kpis.map((s, i) => (
+              <div key={i} className={`mf-fade-up mf-stagger-${(i%4)+1}`}
+                style={{
+                  background:B.white,
+                  border:"1px solid rgba(10,31,68,0.06)",
+                  borderRadius:14,
+                  padding:"18px 18px 16px",
+                  boxShadow:"var(--mf-shadow-xs)",
+                  transition:"box-shadow var(--mf-t-normal) var(--mf-ease-out), transform var(--mf-t-normal) var(--mf-ease-out)",
+                }}
+                onMouseEnter={e=>{e.currentTarget.style.boxShadow="var(--mf-shadow-md)"; e.currentTarget.style.transform="translateY(-2px)";}}
+                onMouseLeave={e=>{e.currentTarget.style.boxShadow="var(--mf-shadow-xs)"; e.currentTarget.style.transform="translateY(0)";}}>
+                <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:8}}>
+                  <span style={{width:6, height:6, borderRadius:"50%", background:s.dot}}/>
+                  <div style={{
+                    fontSize:10, fontWeight:600,
+                    color:"rgba(10,31,68,0.50)",
+                    textTransform:"uppercase", letterSpacing:"0.10em",
+                  }}>{s.l}</div>
+                </div>
+                <div style={{
+                  fontFamily:"'Cormorant Garamond', serif",
+                  fontSize:"clamp(32px, 4vw, 40px)",
+                  fontWeight:500, lineHeight:1,
+                  letterSpacing:"-0.02em",
+                  color:B.navy, fontVariantNumeric:"tabular-nums",
+                }}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 2 cards de alertas: Críticas + Renovaciones del mes */}
+          {(atraso35.length > 0 || renovMes.length > 0) && (
+            <div style={{
+              display:"grid",
+              gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",
+              gap:18,
+            }}>
+              {atraso35.length > 0 && (
+                <div className="mf-fade-up mf-stagger-1" style={{
+                  background:B.white,
+                  border:"1px solid rgba(220,38,38,0.18)",
+                  borderRadius:14,
+                  padding:"20px 22px",
+                  boxShadow:"var(--mf-shadow-xs)",
+                }}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:14}}>
+                    <div style={{display:"flex", alignItems:"center", gap:8}}>
+                      <IconAlertCircle size={16} color={B.redBright}/>
+                      <div style={{
+                        fontFamily:"'Cormorant Garamond', serif",
+                        fontSize:20, fontWeight:500, color:B.redBright,
+                        letterSpacing:"-0.01em",
+                      }}>Cobranza crítica</div>
+                    </div>
+                    <div style={{
+                      fontSize:10, fontWeight:500, color:"rgba(10,31,68,0.45)",
+                      textTransform:"uppercase", letterSpacing:"0.15em",
+                    }}>+35 días</div>
+                  </div>
+                  {atraso35.slice(0,5).map((r, i) => (
+                    <div key={i} style={{
+                      display:"flex", justifyContent:"space-between", alignItems:"center",
+                      padding:"10px 0",
+                      borderBottom: i < Math.min(atraso35.length, 5) - 1 ? "1px solid rgba(10,31,68,0.05)" : "none",
+                    }}>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{
+                          fontSize:13, fontWeight:600, color:B.navy,
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                          letterSpacing:"-0.005em",
+                        }}>{r.nombre}</div>
+                        <div style={{
+                          display:"flex", alignItems:"center", gap:6,
+                          fontSize:11, marginTop:3,
+                          color:"rgba(10,31,68,0.55)",
+                        }}>
+                          <span style={{
+                            fontFamily:"'Cormorant Garamond', serif",
+                            fontSize:16, fontWeight:500, color:B.redBright,
+                            lineHeight:1, fontVariantNumeric:"tabular-nums",
+                          }}>{r.diasAtraso}d</span>
+                          <span style={{opacity:0.4}}>·</span>
+                          <span>{r.producto || "—"}</span>
+                        </div>
+                      </div>
+                      <WAButton tel={r.telefono} small/>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {renovMes.length > 0 && (
+                <div className="mf-fade-up mf-stagger-2" style={{
+                  background:B.white,
+                  border:"1px solid rgba(217,119,6,0.18)",
+                  borderRadius:14,
+                  padding:"20px 22px",
+                  boxShadow:"var(--mf-shadow-xs)",
+                }}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:14}}>
+                    <div style={{display:"flex", alignItems:"center", gap:8}}>
+                      <IconRefresh size={16} color={B.amber}/>
+                      <div style={{
+                        fontFamily:"'Cormorant Garamond', serif",
+                        fontSize:20, fontWeight:500, color:B.amber,
+                        letterSpacing:"-0.01em",
+                      }}>Renovaciones {MESES[ahora.getMonth()]}</div>
+                    </div>
+                    <div style={{
+                      fontSize:10, fontWeight:500, color:"rgba(10,31,68,0.45)",
+                      textTransform:"uppercase", letterSpacing:"0.15em",
+                    }}>Este mes</div>
+                  </div>
+                  {renovMes.slice(0,5).map((r, i) => (
+                    <div key={i} style={{
+                      display:"flex", justifyContent:"space-between", alignItems:"center",
+                      padding:"10px 0",
+                      borderBottom: i < Math.min(renovMes.length, 5) - 1 ? "1px solid rgba(10,31,68,0.05)" : "none",
+                    }}>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{
+                          fontSize:13, fontWeight:600, color:B.navy,
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                          letterSpacing:"-0.005em",
+                        }}>{r.nombre}</div>
+                        <div style={{
+                          fontSize:11, marginTop:3,
+                          color:"rgba(10,31,68,0.55)",
+                          display:"flex", alignItems:"center", gap:6,
+                        }}>
+                          <span>{r.producto || "—"}</span>
+                          <span style={{opacity:0.4}}>·</span>
+                          <span style={{color:B.amber, fontWeight:500}}>Vence {fmtF(r.vencimiento)}</span>
+                        </div>
+                      </div>
+                      <WAButton tel={r.telefono} small/>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ Tabs de tabla ═══ */}
+      {tab === "renovMes" && (
+        <div style={{background:B.white, border:"1px solid rgba(10,31,68,0.06)", borderRadius:14, padding:"22px 24px", boxShadow:"var(--mf-shadow-xs)"}}>
+          <Tabla lista={renovMes} cols={["Póliza","Cliente","Producto","Vencimiento","Estatus","Contacto"]}
+            titulo={`Renovaciones ${MESES[ahora.getMonth()]}`} color={B.amber}
+            onExport={()=>exportarFiltrado(renovMes,"reno_mes_actual")}/>
+        </div>
+      )}
+      {tab === "renovSig" && (
+        <div style={{background:B.white, border:"1px solid rgba(10,31,68,0.06)", borderRadius:14, padding:"22px 24px", boxShadow:"var(--mf-shadow-xs)"}}>
+          <Tabla lista={renovSig} cols={["Póliza","Cliente","Producto","Vencimiento","Estatus","Contacto"]}
+            titulo={`Renovaciones ${MESES[mesSig.getMonth()]}`} color={B.blue}
+            onExport={()=>exportarFiltrado(renovSig,"reno_mes_siguiente")}/>
+        </div>
+      )}
+      {tab === "atraso" && (
+        <div style={{background:B.white, border:"1px solid rgba(10,31,68,0.06)", borderRadius:14, padding:"22px 24px", boxShadow:"var(--mf-shadow-xs)"}}>
+          <Tabla lista={atraso35} cols={["Póliza","Cliente","Producto","Vencimiento","Días atraso","Estatus","Contacto"]}
+            titulo="Cobranza con más de 35 días" color={B.redBright}
+            onExport={()=>exportarFiltrado(atraso35,"cobranza_critica")}/>
+        </div>
+      )}
+      {tab === "todos" && (
+        <div style={{background:B.white, border:"1px solid rgba(10,31,68,0.06)", borderRadius:14, padding:"22px 24px", boxShadow:"var(--mf-shadow-xs)"}}>
+          <Tabla lista={datosFilt} cols={["Póliza","Cliente","Producto","Vencimiento","Días atraso","Estatus","Contacto"]}
+            titulo="Cartera completa" color={B.navy}
+            onExport={()=>exportarFiltrado(datosFilt,"todos")}/>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Usuarios({usuario,cuentas,setCuentas}) {
