@@ -31,7 +31,23 @@ const ETAPAS = [
   {id:"otro",         label:"Sin interés",           color:"#dc2626", icon:"🚫", sinSeg:true},
 ];
 
-const PRODUCTOS_LEAD = ["Vida","GMM","Auto","Hogar","Patrimonial","Ahorro","Educación","Otro"];
+const PRODUCTOS_LEAD = ["Vida","GMM","Auto","Hogar","Retiro","Ahorro","Inversión","Patrimonial","Educación","Otro"];
+
+// Clasificación por línea de negocio (Allianz México)
+const PRODUCTOS_RIESGOS = ["Vida","GMM","Auto","Hogar"];
+const PRODUCTOS_AHORRO  = ["Retiro","Ahorro","Inversión","Patrimonial","Educación"];
+
+// Tipos de pendientes operativos (tareas dentro de cada lead)
+const PENDIENTE_TIPOS = [
+  { v:"cotizacion",  l:"Enviar cotización" },
+  { v:"documentos",  l:"Solicitar documentos" },
+  { v:"informacion", l:"Pedir información faltante" },
+  { v:"pago",        l:"Compartir liga de pago" },
+  { v:"comparativo", l:"Preparar comparativo" },
+  { v:"solicitud",   l:"Llenar solicitud" },
+  { v:"emision",     l:"Revisar emisión" },
+  { v:"otro",        l:"Otro" },
+];
 const PRODUCTOS_COB  = ["GMMI","PLU3","EDU","Auto","Vida","Hogar","Otro"];
 const ESTADOS_MX = ["Aguascalientes","Baja California","Baja California Sur","Campeche","Chiapas","Chihuahua","Ciudad de México","Coahuila","Colima","Durango","Estado de México","Guanajuato","Guerrero","Hidalgo","Jalisco","Michoacán","Morelos","Nayarit","Nuevo León","Oaxaca","Puebla","Querétaro","Quintana Roo","San Luis Potosí","Sinaloa","Sonora","Tabasco","Tamaulipas","Tlaxcala","Veracruz","Yucatán","Zacatecas"];
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -104,6 +120,56 @@ function getTempLead(lead) {
   if(dias<=2 && (interact>=2 || etapasCalientes.includes(lead.etapa))) return {nivel:"caliente",icon:"🔥",color:"#dc2626",label:"Caliente"};
   if(dias<=7 && interact>=1) return {nivel:"tibio",icon:"🟡",color:"#d97706",label:"Tibio"};
   return {nivel:"frio",icon:"❄️",color:"#3b82f6",label:"Frío"};
+}
+
+// ── Prioridades de hoy (lógica del sector asegurador/patrimonial) ──
+// 1) En cotización Riesgos: producto Auto/GMM/Hogar/Vida + etapa asesorado +
+//    sin contacto >2 días (cotización fría = riesgo de perderla con otro agente)
+function enCotizacionRiesgos(leads) {
+  return (leads || []).filter(l =>
+    !l.sinSeguimiento &&
+    l.etapa === "asesorado" &&
+    PRODUCTOS_RIESGOS.includes(l.producto) &&
+    diasDesde(l.ultimoContacto) >= 2
+  );
+}
+// 2) Asesorados Ahorro: producto Retiro/Ahorro/Inversión/Patrimonial/Educación
+//    + etapa asesorado + sin contacto >14 días (perdiendo oportunidad patrimonial)
+function asesoradosAhorroPendientes(leads) {
+  return (leads || []).filter(l =>
+    !l.sinSeguimiento &&
+    l.etapa === "asesorado" &&
+    PRODUCTOS_AHORRO.includes(l.producto) &&
+    diasDesde(l.ultimoContacto) >= 14
+  );
+}
+// 3) Seguimiento urgente: leads activos en riesgo de perderse
+function seguimientoUrgente(leads) {
+  return (leads || []).filter(l => {
+    if (l.sinSeguimiento) return false;
+    if (["otro","cierre"].includes(l.etapa)) return false;
+    const d = diasDesde(l.ultimoContacto);
+    // Lead nuevo sin contacto en >2 días
+    if (l.etapa === "nuevo" && d >= 2) return true;
+    // Cliente en seguimiento sin actividad reciente (riesgo de pérdida)
+    if (l.etapa === "seguimiento" && d >= 5) return true;
+    // Lead caliente sin actividad reciente
+    const temp = getTempLead(l);
+    if (temp?.nivel === "caliente" && d >= 3) return true;
+    // Cita pendiente sin reagendar (>3 días en etapa cita)
+    if (l.etapa === "cita" && d >= 3) return true;
+    return false;
+  });
+}
+// 4) Pendientes operativos: todos los pendientes abiertos de todos los leads
+function totalPendientesAbiertos(leads) {
+  return (leads || []).reduce((sum, l) => {
+    const abiertos = (l.pendientes || []).filter(p => !p.hecho).length;
+    return sum + abiertos;
+  }, 0);
+}
+function leadsConPendientes(leads) {
+  return (leads || []).filter(l => (l.pendientes || []).some(p => !p.hecho));
 }
 
 function getAlertas(lead) {
@@ -590,6 +656,11 @@ const IconBell = ({size=14, color="currentColor"}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
     <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+  </svg>
+);
+const IconFlame = ({size=14, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
   </svg>
 );
 const IconLink2 = ({size=14, color="currentColor"}) => (
@@ -2534,10 +2605,13 @@ function getMicrocopyDelDia() {
 function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
   const activos=leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa));
   const cierres=leads.filter(l=>l.etapa==="cierre");
-  const riesgo=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="riesgo"));
-  const sinC=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="sin_contacto"));
-  const reactivar=leads.filter(l=>getAlertas(l).some(a=>a.tipo==="reactivar"));
   function irA(f){setFiltroNav(f);setSeccion("pipeline");}
+
+  // ── Prioridades de hoy (lógica sector asegurador/patrimonial) ──
+  const cotizandoRiesgos = enCotizacionRiesgos(leads);
+  const ahorroPendientes = asesoradosAhorroPendientes(leads);
+  const urgentes         = seguimientoUrgente(leads);
+  const totalPendientes  = totalPendientesAbiertos(leads);
 
   // ── Saludo dinámico según la hora ──
   const ahora = new Date();
@@ -2567,89 +2641,45 @@ function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
   const cierresEnProceso = leads.filter(l => l.etapa === "cierre").length;
   const contactadosSemana = leads.filter(l => l.ultimoContacto && l.ultimoContacto >= sieteDiasAtras).length;
 
-  // Filas para las 2 cards principales
-  const filasAtencion = [
-    { v: segPendientes, l: segPendientes === 1 ? "Seguimiento pendiente" : "Seguimientos pendientes", icon: <IconClock size={15} color={B.navy}/>, action: ()=>irA("seguimiento") },
-    { v: enRiesgo,      l: enRiesgo === 1 ? "Cliente en riesgo" : "Clientes en riesgo",                icon: <IconAlertCircle size={15} color={B.redBright}/>, action: ()=>irA("seguimiento") },
-    { v: sinRespuesta,  l: sinRespuesta === 1 ? "Cliente sin respuesta" : "Clientes sin respuesta",    icon: <IconUser size={15} color={B.amber}/>, action: ()=>irA("activos") },
-    { v: aReactivar,    l: aReactivar === 1 ? "Lead a reactivar" : "Leads a reactivar",                icon: <IconRefresh size={15} color={B.purple}/>, action: ()=>irA("activos") },
+  // ── 4 Prioridades de hoy (lógica sector asegurador/patrimonial) ──
+  const prioridades = [
+    {
+      key: "cot_riesgos",
+      v: cotizandoRiesgos.length,
+      titulo: "En cotización (Riesgos)",
+      sub: "Auto · GMM · Hogar · Vida · sin contacto >2 días",
+      color: "#dc2626", // red — temperatura caliente
+      icon: <IconFlame size={16} color="#dc2626"/>,
+      action: ()=>{ setFiltroNav("asesorado"); setSeccion("pipeline"); },
+    },
+    {
+      key: "ahorro",
+      v: ahorroPendientes.length,
+      titulo: "Asesorados (Ahorro)",
+      sub: "Retiro · Ahorro · Inversión · sin contacto >2 semanas",
+      color: B.gold,
+      icon: <IconDollar size={16} color={B.gold}/>,
+      action: ()=>{ setFiltroNav("asesorado"); setSeccion("pipeline"); },
+    },
+    {
+      key: "urgente",
+      v: urgentes.length,
+      titulo: "Seguimiento urgente",
+      sub: "Leads activos en riesgo de perderse",
+      color: B.redBright,
+      icon: <IconAlertCircle size={16} color={B.redBright}/>,
+      action: ()=>{ setFiltroNav("activos"); setSeccion("pipeline"); },
+    },
+    {
+      key: "pendientes",
+      v: totalPendientes,
+      titulo: "Pendientes",
+      sub: "Tareas operativas abiertas en tus leads",
+      color: B.navy,
+      icon: <IconClock size={16} color={B.navy}/>,
+      action: ()=>{ setFiltroNav("activos"); setSeccion("lista"); },
+    },
   ];
-  const filasActividad = [
-    { v: contactadosSemana, l: contactadosSemana === 1 ? "Cliente contactado" : "Clientes contactados", icon: <IconPhoneCall size={15} color={B.navy}/> },
-    { v: cierresEnProceso,  l: cierresEnProceso === 1 ? "Cierre en proceso" : "Cierres en proceso",     icon: <IconStar size={15} color={B.gold}/>, action: ()=>irA("cierre") },
-    { v: citasProximas,     l: citasProximas === 1 ? "Cita próxima" : "Citas próximas",                 icon: <IconCalendar size={15} color={B.blue}/>, action: ()=>irA("cita") },
-  ];
-
-  // Fila item reutilizable (más compacta, con número grande + label sutil + chevron al final)
-  const FilaItem = ({ row }) => (
-    <button
-      onClick={row.action}
-      disabled={!row.action}
-      style={{
-        all:"unset",
-        display:"flex", alignItems:"center", gap:14,
-        padding:"14px 4px",
-        cursor: row.action ? "pointer" : "default",
-        borderBottom:`1px solid rgba(10,31,68,0.05)`,
-        transition:"background-color var(--mf-t-fast) var(--mf-ease-out)",
-        borderRadius:6,
-        width:"100%", boxSizing:"border-box",
-      }}
-      onMouseEnter={e=>{ if(row.action) e.currentTarget.style.backgroundColor = "rgba(10,31,68,0.025)"; }}
-      onMouseLeave={e=>{ e.currentTarget.style.backgroundColor = "transparent"; }}>
-      <div style={{
-        width:32, display:"flex", justifyContent:"center", flexShrink:0,
-        color: row.v > 0 ? B.navy : "rgba(10,31,68,0.35)",
-      }}>{row.icon}</div>
-      <div style={{
-        fontFamily:"'Cormorant Garamond', serif",
-        fontSize:24, fontWeight:500, lineHeight:1,
-        letterSpacing:"-0.01em",
-        color: row.v > 0 ? B.navy : "rgba(10,31,68,0.30)",
-        minWidth:30, textAlign:"left",
-      }}>{row.v}</div>
-      <div style={{
-        flex:1, minWidth:0,
-        fontSize:13, fontWeight:400,
-        color:"rgba(10,31,68,0.65)",
-        lineHeight:1.4,
-      }}>{row.l}</div>
-      {row.action && (
-        <div style={{color:"rgba(10,31,68,0.30)", flexShrink:0, display:"flex"}}>
-          <IconChevronRight size={14}/>
-        </div>
-      )}
-    </button>
-  );
-
-  const CardWrap = ({ title, subtitle, children, delay }) => (
-    <div className={`mf-fade-up mf-stagger-${delay}`}
-      style={{
-        background:B.white,
-        border:"1px solid rgba(10,31,68,0.06)",
-        borderRadius:16,
-        padding:"22px 24px 12px",
-        boxShadow:"var(--mf-shadow-xs)",
-        transition:"box-shadow var(--mf-t-normal) var(--mf-ease-out)",
-      }}>
-      <div style={{display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6}}>
-        <div style={{
-          fontFamily:"'Cormorant Garamond', serif",
-          fontSize:22, fontWeight:500,
-          letterSpacing:"-0.01em",
-          color:B.navy,
-        }}>{title}</div>
-        {subtitle && (
-          <div style={{fontSize:10, fontWeight:500, color:"rgba(10,31,68,0.40)", textTransform:"uppercase", letterSpacing:"0.15em"}}>
-            {subtitle}
-          </div>
-        )}
-      </div>
-      <div style={{display:"flex", flexDirection:"column"}}>
-        {children}
-      </div>
-    </div>
-  );
 
   return <div className="mf-fade-in">
     {/* ═══ Hero: saludo premium banca privada ═══ */}
@@ -2677,20 +2707,93 @@ function Dashboard({leads, eventos = [], usuario, setFiltroNav, setSeccion}) {
       </p>
     </div>
 
-    {/* ═══ Dos cards principales agrupadas (estilo Linear / Stripe) ═══ */}
-    <div style={{
-      display:"grid",
-      gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",
-      gap:18,
-      marginBottom:30,
-    }}>
-      <CardWrap title="Atención hoy" subtitle="Prioridad" delay={1}>
-        {filasAtencion.map((f, i) => <FilaItem key={i} row={f}/>)}
-      </CardWrap>
+    {/* ═══ PRIORIDADES DE HOY (sector asegurador/patrimonial) ═══ */}
+    <div style={{marginBottom:32}}>
+      <div style={{
+        display:"flex", alignItems:"baseline", justifyContent:"space-between",
+        marginBottom:14, flexWrap:"wrap", gap:8,
+      }}>
+        <div style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:24, fontWeight:500,
+          letterSpacing:"-0.015em",
+          color:B.navy,
+        }}>Prioridades de hoy</div>
+        <div style={{
+          fontSize:10, fontWeight:500,
+          color:"rgba(10,31,68,0.40)",
+          textTransform:"uppercase", letterSpacing:"0.18em",
+        }}>Acciones recomendadas</div>
+      </div>
 
-      <CardWrap title="Actividad semanal" subtitle="7 días" delay={2}>
-        {filasActividad.map((f, i) => <FilaItem key={i} row={f}/>)}
-      </CardWrap>
+      <div style={{
+        display:"grid",
+        gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",
+        gap:14,
+      }}>
+        {prioridades.map((p, i) => (
+          <button
+            key={p.key}
+            onClick={p.action}
+            className={`mf-fade-up mf-stagger-${(i%4)+1}`}
+            style={{
+              textAlign:"left",
+              background:B.white,
+              border:"1px solid rgba(10,31,68,0.06)",
+              borderRadius:16,
+              padding:"22px 22px 20px",
+              cursor:"pointer",
+              boxShadow:"var(--mf-shadow-xs)",
+              transition:"transform var(--mf-t-normal) var(--mf-ease-out), box-shadow var(--mf-t-normal) var(--mf-ease-out), border-color var(--mf-t-fast) var(--mf-ease-out)",
+              fontFamily:"'Poppins', sans-serif",
+              color:B.navy,
+              minHeight:148,
+              display:"flex", flexDirection:"column",
+            }}
+            onMouseEnter={e=>{
+              e.currentTarget.style.boxShadow="var(--mf-shadow-md)";
+              e.currentTarget.style.transform="translateY(-2px)";
+              e.currentTarget.style.borderColor= p.v > 0 ? `${p.color}40` : "rgba(198,169,107,0.20)";
+            }}
+            onMouseLeave={e=>{
+              e.currentTarget.style.boxShadow="var(--mf-shadow-xs)";
+              e.currentTarget.style.transform="translateY(0)";
+              e.currentTarget.style.borderColor="rgba(10,31,68,0.06)";
+            }}>
+            {/* Icono + número */}
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12}}>
+              <div style={{
+                width:36, height:36, borderRadius:10,
+                background: p.v > 0 ? `${p.color}10` : "rgba(10,31,68,0.04)",
+                border: `1px solid ${p.v > 0 ? `${p.color}25` : "rgba(10,31,68,0.06)"}`,
+                display:"flex", alignItems:"center", justifyContent:"center",
+              }}>{p.icon}</div>
+              <div style={{
+                fontFamily:"'Cormorant Garamond', serif",
+                fontSize:"clamp(38px, 4.5vw, 48px)",
+                fontWeight:500, lineHeight:1,
+                letterSpacing:"-0.025em",
+                color: p.v > 0 ? B.navy : "rgba(10,31,68,0.25)",
+                fontVariantNumeric:"tabular-nums",
+              }}>{p.v}</div>
+            </div>
+
+            {/* Título + descripción */}
+            <div>
+              <div style={{
+                fontSize:13.5, fontWeight:600,
+                color:B.navy,
+                letterSpacing:"-0.005em",
+                marginBottom:4,
+              }}>{p.titulo}</div>
+              <div style={{
+                fontSize:11.5, color:"rgba(10,31,68,0.50)",
+                lineHeight:1.45, letterSpacing:"0.005em",
+              }}>{p.sub}</div>
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
 
     {/* Separador editorial muy sutil */}
@@ -3050,9 +3153,40 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
     onSave({...f,ultimoContacto:hoy(),ultimaActualizacion:{por:usuario?.nombre||"",rol:usuario?.rol||"",fecha:hoy()}});
     onClose();
   }
-  const TABS_ADMIN=[{v:"info",l:"Info"},{v:"etapa",l:"Etapa"},{v:"checklist",l:"Seguimiento"},{v:"historial",l:`Historial (${(f.seguimientos||[]).length})`},{v:"estrategia",l:"Estrategia"}];
-  const TABS_ASIST=[{v:"checklist",l:"Seguimiento"},{v:"historial",l:`Historial (${(f.seguimientos||[]).length})`},{v:"info",l:"Info"}];
+  const pendActivos = (f.pendientes||[]).filter(p=>!p.hecho).length;
+  const pendLabel = pendActivos > 0 ? `Pendientes (${pendActivos})` : "Pendientes";
+  const TABS_ADMIN=[{v:"info",l:"Info"},{v:"etapa",l:"Etapa"},{v:"pendientes",l:pendLabel},{v:"checklist",l:"Seguimiento"},{v:"historial",l:`Historial (${(f.seguimientos||[]).length})`},{v:"estrategia",l:"Estrategia"}];
+  const TABS_ASIST=[{v:"pendientes",l:pendLabel},{v:"checklist",l:"Seguimiento"},{v:"historial",l:`Historial (${(f.seguimientos||[]).length})`},{v:"info",l:"Info"}];
   const TABS=esAsistente?TABS_ASIST:TABS_ADMIN;
+
+  // Pendientes operativos del lead
+  const [nuevoPendTipo, setNuevoPendTipo] = useState("cotizacion");
+  const [nuevoPendTexto, setNuevoPendTexto] = useState("");
+  function agregarPendiente() {
+    const tipo = PENDIENTE_TIPOS.find(p => p.v === nuevoPendTipo);
+    const texto = nuevoPendTexto.trim() || tipo?.l || "Pendiente";
+    const nuevo = {
+      id: uid(),
+      tipo: nuevoPendTipo,
+      texto,
+      hecho: false,
+      fechaCreacion: hoy(),
+      fechaCompletado: null,
+    };
+    setF(p => ({ ...p, pendientes: [...(p.pendientes||[]), nuevo] }));
+    setNuevoPendTexto("");
+  }
+  function togglePendiente(id) {
+    setF(p => ({
+      ...p,
+      pendientes: (p.pendientes||[]).map(x =>
+        x.id === id ? { ...x, hecho: !x.hecho, fechaCompletado: !x.hecho ? hoy() : null } : x
+      ),
+    }));
+  }
+  function eliminarPendiente(id) {
+    setF(p => ({ ...p, pendientes: (p.pendientes||[]).filter(x => x.id !== id) }));
+  }
   const asistentes=(cuentas||[]).filter(c=>c.rol==="asistente"&&c.adminId===(usuario.rol==="superadmin"?c.adminId:usuario.id));
   const tipoColor={llamada:B.blue,whatsapp:"#25d366",visita:B.purple,correo:B.amber,nota:"#9ca3af"};
 
@@ -3244,6 +3378,125 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
         </div>
       </div>
     </div>}
+    {tab==="pendientes" && (
+      <div>
+        <div style={{
+          fontSize:11, fontWeight:500,
+          color:"rgba(10,31,68,0.45)",
+          textTransform:"uppercase", letterSpacing:"0.12em",
+          marginBottom:14,
+        }}>Tareas operativas pendientes</div>
+
+        {/* Agregar pendiente */}
+        <div style={{display:"flex", gap:8, marginBottom:18, flexWrap:"wrap"}}>
+          <div style={{minWidth:170}}>
+            <Sel value={nuevoPendTipo} onChange={setNuevoPendTipo}
+              options={PENDIENTE_TIPOS.map(p => ({ v:p.v, l:p.l }))}/>
+          </div>
+          <div style={{flex:1, minWidth:180}}>
+            <Inp value={nuevoPendTexto} onChange={setNuevoPendTexto}
+              placeholder="Detalle opcional…"
+              onKeyDown={e=>e.key==="Enter"&&agregarPendiente()}/>
+          </div>
+          <button onClick={agregarPendiente}
+            style={{
+              display:"inline-flex", alignItems:"center", justifyContent:"center", gap:5,
+              padding:"0 14px", minHeight:44, borderRadius:8, border:"none",
+              background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+              color:"#fff",
+              fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12.5,
+              cursor:"pointer",
+              boxShadow:"0 1px 2px rgba(10,31,68,0.10)",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
+            onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
+            <IconPlus size={13} color="#fff"/>
+          </button>
+        </div>
+
+        {/* Lista de pendientes */}
+        {(f.pendientes||[]).length === 0 ? (
+          <div style={{
+            fontSize:13, color:"rgba(10,31,68,0.30)",
+            textAlign:"center", padding:"32px 0",
+            fontStyle:"italic", letterSpacing:"0.01em",
+          }}>Sin pendientes para este lead</div>
+        ) : (
+          <div>
+            {(f.pendientes||[]).map(p => {
+              const tipo = PENDIENTE_TIPOS.find(t => t.v === p.tipo) || PENDIENTE_TIPOS[7];
+              return (
+                <div key={p.id} style={{
+                  display:"flex", alignItems:"flex-start", gap:11,
+                  padding:"12px 14px",
+                  borderRadius:10,
+                  background: p.hecho ? "rgba(22,101,52,0.04)" : B.white,
+                  border: `1px solid ${p.hecho ? "rgba(22,101,52,0.20)" : "rgba(10,31,68,0.06)"}`,
+                  marginBottom:8,
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}>
+                  <button onClick={()=>togglePendiente(p.id)}
+                    aria-label={p.hecho ? "Marcar como pendiente" : "Marcar como hecho"}
+                    style={{
+                      width:20, height:20, borderRadius:5, marginTop:1,
+                      border:`1.5px solid ${p.hecho ? B.green : "rgba(10,31,68,0.20)"}`,
+                      background: p.hecho ? B.green : "transparent",
+                      cursor:"pointer", flexShrink:0,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                    }}>
+                    {p.hecho && <IconCheck size={12} color="#fff"/>}
+                  </button>
+                  <div style={{flex:1, minWidth:0}}>
+                    <div style={{
+                      fontSize:13.5, fontWeight: p.hecho ? 400 : 600,
+                      color: p.hecho ? "rgba(10,31,68,0.45)" : B.navy,
+                      letterSpacing:"-0.005em",
+                      textDecoration: p.hecho ? "line-through" : "none",
+                      marginBottom:3,
+                    }}>{p.texto}</div>
+                    <div style={{
+                      display:"inline-flex", alignItems:"center", gap:7,
+                      fontSize:10.5, color:"rgba(10,31,68,0.45)",
+                    }}>
+                      <span style={{
+                        padding:"1px 7px", borderRadius:5,
+                        background:"rgba(10,31,68,0.04)",
+                        fontWeight:500, letterSpacing:"0.01em",
+                      }}>{tipo.l}</span>
+                      <span style={{opacity:0.5}}>·</span>
+                      <span>creado {fmtF(p.fechaCreacion)}</span>
+                      {p.hecho && p.fechaCompletado && (
+                        <>
+                          <span style={{opacity:0.5}}>·</span>
+                          <span style={{color:B.green}}>hecho {fmtF(p.fechaCompletado)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <button onClick={()=>eliminarPendiente(p.id)}
+                    aria-label="Eliminar pendiente"
+                    style={{
+                      width:24, height:24, borderRadius:6,
+                      background:"transparent",
+                      border:"1px solid transparent",
+                      color:"rgba(10,31,68,0.35)",
+                      cursor:"pointer", flexShrink:0,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                    }}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(220,38,38,0.20)"; e.currentTarget.style.background="rgba(220,38,38,0.04)"; e.currentTarget.style.color=B.redBright;}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor="transparent"; e.currentTarget.style.background="transparent"; e.currentTarget.style.color="rgba(10,31,68,0.35)";}}>
+                    <IconX size={11}/>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    )}
     {tab==="checklist"&&<div>
       <div style={{
         fontSize:11, fontWeight:500,
@@ -3491,6 +3744,7 @@ function leadFromDB(row, seguimientos = []) {
     intereses: row.intereses || "",
     motivador: row.motivador || "",
     checklist: { ...EMPTY_CHECK, ...(row.checklist || {}) },
+    pendientes: Array.isArray(row.pendientes) ? row.pendientes : [],
     asignadoA: row.asignado_a || null,
     mesCreacion: row.mes_creacion || (row.created_at ? row.created_at.slice(0,7) : hoy().slice(0,7)),
     seguimientos: seguimientos
@@ -3520,6 +3774,7 @@ function leadToDB(lead, adminId) {
     intereses: lead.intereses || null,
     motivador: lead.motivador || null,
     checklist: lead.checklist || { ...EMPTY_CHECK },
+    pendientes: Array.isArray(lead.pendientes) ? lead.pendientes : [],
     mes_creacion: lead.mesCreacion || hoy().slice(0,7),
   };
 }
