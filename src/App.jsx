@@ -1385,6 +1385,20 @@ function bioSessionDesbloqueada() {
   catch { return false; }
 }
 
+// ── Timeout de inactividad configurable (5/10/15 min) ──
+const IDLE_TIMEOUT_KEY = "mf_idle_timeout_min";
+const IDLE_TIMEOUT_OPTIONS = [5, 10, 15];
+function getIdleTimeoutMin() {
+  try {
+    const v = parseInt(localStorage.getItem(IDLE_TIMEOUT_KEY), 10);
+    return IDLE_TIMEOUT_OPTIONS.includes(v) ? v : 15;
+  } catch { return 15; }
+}
+function setIdleTimeoutMinLS(min) {
+  try { localStorage.setItem(IDLE_TIMEOUT_KEY, String(min)); }
+  catch {}
+}
+
 /* ═══════════════════════════════════════════
    PANTALLA DE BLOQUEO BIOMÉTRICO
 ═══════════════════════════════════════════ */
@@ -1617,9 +1631,93 @@ function IdleWarningModal({ onContinue, onLogout, countdownSeconds = 60 }) {
 }
 
 /* ═══════════════════════════════════════════
+   LOGOUT CONFIRMATION MODAL — pregunta antes de cerrar sesión
+═══════════════════════════════════════════ */
+function LogoutConfirmModal({ onConfirm, onCancel, usuario }) {
+  return (
+    <div style={{
+      position:"fixed", inset:0, zIndex:1200,
+      background:"rgba(10,31,68,0.40)",
+      backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)",
+      display:"flex", alignItems:"center", justifyContent:"center", padding:24,
+      animation:"mfFadeIn .25s var(--mf-ease-out)",
+    }} onClick={(e)=>{ if(e.target===e.currentTarget) onCancel(); }}>
+      <div style={{
+        background:"#F8F6F2",
+        borderRadius:20,
+        padding:"32px 28px 26px",
+        maxWidth:400, width:"100%",
+        boxShadow:"0 24px 60px rgba(10,31,68,0.25)",
+        border:"1px solid rgba(10,31,68,0.05)",
+        animation:"mfFadeUp .35s var(--mf-ease-spring)",
+        textAlign:"center",
+        fontFamily:"'Poppins', sans-serif",
+      }}>
+        <div style={{
+          width:56, height:56, borderRadius:"50%",
+          background:"rgba(10,31,68,0.06)",
+          border:"1px solid rgba(10,31,68,0.10)",
+          margin:"0 auto 18px",
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}>
+          <IconLock size={24} color={B.navy}/>
+        </div>
+
+        <h2 style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:24, fontWeight:500,
+          color:B.navy, letterSpacing:"-0.01em",
+          margin:"0 0 10px",
+        }}>¿Cerrar sesión?</h2>
+
+        <p style={{
+          fontSize:13.5, color:"rgba(10,31,68,0.60)",
+          lineHeight:1.55, margin:"0 0 24px",
+        }}>
+          {usuario?.nombre
+            ? <>Vas a cerrar tu sesión de <strong style={{color:B.navy}}>{usuario.nombre.split(" ")[0]}</strong>.</>
+            : "Vas a salir de MarFlow."}
+        </p>
+
+        <div style={{display:"flex", gap:10, flexDirection:"column"}}>
+          <button onClick={onConfirm}
+            style={{
+              padding:"13px 18px", borderRadius:12, border:"none",
+              background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+              color:"#fff",
+              fontFamily:"'Poppins',sans-serif",
+              fontWeight:600, fontSize:13.5,
+              cursor:"pointer",
+              boxShadow:"0 4px 14px rgba(10,31,68,0.20)",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)"; e.currentTarget.style.boxShadow="0 6px 18px rgba(10,31,68,0.28)";}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)";}}>
+            Sí, cerrar sesión
+          </button>
+          <button onClick={onCancel}
+            style={{
+              padding:"11px 18px", borderRadius:12,
+              border:"1px solid rgba(10,31,68,0.10)",
+              background:"transparent",
+              color:"rgba(10,31,68,0.65)",
+              fontFamily:"'Poppins',sans-serif",
+              fontWeight:500, fontSize:12.5,
+              cursor:"pointer",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}>
+            No, cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
    SEGURIDAD — sección de preferencias de seguridad
 ═══════════════════════════════════════════ */
-function Seguridad({ usuario }) {
+function Seguridad({ usuario, idleTimeoutMin, onChangeIdleTimeout }) {
   const [bioActivada, setBioActivada] = useState(() => biometriaActiva(usuario?.id));
   const [bioPlataforma, setBioPlataforma] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -1773,7 +1871,7 @@ function Seguridad({ usuario }) {
         )}
       </div>
 
-      {/* Tarjeta auto-logout (informativa) */}
+      {/* Tarjeta auto-logout (interactiva con selector de tiempo) */}
       <div style={{
         background:"#fff",
         border:"1px solid rgba(10,31,68,0.06)",
@@ -1781,7 +1879,7 @@ function Seguridad({ usuario }) {
         padding:"22px 24px",
         boxShadow:"var(--mf-shadow-xs)",
       }}>
-        <div style={{display:"flex", alignItems:"flex-start", gap:14}}>
+        <div style={{display:"flex", alignItems:"flex-start", gap:14, marginBottom:18}}>
           <div style={{
             width:42, height:42, borderRadius:10,
             background:"rgba(10,31,68,0.05)",
@@ -1789,19 +1887,52 @@ function Seguridad({ usuario }) {
             display:"flex", alignItems:"center", justifyContent:"center",
             flexShrink:0,
           }}>
-            <IconShield size={20} color="#0A1F44"/>
+            <IconShield size={20} color={B.navy}/>
           </div>
           <div style={{flex:1}}>
             <div style={{
               fontFamily:"'Cormorant Garamond', serif",
               fontSize:20, fontWeight:500,
-              color:"#0A1F44", letterSpacing:"-0.01em",
+              color:B.navy, letterSpacing:"-0.01em",
               marginBottom:4,
             }}>Cierre automático por inactividad</div>
             <div style={{fontSize:13, color:"rgba(10,31,68,0.60)", lineHeight:1.55}}>
-              Por seguridad, tu sesión se cerrará automáticamente tras <strong>15 minutos sin actividad</strong>. Verás un aviso 1 minuto antes para extender la sesión.
+              Tu sesión se cerrará después del tiempo seleccionado sin actividad. Verás un aviso 1 minuto antes para extender.
             </div>
           </div>
+        </div>
+
+        {/* Selector de tiempo: 3 pills */}
+        <div style={{
+          display:"flex", gap:8, flexWrap:"wrap",
+          padding:"12px 0 4px",
+        }}>
+          {IDLE_TIMEOUT_OPTIONS.map(min => {
+            const active = idleTimeoutMin === min;
+            return (
+              <button key={min}
+                onClick={()=>onChangeIdleTimeout(min)}
+                style={{
+                  display:"inline-flex", alignItems:"center", gap:7,
+                  padding:"10px 16px", borderRadius:10,
+                  border: `1px solid ${active ? "rgba(198,169,107,0.50)" : "rgba(10,31,68,0.08)"}`,
+                  background: active ? "rgba(198,169,107,0.08)" : B.white,
+                  color: active ? B.navy : "rgba(10,31,68,0.65)",
+                  fontFamily:"'Poppins',sans-serif",
+                  fontWeight: active ? 600 : 500,
+                  fontSize:12.5,
+                  letterSpacing:"0.005em",
+                  cursor:"pointer",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                  fontVariantNumeric:"tabular-nums",
+                }}
+                onMouseEnter={e=>{if(!active){e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}}
+                onMouseLeave={e=>{if(!active){e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}}>
+                {active && <IconCheck size={12} color={B.gold}/>}
+                {min} minutos
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -5764,6 +5895,8 @@ export default function App() {
   const [loginMsg,setLoginMsg]=useState("");
   const [idleWarning,setIdleWarning]=useState(false);
   const [bioLocked,setBioLocked]=useState(false);
+  const [idleTimeoutMin,setIdleTimeoutMin]=useState(()=>getIdleTimeoutMin());
+  const [confirmingLogout,setConfirmingLogout]=useState(false);
 
   // Cargar perfil desde la tabla cuentas (con auto-create si el trigger falló)
   async function cargarPerfil(userId) {
@@ -6004,11 +6137,13 @@ export default function App() {
     // El listener onAuthStateChange limpia el resto
   }
 
-  // ── Auto-logout por inactividad (15 min total, warning a los 14) ──
+  // ── Auto-logout por inactividad (timeout configurable 5/10/15 min) ──
+  // Warning aparece 1 min antes del cierre. Si el timeout es 5 min,
+  // warning aparece a los 4 min con countdown de 60s.
   useEffect(() => {
     if (!usuario || bioLocked) return; // No correr el timer si está bloqueado o sin sesión
 
-    const WARNING_MS = 14 * 60 * 1000; // 14 min de inactividad → warning
+    const WARNING_MS = Math.max(0, (idleTimeoutMin - 1)) * 60 * 1000;
     const lastActivityRef = { current: Date.now() };
     let lastReset = 0;
 
@@ -6032,7 +6167,7 @@ export default function App() {
       events.forEach(e => window.removeEventListener(e, resetTimer));
       clearInterval(checkInterval);
     };
-  }, [usuario, bioLocked, idleWarning]);
+  }, [usuario, bioLocked, idleWarning, idleTimeoutMin]);
 
   // ── Bloqueo biométrico al cargar (si está activado y no se verificó en esta sesión) ──
   useEffect(() => {
@@ -6200,7 +6335,24 @@ export default function App() {
             {alertaCount>0&&(<div style={{minWidth:20,height:20,padding:"0 5px",background:B.redBright,borderRadius:10,fontSize:9,color:"#fff",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{alertaCount}</div>)}
             <Av name={usuario.nombre} size={32} color={usuario.color||B.gold}/>
             <div className="mf-user-nasme"><div style={{fontSize:12,fontWeight:700,color:"#fff",lineHeight:1.2}}>{usuario.nombre}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",textTransform:"capitalize",letterSpacing:".3px"}}>{usuario.rol}</div></div>
-            <button onClick={logout} style={{padding:"6px 12px",minHeight:34,borderRadius:8,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.8)",fontFamily:"'Poppins',sans-serif",fontSize:11,cursor:"pointer",flexShrink:0,fontWeight:500}}>Salir</button>
+            <button
+              onClick={()=>setConfirmingLogout(true)}
+              style={{
+                display:"inline-flex", alignItems:"center", gap:6,
+                padding:"6px 12px", minHeight:34, borderRadius:8,
+                border:"1px solid rgba(255,255,255,0.18)",
+                background:"rgba(255,255,255,0.06)",
+                color:"rgba(255,255,255,0.85)",
+                fontFamily:"'Poppins',sans-serif",
+                fontSize:11.5, fontWeight:500, letterSpacing:"0.005em",
+                cursor:"pointer", flexShrink:0,
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}
+              onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.12)"; e.currentTarget.style.borderColor="rgba(198,169,107,0.40)";}}
+              onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor="rgba(255,255,255,0.18)";}}>
+              <IconLock size={11} color="rgba(255,255,255,0.75)"/>
+              Salir
+            </button>
           </div>
         </div>
         <div className="mf-header-row2">
@@ -6223,7 +6375,11 @@ export default function App() {
         {seccion==="mensajes"&&esAdmin&&<Mensajes/>}
         {seccion==="cobranza"&&esAdmin&&<Cobranza/>}
         {seccion==="usuarios"&&esAdmin&&<Usuarios usuario={usuario} cuentas={cuentas} setCuentas={cs=>{setCuentas(cs);LS.set("mf_cuentas",cs);}}/>}
-        {seccion==="seguridad"&&<Seguridad usuario={usuario}/>}
+        {seccion==="seguridad"&&<Seguridad
+          usuario={usuario}
+          idleTimeoutMin={idleTimeoutMin}
+          onChangeIdleTimeout={(min)=>{setIdleTimeoutMin(min); setIdleTimeoutMinLS(min);}}
+        />}
       </main>
 
       <div style={{height:2,background:`linear-gradient(90deg,transparent,${B.gold}55,transparent)`,position:"fixed",bottom:0,left:0,right:0,pointerEvents:"none"}}/>
@@ -6236,6 +6392,22 @@ export default function App() {
           onLogout={async () => {
             setIdleWarning(false);
             // Limpiar state local sensible antes de cerrar sesión
+            setAllLeads({});
+            setAllEventos({});
+            setCuentas([]);
+            await supabase.auth.signOut();
+          }}
+        />
+      )}
+
+      {/* Modal de confirmación al hacer click en "Salir" */}
+      {confirmingLogout && (
+        <LogoutConfirmModal
+          usuario={usuario}
+          onCancel={()=>setConfirmingLogout(false)}
+          onConfirm={async () => {
+            setConfirmingLogout(false);
+            // Limpiar state local sensible
             setAllLeads({});
             setAllEventos({});
             setCuentas([]);
