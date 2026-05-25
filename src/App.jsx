@@ -4209,7 +4209,6 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         <FL label="Producto"><Sel value={f.producto} onChange={v=>set("producto",v)} options={PRODUCTOS_LEAD}/></FL>
         <FL label="Último contacto"><Inp value={f.ultimoContacto} onChange={v=>set("ultimoContacto",v)} type="date"/></FL>
         <FL label="Asignar a"><Sel value={f.asignadoA||""} onChange={v=>set("asignadoA",v)} options={[{v:"",l:"-- Sin asignar --"},...asistentes.map(a=>({v:a.id,l:a.nombre}))]}/></FL>
-        <FL label="Notas" span2><Inp value={f.notas} onChange={v=>set("notas",v)} rows={3} placeholder="Observaciones..."/></FL>
       </div>
 
       {/* ═══ Estado de oportunidad ═══ */}
