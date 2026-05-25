@@ -2095,47 +2095,66 @@ function SeccionActividadReciente({ usuario }) {
             <div style={{fontSize:12.5}}>Conforme uses MarFlow, verás aquí los movimientos.</div>
           </div>
         ) : (
-          items.map((a, i) => {
-            const label = ACTIVIDAD_LABEL[a.tipo]?.l || "modificó";
-            const color = colorActividad(a.tipo);
-            const meta = a.metadata || {};
-            return (
-              <div key={a.id} style={{
-                display:"flex", alignItems:"flex-start", gap:12,
-                padding:"14px 16px",
-                borderBottom: i < items.length-1 ? "1px solid rgba(10,31,68,0.04)" : "none",
-              }}>
-                <div style={{
-                  width:28, height:28, borderRadius:8, flexShrink:0,
-                  background: `${color}10`,
-                  border: `1px solid ${color}22`,
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  marginTop:1,
+          <>
+            <style>{`
+              .mf-act-row { padding: 14px 16px; gap: 12px; }
+              .mf-act-text { font-size: 13px; }
+              .mf-act-time { font-size: 10.5px; }
+              @media (max-width: 480px) {
+                .mf-act-row { padding: 12px 12px; gap: 10px; }
+                .mf-act-text { font-size: 12.5px; }
+                .mf-act-time { font-size: 10px; }
+              }
+            `}</style>
+            {items.map((a, i) => {
+              const label = ACTIVIDAD_LABEL[a.tipo]?.l || "modificó";
+              const color = colorActividad(a.tipo);
+              const meta = a.metadata || {};
+              return (
+                <div key={a.id} className="mf-act-row" style={{
+                  display:"flex", alignItems:"flex-start",
+                  borderBottom: i < items.length-1 ? "1px solid rgba(10,31,68,0.04)" : "none",
                 }}>
-                  <ActividadIcon tipo={a.tipo} color={color}/>
-                </div>
-                <div style={{flex:1, minWidth:0}}>
-                  <div style={{fontSize:13, color:"#0A1F44", lineHeight:1.45, letterSpacing:"-0.005em"}}>
-                    <strong style={{fontWeight:600}}>{a.autor_nombre || "—"}</strong>{" "}
-                    <span style={{color:"rgba(10,31,68,0.55)"}}>{label}</span>{" "}
-                    <strong style={{fontWeight:600}}>{a.entidad_nombre || "—"}</strong>
-                    {meta.de && meta.a && (
-                      <span style={{color:"rgba(10,31,68,0.45)"}}> · {meta.de} → {meta.a}</span>
-                    )}
-                    {meta.texto && (
-                      <span style={{color:"rgba(10,31,68,0.50)", fontStyle:"italic"}}> · {meta.texto}</span>
-                    )}
-                    {meta.producto && meta.numero && (
-                      <span style={{color:"rgba(10,31,68,0.50)"}}> · {meta.producto} {meta.numero}</span>
-                    )}
+                  <div style={{
+                    width:28, height:28, borderRadius:8, flexShrink:0,
+                    background: `${color}10`,
+                    border: `1px solid ${color}22`,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    marginTop:1,
+                  }}>
+                    <ActividadIcon tipo={a.tipo} color={color}/>
                   </div>
-                  <div style={{fontSize:10.5, color:"rgba(10,31,68,0.42)", marginTop:3, textTransform:"uppercase", letterSpacing:"0.10em"}}>
-                    {tiempoRelativo(a.created_at)}
+                  <div style={{
+                    flex:1, minWidth:0,
+                    overflowWrap:"anywhere", wordBreak:"break-word",
+                  }}>
+                    <div className="mf-act-text" style={{
+                      color:"#0A1F44", lineHeight:1.45, letterSpacing:"-0.005em",
+                    }}>
+                      <strong style={{fontWeight:600}}>{a.autor_nombre || "—"}</strong>{" "}
+                      <span style={{color:"rgba(10,31,68,0.55)"}}>{label}</span>{" "}
+                      <strong style={{fontWeight:600}}>{a.entidad_nombre || "—"}</strong>
+                      {meta.de && meta.a && (
+                        <span style={{color:"rgba(10,31,68,0.45)"}}> · {meta.de} → {meta.a}</span>
+                      )}
+                      {meta.texto && (
+                        <span style={{color:"rgba(10,31,68,0.50)", fontStyle:"italic"}}> · {meta.texto}</span>
+                      )}
+                      {meta.producto && meta.numero && (
+                        <span style={{color:"rgba(10,31,68,0.50)"}}> · {meta.producto} {meta.numero}</span>
+                      )}
+                    </div>
+                    <div className="mf-act-time" style={{
+                      color:"rgba(10,31,68,0.42)", marginTop:4,
+                      textTransform:"uppercase", letterSpacing:"0.10em",
+                    }}>
+                      {tiempoRelativo(a.created_at)}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </>
         )}
       </div>
     </div>
@@ -2214,15 +2233,15 @@ function SeccionAccesibilidad({ accesibilidad, onChange }) {
 function AccRow({ titulo, sub, children, last }) {
   return (
     <div style={{
-      display:"flex", alignItems:"center", gap:14,
-      padding:"16px 22px",
+      display:"flex", alignItems:"center", gap:14, flexWrap:"wrap",
+      padding:"14px 16px",
       borderBottom: last ? "none" : "1px solid rgba(10,31,68,0.04)",
     }}>
-      <div style={{flex:1, minWidth:0}}>
+      <div style={{flex:"1 1 180px", minWidth:0}}>
         <div style={{fontSize:13.5, fontWeight:500, color:"#0A1F44", letterSpacing:"-0.005em"}}>{titulo}</div>
-        {sub && <div style={{fontSize:11.5, color:"rgba(10,31,68,0.50)", marginTop:2, lineHeight:1.45}}>{sub}</div>}
+        {sub && <div style={{fontSize:11.5, color:"rgba(10,31,68,0.50)", marginTop:2, lineHeight:1.45, overflowWrap:"anywhere"}}>{sub}</div>}
       </div>
-      {children}
+      <div style={{flexShrink:0}}>{children}</div>
     </div>
   );
 }
@@ -2280,7 +2299,7 @@ function Configuracion({ usuario, idleTimeoutMin, onChangeIdleTimeout, accesibil
   const soportada = biometriaSoportada();
 
   return (
-    <div className="mf-fade-in" style={{maxWidth:720, margin:"0 auto"}}>
+    <div className="mf-fade-in" style={{maxWidth:720, margin:"0 auto", width:"100%"}}>
       <div style={{marginBottom:32}}>
         <div style={{
           fontSize:10.5, fontWeight:500,
@@ -2290,11 +2309,11 @@ function Configuracion({ usuario, idleTimeoutMin, onChangeIdleTimeout, accesibil
         }}>Preferencias</div>
         <h1 style={{
           fontFamily:"'Cormorant Garamond', serif",
-          fontSize:32, fontWeight:500,
+          fontSize:"clamp(26px, 6vw, 32px)", fontWeight:500,
           color:"#0A1F44", letterSpacing:"-0.02em",
           margin:"0 0 8px", lineHeight:1.1,
         }}>Configuración</h1>
-        <p style={{fontSize:14, color:"rgba(10,31,68,0.55)", margin:0, lineHeight:1.5}}>
+        <p style={{fontSize:13.5, color:"rgba(10,31,68,0.55)", margin:0, lineHeight:1.5}}>
           Controla cómo accedes a MarFlow, revisa la actividad reciente y ajusta la experiencia visual.
         </p>
       </div>
@@ -7665,37 +7684,172 @@ export default function App() {
           <MarflowWordmark height={18}/>
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
             <div style={{position:"relative"}}>
-              <button onClick={()=>setNotifOpen(o=>!o)} style={{width:36,height:36,borderRadius:"50%",border:`1px solid ${notifOpen?B.gold:"rgba(255,255,255,0.3)"}`,background:notifOpen?B.gold+"22":"rgba(255,255,255,0.1)",color:notifOpen?B.gold:"#fff",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .18s",flexShrink:0,position:"relative"}}>
-                🔔
-                {alertaCount>0&&<span style={{position:"absolute",top:0,right:0,width:14,height:14,background:B.redBright,borderRadius:"50%",fontSize:8,color:"#fff",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{alertaCount}</span>}
+              <button
+                onClick={()=>setNotifOpen(o=>!o)}
+                aria-label={`Alertas${alertaCount?` (${alertaCount})`:""}`}
+                style={{
+                  width:36, height:36, borderRadius:"50%",
+                  border:`1px solid ${notifOpen ? B.gold : "rgba(255,255,255,0.18)"}`,
+                  background: notifOpen ? "rgba(198,169,107,0.18)" : "rgba(255,255,255,0.05)",
+                  color:"#fff",
+                  cursor:"pointer",
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                  flexShrink:0, position:"relative",
+                }}>
+                <IconBell size={15} color={notifOpen ? B.gold : "rgba(255,255,255,0.85)"}/>
+                {alertaCount>0 && (
+                  <span style={{
+                    position:"absolute", top:-2, right:-2,
+                    minWidth:16, height:16, padding:"0 4px",
+                    background:B.redBright,
+                    border:"2px solid #0A1F44",
+                    borderRadius:10,
+                    fontSize:9, color:"#fff", fontWeight:700,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontFamily:"'Poppins', sans-serif",
+                    letterSpacing:0,
+                  }}>{alertaCount}</span>
+                )}
               </button>
-              {notifOpen&&(
-                <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:44,right:0,width:320,background:B.white,borderRadius:14,border:`1px solid ${B.gray}`,boxShadow:B.shadowLg,zIndex:800,animation:"fadeUp .18s ease",overflow:"hidden"}}>
-                  <div style={{background:B.navy,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{fontSize:13,fontWeight:700,color:B.white}}>Centro de actividad</div><button onClick={()=>setNotifOpen(false)} style={{background:"none",border:"none",color:"rgba(255,255,255,.6)",cursor:"pointer",fontSize:16}}>✕</button></div>
-                  <div style={{padding:"12px 16px",borderBottom:`1px solid ${B.gray}`,background:B.goldDim}}><div style={{fontSize:10,fontWeight:600,color:"#64748b",textTransform:"uppercase",letterSpacing:".7px",marginBottom:4}}>Sesión actual</div><div style={{fontSize:22,fontWeight:800,color:B.navy,lineHeight:1}}>{Math.floor((Date.now()-sessionStart)/60000)} min</div><div style={{fontSize:11,color:"#64748b",marginTop:2}}>desde que ingresaste hoy</div></div>
-                  <div style={{padding:"12px 16px",borderBottom:`1px solid ${B.gray}`}}>
-                    <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".7px",marginBottom:8}}>Alertas de leads</div>
-                    {alertaCount===0&&<div style={{fontSize:12,color:B.green,fontWeight:500}}>✓ Todo en orden</div>}
-                    {leads.filter(l=>getAlertas(l).some(a=>a.tipo==="riesgo")).slice(0,3).map(l=>(<div key={l.id} style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}><span style={{fontSize:10,animation:"pulse 1.4s infinite",color:B.redBright}}>●</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:B.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.nombre}</div><div style={{fontSize:10,color:B.redBright}}>⚠ Riesgo de pérdida</div></div></div>))}
-                    {leads.filter(l=>getAlertas(l).some(a=>a.tipo==="sin_contacto")).slice(0,3).map(l=>(<div key={l.id} style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}><span style={{fontSize:10,color:B.amber}}>●</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:B.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.nombre}</div><div style={{fontSize:10,color:B.amber}}>{diasDesde(l.ultimoContacto)}d sin contacto</div></div></div>))}
-                  </div>
-                  <div style={{padding:"12px 16px"}}>
-                    <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".7px",marginBottom:8}}>Tus patrones de uso</div>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8}}>
-                      {[{l:"Mejor día",v:"Martes",ic:"📅"},{l:"Mejor horario",v:"10-12am",ic:"⏰"},{l:"Hora + respuestas",v:"11am",ic:"💬"},{l:"Leads activos",v:leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa)).length,ic:"*"}].map((m,i)=>(<div key={i} style={{background:B.cream,borderRadius:9,padding:"9px 11px"}}><div style={{fontSize:14,marginBottom:3}}>{m.ic}</div><div style={{fontSize:16,fontWeight:800,color:B.navy,lineHeight:1}}>{m.v}</div><div style={{fontSize:9,color:"#94a3b8",marginTop:2,textTransform:"uppercase",letterSpacing:".5px"}}>{m.l}</div></div>))}
+
+              {notifOpen && (
+                <div onClick={e=>e.stopPropagation()} style={{
+                  position:"absolute", top:44, right:0,
+                  width:"min(340px, calc(100vw - 32px))",
+                  background:"#F8F6F2",
+                  borderRadius:16,
+                  border:"1px solid rgba(10,31,68,0.08)",
+                  boxShadow:"0 20px 50px rgba(10,31,68,0.18), 0 4px 12px rgba(10,31,68,0.06)",
+                  zIndex:800,
+                  animation:"mfFadeUp .22s var(--mf-ease-spring)",
+                  overflow:"hidden",
+                }}>
+                  {/* Header */}
+                  <div style={{
+                    padding:"16px 18px 14px",
+                    borderBottom:"1px solid rgba(10,31,68,0.06)",
+                    display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10,
+                  }}>
+                    <div>
+                      <div style={{
+                        fontSize:10, fontWeight:500,
+                        color:"rgba(10,31,68,0.40)",
+                        textTransform:"uppercase", letterSpacing:"0.22em",
+                        marginBottom:4,
+                      }}>Notificaciones</div>
+                      <div style={{
+                        fontFamily:"'Cormorant Garamond', serif",
+                        fontSize:20, fontWeight:500, color:B.navy,
+                        letterSpacing:"-0.015em", lineHeight:1.1,
+                      }}>Centro de alertas</div>
                     </div>
-                    <div style={{marginTop:10,fontSize:10,color:"#94a3b8",fontStyle:"italic",textAlign:"center"}}>Las métricas detalladas se irán construyendo con el uso de la app</div>
+                    <button onClick={()=>setNotifOpen(false)} style={{
+                      width:28, height:28, borderRadius:8,
+                      border:"1px solid rgba(10,31,68,0.08)",
+                      background:"#fff", cursor:"pointer",
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      color:"rgba(10,31,68,0.55)",
+                    }}><IconX size={12} color="currentColor"/></button>
                   </div>
+
+                  {/* Sesión actual */}
+                  <div style={{
+                    padding:"14px 18px",
+                    borderBottom:"1px solid rgba(10,31,68,0.06)",
+                  }}>
+                    <div style={{
+                      fontSize:10, fontWeight:500,
+                      color:"rgba(10,31,68,0.45)",
+                      textTransform:"uppercase", letterSpacing:"0.18em",
+                      marginBottom:6,
+                    }}>Sesión actual</div>
+                    <div style={{
+                      fontFamily:"'Cormorant Garamond', serif",
+                      fontSize:26, fontWeight:500, lineHeight:1,
+                      color:B.navy, letterSpacing:"-0.025em",
+                      fontVariantNumeric:"tabular-nums",
+                    }}>{Math.floor((Date.now()-sessionStart)/60000)} <span style={{fontFamily:"'Poppins',sans-serif", fontSize:11, color:"rgba(10,31,68,0.50)", fontWeight:500, letterSpacing:"0.05em", textTransform:"uppercase"}}>min</span></div>
+                    <div style={{fontSize:11.5, color:"rgba(10,31,68,0.50)", marginTop:4}}>Desde que ingresaste hoy</div>
+                  </div>
+
+                  {/* Alertas de leads */}
+                  <div style={{padding:"14px 18px"}}>
+                    <div style={{
+                      fontSize:10, fontWeight:500,
+                      color:"rgba(10,31,68,0.45)",
+                      textTransform:"uppercase", letterSpacing:"0.18em",
+                      marginBottom:10,
+                    }}>Leads que requieren acción</div>
+                    {alertaCount===0 && (
+                      <div style={{
+                        fontSize:12.5, color:"rgba(10,31,68,0.55)",
+                        fontStyle:"italic", padding:"4px 0",
+                      }}>Todo en orden por ahora.</div>
+                    )}
+                    {leads.filter(l=>getAlertas(l).some(a=>a.tipo==="riesgo")).slice(0,3).map(l=>(
+                      <div key={l.id} style={{display:"flex", gap:10, alignItems:"center", padding:"8px 0", borderBottom:"1px solid rgba(10,31,68,0.04)"}}>
+                        <span style={{width:6, height:6, borderRadius:"50%", background:B.redBright, animation:"mfPulseDot 1.6s infinite", flexShrink:0}}/>
+                        <div style={{flex:1, minWidth:0}}>
+                          <div style={{fontSize:12.5, fontWeight:600, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{l.nombre}</div>
+                          <div style={{fontSize:10.5, color:B.redBright, marginTop:1, textTransform:"uppercase", letterSpacing:"0.10em"}}>Riesgo de pérdida</div>
+                        </div>
+                      </div>
+                    ))}
+                    {leads.filter(l=>getAlertas(l).some(a=>a.tipo==="sin_contacto")).slice(0,3).map(l=>(
+                      <div key={l.id} style={{display:"flex", gap:10, alignItems:"center", padding:"8px 0", borderBottom:"1px solid rgba(10,31,68,0.04)"}}>
+                        <span style={{width:6, height:6, borderRadius:"50%", background:B.gold, flexShrink:0}}/>
+                        <div style={{flex:1, minWidth:0}}>
+                          <div style={{fontSize:12.5, fontWeight:600, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{l.nombre}</div>
+                          <div style={{fontSize:10.5, color:"rgba(10,31,68,0.55)", marginTop:1}}>{diasDesde(l.ultimoContacto)} días sin contacto</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Actividad equipo (si tiene asistentes) */}
                   {esAdmin&&(()=>{
                     const miEquipo=usuario.rol==="superadmin"?cuentas.filter(c=>c.rol==="asistente"):cuentas.filter(c=>c.rol==="asistente"&&c.adminId===usuario.id);
                     if(miEquipo.length===0)return null;
                     const actHoy=(uid)=>{const all=allLeads[cuentas.find(c=>c.id===uid)?.adminId||uid]||leads;return all.flatMap(l=>l.seguimientos||[]).filter(s=>s.autor&&s.fecha===hoy()).length;};
-                    return(<div style={{padding:"12px 16px",borderTop:`1px solid ${B.gray}`}}><div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".7px",marginBottom:8}}>{usuario.rol==="superadmin"?"Actividad de todos los asistentes":"Actividad de tu equipo"}</div>{miEquipo.map(c=>{const act=actHoy(c.id);const adminNombre=cuentas.find(a=>a.id===c.adminId)?.nombre||"";return(<div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px solid ${B.gray}22`}}><Av name={c.nombre} size={28} color={B.purple}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:B.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.nombre}</div>{usuario.rol==="superadmin"&&adminNombre&&<div style={{fontSize:9,color:"#94a3b8"}}>Admin: {adminNombre}</div>}</div><div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:act>0?B.green:"#94a3b8"}}>{act}</div><div style={{fontSize:9,color:"#94a3b8"}}>hoy</div></div></div>);})}</div>);
+                    return (
+                      <div style={{padding:"14px 18px", borderTop:"1px solid rgba(10,31,68,0.06)"}}>
+                        <div style={{
+                          fontSize:10, fontWeight:500,
+                          color:"rgba(10,31,68,0.45)",
+                          textTransform:"uppercase", letterSpacing:"0.18em",
+                          marginBottom:10,
+                        }}>{usuario.rol==="superadmin" ? "Asistentes (todos)" : "Tu equipo"}</div>
+                        {miEquipo.map(c=>{
+                          const act=actHoy(c.id);
+                          const adminNombre=cuentas.find(a=>a.id===c.adminId)?.nombre||"";
+                          return (
+                            <div key={c.id} style={{display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"1px solid rgba(10,31,68,0.04)"}}>
+                              <Av name={c.nombre} size={26} color={B.navy}/>
+                              <div style={{flex:1, minWidth:0}}>
+                                <div style={{fontSize:12.5, fontWeight:600, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.nombre}</div>
+                                {usuario.rol==="superadmin"&&adminNombre && (
+                                  <div style={{fontSize:10, color:"rgba(10,31,68,0.45)", letterSpacing:"0.04em"}}>Admin · {adminNombre}</div>
+                                )}
+                              </div>
+                              <div style={{textAlign:"right", flexShrink:0}}>
+                                <div style={{
+                                  fontFamily:"'Cormorant Garamond', serif",
+                                  fontSize:18, fontWeight:500, lineHeight:1,
+                                  color: act>0 ? "#059669" : "rgba(10,31,68,0.30)",
+                                  letterSpacing:"-0.02em",
+                                }}>{act}</div>
+                                <div style={{fontSize:9, color:"rgba(10,31,68,0.45)", marginTop:2, textTransform:"uppercase", letterSpacing:"0.10em"}}>hoy</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
                   })()}
                 </div>
               )}
             </div>
-            {alertaCount>0&&(<div style={{minWidth:20,height:20,padding:"0 5px",background:B.redBright,borderRadius:10,fontSize:9,color:"#fff",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{alertaCount}</div>)}
             <Av name={usuario.nombre} size={32} color={usuario.color||B.gold}/>
             <div className="mf-user-nasme"><div style={{fontSize:12,fontWeight:700,color:"#fff",lineHeight:1.2}}>{usuario.nombre}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",textTransform:"capitalize",letterSpacing:".3px"}}>{usuario.rol}</div></div>
             <button
