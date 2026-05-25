@@ -40,6 +40,16 @@ const PRODUCTOS_AHORRO  = ["Retiro","Ahorro","Inversión","Patrimonial","Educaci
 // Productos que tienen póliza con fecha de renovación (cartera vigente)
 const POLIZA_PRODUCTOS = ["Auto","GMM","Hogar","Vida"];
 
+// Estados de oportunidad — reemplaza el concepto "temperatura" (frío/tibio/caliente)
+// Sistema híbrido: manual prevalece; si no hay manual, se calcula auto vía getEstadoOportunidad()
+const ESTADOS_OPORTUNIDAD = [
+  { v:"muy_interesado",    l:"Muy interesado",    sub:"Cliente receptivo y activo",            color:"#b91c1c" },
+  { v:"alta_oportunidad",  l:"Alta oportunidad",  sub:"Referido o alta probabilidad de cierre", color:"#C6A96B" },
+  { v:"seguimiento_debil", l:"Seguimiento débil", sub:"Pocas interacciones o muchos días sin actividad", color:"#d97706" },
+  { v:"en_pausa",          l:"En pausa",          sub:"Cliente pidió esperar o retomar después", color:"#64748b" },
+  { v:"patrimonial",       l:"Perfil patrimonial", sub:"Capacidad financiera elevada o alto ticket", color:"#7c3aed" },
+];
+
 // Tipos de pendientes operativos (tareas dentro de cada lead)
 const PENDIENTE_TIPOS = [
   { v:"cotizacion",  l:"Enviar cotización" },
@@ -193,15 +203,40 @@ const ACTIVIDAD_LABEL = {
   "evento.completado": { l: "completó",                icon: "check"    },
 };
 
-function getTempLead(lead) {
-  if(lead.sinSeguimiento) return null;
+// Devuelve el objeto ESTADOS_OPORTUNIDAD del estado actual del lead, o null.
+// Híbrido: si el asesor asignó manualmente → prevalece. Si no, calcula:
+//   - es_referido true → "alta_oportunidad"
+//   - interacciones <= 1 y días sin contacto >= 5 → "seguimiento_debil"
+function getEstadoOportunidad(lead) {
+  if (!lead) return null;
+  if (lead.sinSeguimiento) return null;
+  // 1) Manual prevalece
+  if (lead.estadoOportunidad) {
+    return ESTADOS_OPORTUNIDAD.find(e => e.v === lead.estadoOportunidad) || null;
+  }
+  // 2) Referido → alta oportunidad
+  if (lead.esReferido) {
+    return ESTADOS_OPORTUNIDAD.find(e => e.v === "alta_oportunidad");
+  }
+  // 3) Seguimiento débil: pocas interacciones + sin contacto reciente
+  const chk = lead.checklist || {};
+  const interact = [chk.wa1, chk.wa2, chk.call1, chk.call2, chk.email].filter(Boolean).length;
   const dias = diasDesde(lead.ultimoContacto);
-  const chk = lead.checklist||{};
-  const interact = [chk.wa1,chk.wa2,chk.call1,chk.call2,chk.email].filter(Boolean).length;
-  const etapasCalientes = ["cita","seguimiento","cierre"];
-  if(dias<=2 && (interact>=2 || etapasCalientes.includes(lead.etapa))) return {nivel:"caliente",icon:"🔥",color:"#dc2626",label:"Caliente"};
-  if(dias<=7 && interact>=1) return {nivel:"tibio",icon:"🟡",color:"#d97706",label:"Tibio"};
-  return {nivel:"frio",icon:"❄️",color:"#3b82f6",label:"Frío"};
+  if (interact <= 1 && dias >= 5) {
+    return ESTADOS_OPORTUNIDAD.find(e => e.v === "seguimiento_debil");
+  }
+  return null;
+}
+
+// Wrapper de compatibilidad para código que aún referencia getTempLead.
+// Devuelve null o un objeto con el shape antiguo { nivel, color, label } basado
+// en el estado de oportunidad equivalente. Marca para eliminación futura.
+function getTempLead(lead) {
+  const e = getEstadoOportunidad(lead);
+  if (!e) return null;
+  const nivelMap = { muy_interesado: "caliente", alta_oportunidad: "caliente",
+                     seguimiento_debil: "tibio", en_pausa: "tibio", patrimonial: "tibio" };
+  return { nivel: nivelMap[e.v] || "frio", color: e.color, label: e.l };
 }
 
 // ── Prioridades de hoy (lógica del sector asegurador/patrimonial) ──
@@ -226,18 +261,26 @@ function asesoradosAhorroPendientes(leads) {
   );
 }
 // 3) Seguimiento urgente: leads activos en riesgo de perderse
+// Devuelve true si el lead está actualmente en pausa con fecha futura.
+function leadEnPausaActiva(l) {
+  if (!l || l.estadoOportunidad !== "en_pausa") return false;
+  if (!l.pausaHasta) return true; // pausa indefinida
+  return l.pausaHasta >= hoy();
+}
+
 function seguimientoUrgente(leads) {
   return (leads || []).filter(l => {
     if (l.sinSeguimiento) return false;
     if (["otro","cierre"].includes(l.etapa)) return false;
+    if (leadEnPausaActiva(l)) return false;
     const d = diasDesde(l.ultimoContacto);
     // Lead nuevo sin contacto en >2 días
     if (l.etapa === "nuevo" && d >= 2) return true;
     // Cliente en seguimiento sin actividad reciente (riesgo de pérdida)
     if (l.etapa === "seguimiento" && d >= 5) return true;
-    // Lead caliente sin actividad reciente
-    const temp = getTempLead(l);
-    if (temp?.nivel === "caliente" && d >= 3) return true;
+    // Lead con estado "muy interesado" o "alta oportunidad" sin actividad reciente
+    const eo = getEstadoOportunidad(l);
+    if ((eo?.v === "muy_interesado" || eo?.v === "alta_oportunidad") && d >= 3) return true;
     // Cita pendiente sin reagendar (>3 días en etapa cita)
     if (l.etapa === "cita" && d >= 3) return true;
     return false;
@@ -279,14 +322,15 @@ function renovacionesPendientes(leads) {
 
 function getAlertas(lead) {
   if(lead.sinSeguimiento) return [];
+  if(leadEnPausaActiva(lead)) return [];
   const dias = diasDesde(lead.ultimoContacto);
   const a = [];
   if(!["otro","cierre"].includes(lead.etapa)) {
-    if(dias>=15) a.push({tipo:"reactivar", msg:`♻️ ${dias}d -- Reactivar`, color:B.purple});
+    if(dias>=15) a.push({tipo:"reactivar", msg:`${dias}d · Reactivar`, color:B.purple});
     else if(dias>=2) a.push({tipo:"sin_contacto", msg:`${dias}d sin contacto`, color:B.amber});
   }
-  if(lead.etapa==="seguimiento" && dias>=5) a.push({tipo:"riesgo", msg:"⚠ Riesgo de pérdida", color:B.redBright});
-  if(lead.etapa==="cita" && dias>=1) a.push({tipo:"cot", msg:"💡 Confirmar cita", color:B.blue});
+  if(lead.etapa==="seguimiento" && dias>=5) a.push({tipo:"riesgo", msg:"Riesgo de pérdida", color:B.redBright});
+  if(lead.etapa==="cita" && dias>=1) a.push({tipo:"cot", msg:"Confirmar cita", color:B.blue});
   return a;
 }
 
@@ -437,6 +481,59 @@ function FL({label,children,span2}) {
     {label&&<label style={{fontSize:10,fontWeight:600,color:"#6b7280",textTransform:"uppercase",letterSpacing:".7px"}}>{label}</label>}
     {children}
   </div>;
+}
+
+// Badge premium minimalista para "Estado de oportunidad"
+// Pasa `lead` y se resuelve automático, o `estado` (objeto de ESTADOS_OPORTUNIDAD).
+function BadgeEstado({ lead, estado, size = "sm" }) {
+  const e = estado || (lead ? getEstadoOportunidad(lead) : null);
+  if (!e) return null;
+  const padding = size === "xs" ? "2px 7px" : size === "md" ? "5px 11px" : "3px 9px";
+  const fontSize = size === "xs" ? 9.5 : size === "md" ? 11 : 10;
+  const dotSize = size === "xs" ? 5 : size === "md" ? 7 : 6;
+  return (
+    <span style={{
+      display:"inline-flex", alignItems:"center", gap:6,
+      padding,
+      borderRadius:999,
+      background:`${e.color}10`,
+      border:`1px solid ${e.color}28`,
+      color:e.color,
+      fontFamily:"'Poppins',sans-serif",
+      fontWeight:600,
+      fontSize,
+      letterSpacing:"0.04em",
+      textTransform:"uppercase",
+      lineHeight:1,
+      whiteSpace:"nowrap",
+    }}>
+      <span style={{width:dotSize, height:dotSize, borderRadius:"50%", background:e.color}}/>
+      {e.l}
+    </span>
+  );
+}
+
+// Badge "Referido" — discreto, gold champagne
+function BadgeReferido({ size = "sm" }) {
+  const padding = size === "xs" ? "2px 7px" : "3px 9px";
+  const fontSize = size === "xs" ? 9.5 : 10;
+  return (
+    <span style={{
+      display:"inline-flex", alignItems:"center", gap:5,
+      padding,
+      borderRadius:999,
+      background:"rgba(198,169,107,0.10)",
+      border:"1px solid rgba(198,169,107,0.30)",
+      color:"#8b7340",
+      fontFamily:"'Poppins',sans-serif",
+      fontWeight:600,
+      fontSize,
+      letterSpacing:"0.06em",
+      textTransform:"uppercase",
+      lineHeight:1,
+      whiteSpace:"nowrap",
+    }}>Referido</span>
+  );
 }
 
 function MFModal({onClose,children,width=520}) {
@@ -2730,9 +2827,13 @@ function Metricas({leads}) {
   const contactados = leads.filter(l=>(l.checklist?.wa1||l.checklist?.call1)&&!l.sinSeguimiento).length;
   const conv = Math.round((cierres/total)*100);
   const contRatio = Math.round((contactados/total)*100);
-  const calientes = leads.filter(l=>getTempLead(l)?.nivel==="caliente").length;
-  const tibios = leads.filter(l=>getTempLead(l)?.nivel==="tibio").length;
-  const frios = leads.filter(l=>getTempLead(l)?.nivel==="frio").length;
+  // Distribución por Estado de oportunidad (reemplaza calientes/tibios/fríos)
+  const distEstadoOp = ESTADOS_OPORTUNIDAD.map(e => ({
+    l: e.l,
+    v: leads.filter(l => getEstadoOportunidad(l)?.v === e.v).length,
+    c: e.color,
+  }));
+  const sinEstado = leads.filter(l => !l.sinSeguimiento && !getEstadoOportunidad(l)).length;
 
   // KPIs principales
   const kpis = [
@@ -2743,11 +2844,7 @@ function Metricas({leads}) {
     { l:"Sin seguimiento", v:perdidos,          sub:"Perdidos o descartados",dot:B.redBright, icon:<IconMinusCircle size={13} color="rgba(10,31,68,0.40)"/> },
   ];
 
-  const temps = [
-    { l:"Calientes", v:calientes, c:"#dc2626" },
-    { l:"Tibios",    v:tibios,    c:"#d97706" },
-    { l:"Fríos",     v:frios,     c:"#3b82f6" },
-  ];
+  const temps = distEstadoOp;
 
   return (
     <div className="mf-fade-in" style={{maxWidth:1200, margin:"0 auto"}}>
@@ -2849,12 +2946,12 @@ function Metricas({leads}) {
               fontSize:22, fontWeight:500,
               letterSpacing:"-0.01em",
               color:B.navy,
-            }}>Temperatura de leads</div>
+            }}>Estado de oportunidad</div>
             <div style={{
               fontSize:10, fontWeight:500,
               color:"rgba(10,31,68,0.40)",
               textTransform:"uppercase", letterSpacing:"0.15em",
-            }}>Calidad</div>
+            }}>Distribución</div>
           </div>
           {temps.map(t => {
             const pct = Math.round((t.v/total)*100);
@@ -3012,7 +3109,7 @@ function getMicrocopyDelDia() {
   return MF_MICROCOPY[diaDelAño % MF_MICROCOPY.length];
 }
 
-function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFiltroNav, setSeccion}) {
+function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas = [], setFiltroNav, setSeccion}) {
   const activos=leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa));
   function irA(f){setFiltroNav(f);setSeccion("pipeline");}
 
@@ -3588,6 +3685,7 @@ function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFil
         onDelete={delDash}
         cuentas={cuentas}
         usuario={usuario}
+        setEventos={setEventos}
       />
     )}
   </div>;
@@ -3597,12 +3695,7 @@ function LeadCard({lead,onClick,onContacto}) {
   const etapa=ETAPAS.find(e=>e.id===lead.etapa)||ETAPAS[0];
   const alerts=getAlertas(lead);
   const sinSeg=lead.sinSeguimiento||lead.checklist?.noInteres;
-  const temp=getTempLead(lead);
-  // color del dot de temperatura sin emoji
-  const tempColor = temp?.nivel === "caliente" ? "#dc2626"
-                  : temp?.nivel === "tibio"    ? "#d97706"
-                  : temp?.nivel === "frio"     ? "#3b82f6"
-                  : "transparent";
+  const estadoOp = getEstadoOportunidad(lead);
   return <div onClick={()=>onClick(lead)}
     style={{
       background: sinSeg ? "rgba(220,38,38,0.03)" : B.white,
@@ -3637,10 +3730,6 @@ function LeadCard({lead,onClick,onContacto}) {
     <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:5, paddingLeft:6}}>
       <div style={{flex:1, minWidth:0}}>
         <div style={{display:"flex", alignItems:"center", gap:7, marginBottom:2}}>
-          {temp && !sinSeg && (
-            <span aria-label={temp.label} title={temp.label}
-              style={{width:6, height:6, borderRadius:"50%", background:tempColor, flexShrink:0}}/>
-          )}
           {sinSeg && (
             <span style={{display:"inline-flex", color:B.redBright, flexShrink:0}}>
               <IconMinusCircle size={12}/>
@@ -3669,6 +3758,14 @@ function LeadCard({lead,onClick,onContacto}) {
         }}>{lead.producto}</span>
       )}
     </div>
+
+    {/* Estado de oportunidad + Referido (badges premium) */}
+    {!sinSeg && (estadoOp || lead.esReferido) && (
+      <div style={{display:"flex", flexWrap:"wrap", gap:5, marginBottom:6, paddingLeft:6}}>
+        {estadoOp && <BadgeEstado estado={estadoOp} size="xs"/>}
+        {lead.esReferido && <BadgeReferido size="xs"/>}
+      </div>
+    )}
 
     {/* Alertas (puntos coloreados + texto sutil, sin animaciones bruscas) */}
     {!sinSeg && alerts.length > 0 && (
@@ -3814,7 +3911,7 @@ function EnviarWhatsAppModal({ lead, usuario, onClose, onEnviado }) {
   );
 }
 
-function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
+function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
   const [f,setF]=useState({...lead});
   const [tab,setTab]=useState("info");
   const [nota,setNota]=useState("");
@@ -3874,7 +3971,47 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
       seguimientos:[{id:uid(),fecha:hoy(),texto:`Etapa: ${etA} → ${etL}${autoSinSeg?" (sin seguimiento automático)":""}`,tipo:"nota",autor:usuario?.nombre||"",rol:usuario?.rol||"",_auto:true},...(p.seguimientos||[])]}));
   }
   function guardar(){
-    onSave({...f,ultimoContacto:hoy(),ultimaActualizacion:{por:usuario?.nombre||"",rol:usuario?.rol||"",fecha:hoy()}});
+    let payload = { ...f, ultimoContacto: hoy(),
+      ultimaActualizacion: { por: usuario?.nombre||"", rol: usuario?.rol||"", fecha: hoy() } };
+
+    // Auto-acciones cuando estado=en_pausa con fecha: crear evento + pendiente
+    const pausaCambio = f.estadoOportunidad === "en_pausa"
+      && f.pausaHasta
+      && (lead?.estadoOportunidad !== "en_pausa" || lead?.pausaHasta !== f.pausaHasta);
+    if (pausaCambio) {
+      // 1) Agregar pendiente operativo "Retomar seguimiento"
+      const yaTienePend = (f.pendientes || []).some(p =>
+        !p.hecho && p.tipo === "otro" && (p.texto||"").startsWith("Retomar")
+      );
+      if (!yaTienePend) {
+        payload = {
+          ...payload,
+          pendientes: [
+            ...(f.pendientes || []),
+            { id: uid(), tipo: "otro",
+              texto: `Retomar seguimiento el ${fmtF(f.pausaHasta)}`,
+              hecho: false, fechaCreacion: hoy(), fechaCompletado: null },
+          ],
+        };
+      }
+      // 2) Crear evento en Agenda (si el contenedor proveyó setEventos)
+      if (typeof setEventos === "function") {
+        const nuevoEvento = {
+          id: uid(),
+          titulo: `Retomar seguimiento · ${f.nombre || "Lead"}`,
+          tipo: "cita", subtipo: "seguimiento",
+          fechaInicio: f.pausaHasta, fechaFin: f.pausaHasta, fecha: f.pausaHasta,
+          horaInicio: "10:00", horaFin: "10:30",
+          repeticion: "none", nota: "Auto-agendado por estado En pausa.",
+          leadId: f.id,
+          agendadoPor: usuario?.nombre || "",
+          recordatorioCot: false,
+        };
+        setEventos(p => [...(p||[]), nuevoEvento]);
+      }
+    }
+
+    onSave(payload);
     onClose();
   }
   const pendActivos = (f.pendientes||[]).filter(p=>!p.hecho).length;
@@ -3950,10 +4087,7 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
   const asistentes=(cuentas||[]).filter(c=>c.rol==="asistente"&&c.adminId===(usuario.rol==="superadmin"?c.adminId:usuario.id));
   const tipoColor={llamada:B.blue,whatsapp:"#25d366",visita:B.purple,correo:B.amber,nota:"#9ca3af"};
 
-  const tempColorLead = temp?.nivel === "caliente" ? "#dc2626"
-                      : temp?.nivel === "tibio"    ? "#d97706"
-                      : temp?.nivel === "frio"     ? "#3b82f6"
-                      : null;
+  const estadoOpLead = getEstadoOportunidad(f);
 
   return <MFModal onClose={onClose} width={640}>
     <MHead
@@ -3962,13 +4096,16 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
         <span style={{display:"inline-flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
           <span>{f.producto || "—"}</span>
           {f.estado && <><span style={{opacity:0.4}}>·</span><span>{f.estado}</span></>}
-          {temp && tempColorLead && (
+          {estadoOpLead && (
             <>
               <span style={{opacity:0.4}}>·</span>
-              <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
-                <span style={{width:7,height:7,borderRadius:"50%",background:tempColorLead}}/>
-                {temp.label}
-              </span>
+              <BadgeEstado estado={estadoOpLead} size="xs"/>
+            </>
+          )}
+          {f.esReferido && (
+            <>
+              <span style={{opacity:0.4}}>·</span>
+              <BadgeReferido size="xs"/>
             </>
           )}
         </span>
@@ -4062,16 +4199,109 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
         {a.msg}
       </div>
     ))}
-    {tab==="info"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
-      <FL label="Nombre completo" span2><Inp value={f.nombre} onChange={v=>set("nombre",v)}/></FL>
-      <FL label="Teléfono / WhatsApp"><Inp value={f.telefono} onChange={v=>set("telefono",v)}/></FL>
-      <FL label="Edad"><Inp value={f.edad} onChange={v=>set("edad",v)} type="number"/></FL>
-      <FL label="Correo" span2><Inp value={f.correo} onChange={v=>set("correo",v)} type="email"/></FL>
-      <FL label="Estado de la República"><Sel value={f.estado} onChange={v=>set("estado",v)} options={[{v:"",l:"Seleccionar..."},...ESTADOS_MX.map(e=>({v:e,l:e}))]}/></FL>
-      <FL label="Producto"><Sel value={f.producto} onChange={v=>set("producto",v)} options={PRODUCTOS_LEAD}/></FL>
-      <FL label="Último contacto"><Inp value={f.ultimoContacto} onChange={v=>set("ultimoContacto",v)} type="date"/></FL>
-      <FL label="Asignar a"><Sel value={f.asignadoA||""} onChange={v=>set("asignadoA",v)} options={[{v:"",l:"-- Sin asignar --"},...asistentes.map(a=>({v:a.id,l:a.nombre}))]}/></FL>
-      <FL label="Notas" span2><Inp value={f.notas} onChange={v=>set("notas",v)} rows={3} placeholder="Observaciones..."/></FL>
+    {tab==="info"&&<div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
+        <FL label="Nombre completo" span2><Inp value={f.nombre} onChange={v=>set("nombre",v)}/></FL>
+        <FL label="Teléfono / WhatsApp"><Inp value={f.telefono} onChange={v=>set("telefono",v)}/></FL>
+        <FL label="Edad"><Inp value={f.edad} onChange={v=>set("edad",v)} type="number"/></FL>
+        <FL label="Correo" span2><Inp value={f.correo} onChange={v=>set("correo",v)} type="email"/></FL>
+        <FL label="Estado de la República"><Sel value={f.estado} onChange={v=>set("estado",v)} options={[{v:"",l:"Seleccionar..."},...ESTADOS_MX.map(e=>({v:e,l:e}))]}/></FL>
+        <FL label="Producto"><Sel value={f.producto} onChange={v=>set("producto",v)} options={PRODUCTOS_LEAD}/></FL>
+        <FL label="Último contacto"><Inp value={f.ultimoContacto} onChange={v=>set("ultimoContacto",v)} type="date"/></FL>
+        <FL label="Asignar a"><Sel value={f.asignadoA||""} onChange={v=>set("asignadoA",v)} options={[{v:"",l:"-- Sin asignar --"},...asistentes.map(a=>({v:a.id,l:a.nombre}))]}/></FL>
+        <FL label="Notas" span2><Inp value={f.notas} onChange={v=>set("notas",v)} rows={3} placeholder="Observaciones..."/></FL>
+      </div>
+
+      {/* ═══ Estado de oportunidad ═══ */}
+      <div style={{marginTop:24}}>
+        <div style={{
+          fontSize:10, fontWeight:500,
+          color:"rgba(10,31,68,0.40)",
+          textTransform:"uppercase", letterSpacing:"0.18em",
+          marginBottom:10,
+        }}>Estado de oportunidad</div>
+
+        <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10}}>
+          <button onClick={()=>set("estadoOportunidad", null)} style={{
+            all:"unset", cursor:"pointer",
+            padding:"6px 12px", borderRadius:999,
+            border: `1px solid ${!f.estadoOportunidad ? "rgba(10,31,68,0.30)" : "rgba(10,31,68,0.08)"}`,
+            background: !f.estadoOportunidad ? "rgba(10,31,68,0.04)" : "#fff",
+            color: !f.estadoOportunidad ? B.navy : "rgba(10,31,68,0.50)",
+            fontSize:11, fontWeight:500, letterSpacing:"0.01em",
+          }}>Auto / sin estado</button>
+          {ESTADOS_OPORTUNIDAD.map(e => {
+            const active = f.estadoOportunidad === e.v;
+            return (
+              <button key={e.v} onClick={()=>set("estadoOportunidad", e.v)} style={{
+                all:"unset", cursor:"pointer",
+                display:"inline-flex", alignItems:"center", gap:6,
+                padding:"6px 12px", borderRadius:999,
+                border: `1px solid ${active ? `${e.color}55` : "rgba(10,31,68,0.08)"}`,
+                background: active ? `${e.color}10` : "#fff",
+                color: active ? e.color : "rgba(10,31,68,0.55)",
+                fontSize:11, fontWeight:active?600:500, letterSpacing:"0.01em",
+              }}>
+                <span style={{width:6, height:6, borderRadius:"50%", background: active ? e.color : "rgba(10,31,68,0.20)"}}/>
+                {e.l}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Si "En pausa" seleccionado → input fecha */}
+        {f.estadoOportunidad === "en_pausa" && (
+          <div style={{
+            background:"rgba(100,116,139,0.04)",
+            border:"1px solid rgba(100,116,139,0.15)",
+            borderRadius:10,
+            padding:"12px 14px",
+            marginTop:6,
+          }}>
+            <div style={{fontSize:11.5, color:"rgba(10,31,68,0.65)", marginBottom:8, lineHeight:1.45}}>
+              ¿Cuándo retomas el seguimiento? Al guardar, MarFlow agendará un evento y agregará un pendiente.
+            </div>
+            <FL label="Retomar el día">
+              <Inp type="date" value={f.pausaHasta||""} onChange={v=>set("pausaHasta", v)}/>
+            </FL>
+          </div>
+        )}
+
+        {/* Toggle referido */}
+        <div style={{
+          display:"flex", alignItems:"center", gap:12,
+          marginTop:14, padding:"12px 14px",
+          background:"rgba(198,169,107,0.05)",
+          border:"1px solid rgba(198,169,107,0.18)",
+          borderRadius:10,
+          flexWrap:"wrap",
+        }}>
+          <button onClick={()=>set("esReferido", !f.esReferido)} style={{
+            all:"unset", cursor:"pointer",
+            display:"flex", alignItems:"center", gap:9,
+          }}>
+            <span style={{
+              width:18, height:18, borderRadius:5,
+              background: f.esReferido ? "#C6A96B" : "#fff",
+              border: `1.5px solid ${f.esReferido ? "#C6A96B" : "rgba(10,31,68,0.20)"}`,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              flexShrink:0,
+            }}>
+              {f.esReferido && <IconCheck size={11} color="#fff"/>}
+            </span>
+            <span style={{fontSize:12.5, fontWeight:600, color:B.navy, letterSpacing:"-0.005em"}}>Es referido</span>
+          </button>
+          {f.esReferido && (
+            <div style={{flex:"1 1 180px", minWidth:140}}>
+              <Inp value={f.referidoPor||""} onChange={v=>set("referidoPor", v)}
+                placeholder="¿Por quién? (opcional)"/>
+            </div>
+          )}
+        </div>
+        <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:8, lineHeight:1.45, fontStyle:"italic"}}>
+          Los referidos se marcan automáticamente como "Alta oportunidad" cuando no eliges otro estado manual.
+        </div>
+      </div>
     </div>}
     {tab==="estrategia"&&<div style={{display:"grid",gap:12}}>
       <FL label="Objeciones del cliente"><Inp value={f.objeciones||""} onChange={v=>set("objeciones",v)} rows={2} placeholder="¿Qué lo detiene de comprar?"/></FL>
@@ -4657,6 +4887,10 @@ function leadFromDB(row, seguimientos = []) {
     checklist: { ...EMPTY_CHECK, ...(row.checklist || {}) },
     pendientes: Array.isArray(row.pendientes) ? row.pendientes : [],
     polizas: Array.isArray(row.polizas) ? row.polizas : [],
+    estadoOportunidad: row.estado_oportunidad || null,
+    esReferido: !!row.es_referido,
+    referidoPor: row.referido_por || "",
+    pausaHasta: row.pausa_hasta || null,
     asignadoA: row.asignado_a || null,
     mesCreacion: row.mes_creacion || (row.created_at ? row.created_at.slice(0,7) : hoy().slice(0,7)),
     seguimientos: seguimientos
@@ -4688,6 +4922,10 @@ function leadToDB(lead, adminId) {
     checklist: lead.checklist || { ...EMPTY_CHECK },
     pendientes: Array.isArray(lead.pendientes) ? lead.pendientes : [],
     polizas: Array.isArray(lead.polizas) ? lead.polizas : [],
+    estado_oportunidad: lead.estadoOportunidad || null,
+    es_referido: !!lead.esReferido,
+    referido_por: lead.referidoPor || null,
+    pausa_hasta: lead.pausaHasta || null,
     mes_creacion: lead.mesCreacion || hoy().slice(0,7),
   };
 }
@@ -4936,7 +5174,7 @@ function ImportarLeadsModal({ datos, onConfirm, onClose }) {
   );
 }
 
-function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
+function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario}) {
   const [leadAct,setLeadAct]=useState(null);
   const [nuevoM,setNuevoM]=useState(false);
   const [contactoL,setContactoL]=useState(null);
@@ -4945,7 +5183,7 @@ function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
   const [filtProd,setFiltProd]=useState("");
   const [filtTemp,setFiltTemp]=useState("");
   const fileRef=useRef();
-  const emptyL={id:uid(),nombre:"",telefono:"",correo:"",edad:"",producto:PRODUCTOS_LEAD[0],estado:"",etapa:"nuevo",ultimoContacto:hoy(),notas:"",objeciones:"",intereses:"",motivador:"",checklist:{...EMPTY_CHECK},seguimientos:[],sinSeguimiento:false,asignadoA:null,pendientes:[],polizas:[],mesCreacion:hoy().slice(0,7)};
+  const emptyL={id:uid(),nombre:"",telefono:"",correo:"",edad:"",producto:PRODUCTOS_LEAD[0],estado:"",etapa:"nuevo",ultimoContacto:hoy(),notas:"",objeciones:"",intereses:"",motivador:"",checklist:{...EMPTY_CHECK},seguimientos:[],sinSeguimiento:false,asignadoA:null,pendientes:[],polizas:[],estadoOportunidad:null,esReferido:false,referidoPor:"",pausaHasta:null,mesCreacion:hoy().slice(0,7)};
   function save(d){
     const adminId = getAdminId(usuario);
     const viejo = leads.find(l => l.id === d.id);
@@ -4970,7 +5208,7 @@ function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
   else if(filtroNav&&filtroNav!=="todos") vis=vis.filter(l=>l.etapa===filtroNav);
   if(busq) vis=vis.filter(l=>l.nombre.toLowerCase().includes(busq.toLowerCase())||l.estado?.toLowerCase().includes(busq.toLowerCase()));
   if(filtProd) vis=vis.filter(l=>l.producto===filtProd);
-  if(filtTemp) vis=vis.filter(l=>getTempLead(l)?.nivel===filtTemp);
+  if(filtTemp) vis=vis.filter(l=>getEstadoOportunidad(l)?.v===filtTemp);
   const etapasVis=(filtroNav&&!["todos","activos"].includes(filtroNav)&&ETAPAS.find(e=>e.id===filtroNav))?ETAPAS.filter(e=>e.id===filtroNav):ETAPAS;
 
   async function importar(e){
@@ -5130,13 +5368,11 @@ function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
       <Sel value={filtProd} onChange={setFiltProd}
         options={[{v:"",l:"Todos los productos"},...PRODUCTOS_LEAD.map(p=>({v:p,l:p}))]}/>
 
-      {/* Select Temperatura sin emojis (dots de color en el label) */}
+      {/* Select Estado de oportunidad */}
       <Sel value={filtTemp} onChange={setFiltTemp}
         options={[
-          {v:"",l:"Temperatura"},
-          {v:"caliente",l:"● Caliente"},
-          {v:"tibio",l:"● Tibio"},
-          {v:"frio",l:"● Frío"},
+          {v:"",l:"Estado de oportunidad"},
+          ...ESTADOS_OPORTUNIDAD.map(e => ({ v:e.v, l:e.l })),
         ]}/>
 
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={importar}/>
@@ -5198,8 +5434,8 @@ function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
         );
       })}
     </div>
-    {leadAct&&<LeadModal lead={leadAct} onClose={()=>setLeadAct(null)} onSave={save} onDelete={del} cuentas={cuentas} usuario={usuario}/>}
-    {nuevoM&&<LeadModal lead={emptyL} onClose={()=>setNuevoM(false)} onSave={save} onDelete={()=>{}} cuentas={cuentas} usuario={usuario}/>}
+    {leadAct&&<LeadModal lead={leadAct} onClose={()=>setLeadAct(null)} onSave={save} onDelete={del} cuentas={cuentas} usuario={usuario} setEventos={setEventos}/>}
+    {nuevoM&&<LeadModal lead={emptyL} onClose={()=>setNuevoM(false)} onSave={save} onDelete={()=>{}} cuentas={cuentas} usuario={usuario} setEventos={setEventos}/>}
     {contactoL&&<ContactoModal lead={contactoL} onClose={()=>setContactoL(null)}/>}
     {preview&&<ImportarLeadsModal datos={preview} onConfirm={confirmarImport} onClose={()=>setPreview(null)}/>}
   </div>;
@@ -6037,7 +6273,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
 }
 function _AgendaPanelLateral(){return null;}
 
-function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
+function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
   const now=new Date();
   const mesHoy=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
   const nextDate=new Date(now.getFullYear(),now.getMonth()+1,1);
@@ -6061,7 +6297,7 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
   if(busq)base=base.filter(l=>l.nombre.toLowerCase().includes(busq.toLowerCase())||l.telefono?.includes(busq)||l.estado?.toLowerCase().includes(busq.toLowerCase()));
   if(filtProd)base=base.filter(l=>l.producto===filtProd);
   if(filtEtapa)base=base.filter(l=>l.etapa===filtEtapa);
-  if(filtTemp)base=base.filter(l=>getTempLead(l)?.nivel===filtTemp);
+  if(filtTemp)base=base.filter(l=>getEstadoOportunidad(l)?.v===filtTemp);
   const vis=base;
   const total=vis.length;const activos=vis.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa)).length;const sinSeg=vis.filter(l=>l.sinSeguimiento).length;const calientes=vis.filter(l=>getTempLead(l)?.nivel==="caliente").length;
   const seguAnt=tab==="actual"?leadsActual.filter(l=>{const mc=l.mesCreacion||l.ultimoContacto?.slice(0,7)||mesHoy;return mc<mesHoy&&l.etapa==="seguimiento"&&!l.sinSeguimiento;}).length:0;
@@ -6156,13 +6392,7 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
     @media (max-width: 640px) { .mf-col-hide { display: none !important; } }
   `;
   const fmtMes = m => { const [y, mo] = m.split("-"); return `${["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][parseInt(mo)-1]} ${y}`; };
-  const tempColorOf = (lead) => {
-    const t = getTempLead(lead);
-    if (!t) return null;
-    return t.nivel === "caliente" ? "#dc2626"
-         : t.nivel === "tibio"    ? "#d97706"
-         : "#3b82f6";
-  };
+  const tempColorOf = (lead) => getEstadoOportunidad(lead)?.color || null;
 
   return (<div className="mf-fade-in">
     <style>{LISTA_CSS}</style>
@@ -6323,10 +6553,8 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
       <Sel value={filtProd} onChange={setFiltProd} options={[{v:"",l:"Producto"},...PRODUCTOS_LEAD.map(p=>({v:p,l:p}))]}/>
       <Sel value={filtEtapa} onChange={setFiltEtapa} options={[{v:"",l:"Etapa"},...ETAPAS.map(e=>({v:e.id,l:e.label}))]}/>
       <Sel value={filtTemp} onChange={setFiltTemp} options={[
-        {v:"",l:"Temperatura"},
-        {v:"caliente",l:"● Caliente"},
-        {v:"tibio",l:"● Tibio"},
-        {v:"frio",l:"● Frío"},
+        {v:"",l:"Estado de oportunidad"},
+        ...ESTADOS_OPORTUNIDAD.map(e => ({ v:e.v, l:e.l })),
       ]}/>
       {(busq||filtProd||filtEtapa||filtTemp) && (
         <button onClick={()=>{setBusq(""); setFiltProd(""); setFiltEtapa(""); setFiltTemp("");}}
@@ -6497,9 +6725,8 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
                     </span>
                   </td>
                   <td className="mf-td" style={{textAlign: "center"}}>
-                    {tempColor ? (
-                      <span aria-label={getTempLead(lead)?.label} title={getTempLead(lead)?.label}
-                        style={{display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: tempColor}}/>
+                    {getEstadoOportunidad(lead) ? (
+                      <BadgeEstado lead={lead} size="xs"/>
                     ) : (
                       <span style={{color: "rgba(10,31,68,0.15)", fontSize: 11}}>—</span>
                     )}
@@ -6540,8 +6767,8 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
       </div>
     </div>
     {contactoL&&<ContactoModal lead={contactoL} onClose={()=>setContactoL(null)}/>}
-    {leadAct&&<LeadModal lead={leadAct} onClose={()=>setLeadAct(null)} onSave={save} onDelete={del} cuentas={cuentas} usuario={usuario}/>}
-    {nuevoM&&<LeadModal lead={{...emptyL,mesCreacion:tab==="sig"?mesSig:mesHoy}} onClose={()=>setNuevoM(false)} onSave={d=>{save(d);setNuevoM(false);}} onDelete={()=>{}} cuentas={cuentas} usuario={usuario}/>}
+    {leadAct&&<LeadModal lead={leadAct} onClose={()=>setLeadAct(null)} onSave={save} onDelete={del} cuentas={cuentas} usuario={usuario} setEventos={setEventos}/>}
+    {nuevoM&&<LeadModal lead={{...emptyL,mesCreacion:tab==="sig"?mesSig:mesHoy}} onClose={()=>setNuevoM(false)} onSave={d=>{save(d);setNuevoM(false);}} onDelete={()=>{}} cuentas={cuentas} usuario={usuario} setEventos={setEventos}/>}
 
     {/* Barra de acción de selección múltiple — flotante abajo */}
     {seleccionados.size > 0 && (
@@ -7884,9 +8111,9 @@ export default function App() {
       )}
 
       <main className="mf-main">
-        {seccion==="dashboard"&&esAdmin&&<Dashboard leads={leads} setLeads={setLeads} eventos={eventos} usuario={usuario} cuentas={cuentas} setFiltroNav={setFiltroNav} setSeccion={setSeccion}/>}
-        {seccion==="pipeline"&&esAdmin&&<Pipeline leads={leads} setLeads={setLeads} filtroNav={filtroNav} esAdmin={esAdmin} cuentas={cuentas} usuario={usuario}/>}
-        {seccion==="lista"&&<ListaLeads leads={leads} setLeads={setLeads} cuentas={cuentas} usuario={usuario} esAsistente={esAsistente}/>}
+        {seccion==="dashboard"&&esAdmin&&<Dashboard leads={leads} setLeads={setLeads} eventos={eventos} setEventos={setEventos} usuario={usuario} cuentas={cuentas} setFiltroNav={setFiltroNav} setSeccion={setSeccion}/>}
+        {seccion==="pipeline"&&esAdmin&&<Pipeline leads={leads} setLeads={setLeads} setEventos={setEventos} filtroNav={filtroNav} esAdmin={esAdmin} cuentas={cuentas} usuario={usuario}/>}
+        {seccion==="lista"&&<ListaLeads leads={leads} setLeads={setLeads} setEventos={setEventos} cuentas={cuentas} usuario={usuario} esAsistente={esAsistente}/>}
         {seccion==="agenda"&&<Agenda eventos={eventos} setEventos={setEventos} leads={leads} esAsistente={esAsistente} usuario={usuario}/>}
         {seccion==="metricas"&&esAdmin&&<Metricas leads={leads}/>}
         {seccion==="mensajes"&&esAdmin&&<Mensajes/>}
