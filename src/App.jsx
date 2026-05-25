@@ -114,6 +114,85 @@ const initials = n => (n||"").trim().split(/\s+/).slice(0,2).map(w=>w[0]||"").jo
 const getDias = (y,m) => new Date(y,m+1,0).getDate();
 const getPrimerDia = (y,m) => { const d=new Date(y,m,1).getDay(); return d===0?6:d-1; };
 
+// adminId del usuario actual (admin → su propio id, asistente → admin asignado)
+const getAdminId = u => u?.rol === "asistente" ? u?.adminId : u?.id;
+
+// ── Registro de actividad (timeline en Configuración) ─────────────
+// Se llama desde save/del/togglePend/etc. para guardar un evento de
+// auditoría en Supabase. Fire-and-forget: nunca bloquea la UI.
+async function registrarActividad({ adminId, autor, tipo, entidad, entidadId, entidadNombre, metadata }) {
+  if (!adminId || !tipo) return;
+  try {
+    await supabase.from("actividad").insert({
+      admin_id: adminId,
+      autor_id: autor?.id || null,
+      autor_nombre: autor?.nombre || "",
+      tipo,
+      entidad: entidad || "lead",
+      entidad_id: entidadId || null,
+      entidad_nombre: entidadNombre || "",
+      metadata: metadata || {},
+    });
+  } catch { /* no bloquear UX si falla */ }
+}
+
+// Compara dos leads y devuelve la primera acción notable detectada
+function diffLead(viejo, nuevo) {
+  if (!viejo || !nuevo) return null;
+  if (viejo.etapa !== nuevo.etapa)
+    return { tipo: "lead.etapa", metadata: { de: viejo.etapa, a: nuevo.etapa } };
+  if ((viejo.producto||"") !== (nuevo.producto||""))
+    return { tipo: "lead.producto", metadata: { de: viejo.producto||"—", a: nuevo.producto||"—" } };
+  if ((viejo.asignadoA||"") !== (nuevo.asignadoA||""))
+    return { tipo: "lead.asignado", metadata: { de: viejo.asignadoA||"—", a: nuevo.asignadoA||"—" } };
+  if (!!viejo.sinSeguimiento !== !!nuevo.sinSeguimiento)
+    return { tipo: nuevo.sinSeguimiento ? "lead.perdido" : "lead.recuperado", metadata: {} };
+  // Pendientes nuevos
+  const vPendIds = new Set((viejo.pendientes||[]).map(p => p.id));
+  const pendNuevo = (nuevo.pendientes||[]).find(p => !vPendIds.has(p.id));
+  if (pendNuevo) return { tipo: "lead.pendiente_add", metadata: { texto: pendNuevo.texto||"" } };
+  // Pendientes completados
+  const pendDone = (nuevo.pendientes||[]).find(p => {
+    if (!p.hecho) return false;
+    const v = (viejo.pendientes||[]).find(x => x.id === p.id);
+    return v && !v.hecho;
+  });
+  if (pendDone) return { tipo: "lead.pendiente_done", metadata: { texto: pendDone.texto||"" } };
+  // Póliza nueva
+  const vPolIds = new Set((viejo.polizas||[]).map(p => p.id));
+  const polNueva = (nuevo.polizas||[]).find(p => !vPolIds.has(p.id));
+  if (polNueva) return { tipo: "lead.poliza_add", metadata: { producto: polNueva.producto||"", numero: polNueva.numero||"" } };
+  // Notas (cambio en notas, objeciones o intereses)
+  if ((viejo.notas||"") !== (nuevo.notas||""))
+    return { tipo: "lead.nota", metadata: {} };
+  // Edición genérica
+  const camposBase = ["nombre","telefono","correo","edad","estado","objeciones","intereses","motivador","ultimoContacto"];
+  if (camposBase.some(c => (viejo[c]||"") !== (nuevo[c]||"")))
+    return { tipo: "lead.editado", metadata: {} };
+  return null;
+}
+
+// Etiqueta humana por tipo (se usa en el timeline)
+const ACTIVIDAD_LABEL = {
+  "lead.creado":    { l: "creó",                  icon: "plus"    },
+  "lead.editado":   { l: "editó",                 icon: "edit"    },
+  "lead.eliminado": { l: "eliminó",               icon: "trash"   },
+  "lead.etapa":     { l: "cambió etapa de",       icon: "arrow"   },
+  "lead.producto":  { l: "cambió producto de",    icon: "edit"    },
+  "lead.asignado":  { l: "reasignó",              icon: "user"    },
+  "lead.perdido":   { l: "marcó como perdido a",  icon: "x"       },
+  "lead.recuperado":{ l: "recuperó a",            icon: "check"   },
+  "lead.nota":      { l: "agregó nota a",         icon: "edit"    },
+  "lead.pendiente_add":  { l: "agregó pendiente a",     icon: "plus"  },
+  "lead.pendiente_done": { l: "completó pendiente de",  icon: "check" },
+  "lead.poliza_add":     { l: "registró póliza de",     icon: "shield"},
+  "evento.creado":     { l: "agendó",                  icon: "calendar" },
+  "evento.editado":    { l: "editó evento",            icon: "edit"     },
+  "evento.eliminado":  { l: "eliminó evento",          icon: "trash"    },
+  "evento.fecha":      { l: "reagendó",                icon: "calendar" },
+  "evento.completado": { l: "completó",                icon: "check"    },
+};
+
 function getTempLead(lead) {
   if(lead.sinSeguimiento) return null;
   const dias = diasDesde(lead.ultimoContacto);
@@ -1893,9 +1972,285 @@ function LogoutConfirmModal({ onConfirm, onCancel, usuario }) {
 }
 
 /* ═══════════════════════════════════════════
-   SEGURIDAD — sección de preferencias de seguridad
+   CONFIGURACIÓN — actividad reciente, biométrico y accesibilidad
 ═══════════════════════════════════════════ */
-function Seguridad({ usuario, idleTimeoutMin, onChangeIdleTimeout }) {
+
+// Encabezado editorial reusable entre secciones de Configuración
+function SeccionTitulo({ eyebrow, titulo, sub }) {
+  return (
+    <div style={{margin:"40px 0 16px"}}>
+      <div style={{
+        fontSize:10, fontWeight:500,
+        color:"rgba(10,31,68,0.40)",
+        textTransform:"uppercase", letterSpacing:"0.22em",
+        marginBottom:6,
+      }}>{eyebrow}</div>
+      <div style={{
+        fontFamily:"'Cormorant Garamond', serif",
+        fontSize:24, fontWeight:500,
+        color:"#0A1F44", letterSpacing:"-0.015em",
+        lineHeight:1.15, marginBottom:sub?4:0,
+      }}>{titulo}</div>
+      {sub && <div style={{fontSize:12.5, color:"rgba(10,31,68,0.55)", lineHeight:1.5}}>{sub}</div>}
+    </div>
+  );
+}
+
+// Icono discreto para timeline de actividad (mapeado en ACTIVIDAD_LABEL)
+function ActividadIcon({ tipo, color = "rgba(10,31,68,0.55)" }) {
+  const which = ACTIVIDAD_LABEL[tipo]?.icon || "edit";
+  const props = { size: 12, color };
+  switch (which) {
+    case "plus":     return <IconPlus {...props}/>;
+    case "edit":     return <IconRefresh {...props}/>;
+    case "trash":    return <IconTrash {...props}/>;
+    case "arrow":    return <IconArrowRight {...props}/>;
+    case "user":     return <IconUser {...props}/>;
+    case "x":        return <IconX {...props}/>;
+    case "check":    return <IconCheck {...props}/>;
+    case "shield":   return <IconShield {...props}/>;
+    case "calendar": return <IconCalendar {...props}/>;
+    default:         return <IconRefresh {...props}/>;
+  }
+}
+
+// Color por familia de evento
+function colorActividad(tipo) {
+  if (!tipo) return "rgba(10,31,68,0.45)";
+  if (tipo.startsWith("evento.")) return "#7c3aed";
+  if (tipo === "lead.creado")     return "#059669";
+  if (tipo === "lead.eliminado")  return "#dc2626";
+  if (tipo === "lead.perdido")    return "#dc2626";
+  if (tipo === "lead.recuperado") return "#059669";
+  if (tipo === "lead.etapa")      return "#0A1F44";
+  if (tipo === "lead.poliza_add") return "#7c3aed";
+  if (tipo.startsWith("lead.pendiente_")) return "#C6A96B";
+  return "rgba(10,31,68,0.55)";
+}
+
+// Formato relativo "hace X" para timeline
+function tiempoRelativo(iso) {
+  if (!iso) return "—";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000)        return "hace un momento";
+  if (ms < 3_600_000)     return `hace ${Math.floor(ms/60_000)} min`;
+  if (ms < 86_400_000)    return `hace ${Math.floor(ms/3_600_000)} h`;
+  if (ms < 7*86_400_000)  return `hace ${Math.floor(ms/86_400_000)} d`;
+  return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+}
+
+// Timeline de últimas 15 acciones del admin (Supabase) — sub-sección de Configuración
+function SeccionActividadReciente({ usuario }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const adminId = getAdminId(usuario);
+
+  async function cargar() {
+    if (!adminId) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("actividad")
+        .select("*")
+        .eq("admin_id", adminId)
+        .order("created_at", { ascending: false })
+        .limit(15);
+      if (!error) setItems(data || []);
+    } catch { /* silencio */ }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    cargar();
+    if (!adminId) return;
+    // Realtime: refrescar cuando llegue una actividad nueva
+    const channel = supabase
+      .channel(`actividad-${adminId}`)
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "actividad", filter: `admin_id=eq.${adminId}` },
+        () => cargar())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminId]);
+
+  return (
+    <div>
+      <SeccionTitulo eyebrow="Historial" titulo="Actividad reciente"
+        sub="Últimos 15 movimientos sobre leads y agenda. Se actualiza en vivo."/>
+      <div style={{
+        background:"#fff",
+        border:"1px solid rgba(10,31,68,0.05)",
+        borderRadius:16,
+        padding:"6px 4px",
+        boxShadow:"var(--mf-shadow-xs)",
+      }}>
+        {loading ? (
+          <div style={{padding:"36px 16px", textAlign:"center", color:"rgba(10,31,68,0.45)", fontSize:12.5}}>
+            <IconLoader size={16} color="rgba(10,31,68,0.45)"/>
+          </div>
+        ) : items.length === 0 ? (
+          <div style={{padding:"36px 18px", textAlign:"center", color:"rgba(10,31,68,0.50)"}}>
+            <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:18, color:"#0A1F44", marginBottom:4}}>Sin actividad aún</div>
+            <div style={{fontSize:12.5}}>Conforme uses MarFlow, verás aquí los movimientos.</div>
+          </div>
+        ) : (
+          items.map((a, i) => {
+            const label = ACTIVIDAD_LABEL[a.tipo]?.l || "modificó";
+            const color = colorActividad(a.tipo);
+            const meta = a.metadata || {};
+            return (
+              <div key={a.id} style={{
+                display:"flex", alignItems:"flex-start", gap:12,
+                padding:"14px 16px",
+                borderBottom: i < items.length-1 ? "1px solid rgba(10,31,68,0.04)" : "none",
+              }}>
+                <div style={{
+                  width:28, height:28, borderRadius:8, flexShrink:0,
+                  background: `${color}10`,
+                  border: `1px solid ${color}22`,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  marginTop:1,
+                }}>
+                  <ActividadIcon tipo={a.tipo} color={color}/>
+                </div>
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{fontSize:13, color:"#0A1F44", lineHeight:1.45, letterSpacing:"-0.005em"}}>
+                    <strong style={{fontWeight:600}}>{a.autor_nombre || "—"}</strong>{" "}
+                    <span style={{color:"rgba(10,31,68,0.55)"}}>{label}</span>{" "}
+                    <strong style={{fontWeight:600}}>{a.entidad_nombre || "—"}</strong>
+                    {meta.de && meta.a && (
+                      <span style={{color:"rgba(10,31,68,0.45)"}}> · {meta.de} → {meta.a}</span>
+                    )}
+                    {meta.texto && (
+                      <span style={{color:"rgba(10,31,68,0.50)", fontStyle:"italic"}}> · {meta.texto}</span>
+                    )}
+                    {meta.producto && meta.numero && (
+                      <span style={{color:"rgba(10,31,68,0.50)"}}> · {meta.producto} {meta.numero}</span>
+                    )}
+                  </div>
+                  <div style={{fontSize:10.5, color:"rgba(10,31,68,0.42)", marginTop:3, textTransform:"uppercase", letterSpacing:"0.10em"}}>
+                    {tiempoRelativo(a.created_at)}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Sub-sección de Accesibilidad (toggles minimal)
+const ACCESIBILIDAD_DEFAULT = { fontSize: "normal", reduceMotion: false, highContrast: false, betterReading: false, darkMode: false };
+
+function SeccionAccesibilidad({ accesibilidad, onChange }) {
+  const v = { ...ACCESIBILIDAD_DEFAULT, ...(accesibilidad||{}) };
+  function set(k, val) { onChange({ ...v, [k]: val }); }
+
+  return (
+    <div>
+      <SeccionTitulo eyebrow="Experiencia" titulo="Accesibilidad"
+        sub="Ajusta cómo se ve MarFlow para que sea más cómodo y legible."/>
+      <div style={{
+        background:"#fff",
+        border:"1px solid rgba(10,31,68,0.05)",
+        borderRadius:16,
+        boxShadow:"var(--mf-shadow-xs)",
+        overflow:"hidden",
+      }}>
+        {/* Tamaño texto: 3 pills */}
+        <AccRow titulo="Tamaño de texto" sub="Afecta la app completa.">
+          <div style={{display:"flex", gap:6}}>
+            {[{v:"small",l:"S"},{v:"normal",l:"M"},{v:"large",l:"L"}].map(o=>{
+              const active = v.fontSize === o.v;
+              return (
+                <button key={o.v} onClick={()=>set("fontSize", o.v)} style={{
+                  padding:"7px 14px", borderRadius:8,
+                  border: `1px solid ${active ? "rgba(198,169,107,0.45)" : "rgba(10,31,68,0.08)"}`,
+                  background: active ? "rgba(198,169,107,0.08)" : "#fff",
+                  color: active ? "#0A1F44" : "rgba(10,31,68,0.55)",
+                  fontFamily:"'Poppins',sans-serif",
+                  fontWeight: active ? 600 : 500, fontSize:12,
+                  cursor:"pointer",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}>{o.l}</button>
+              );
+            })}
+          </div>
+        </AccRow>
+
+        <AccRow titulo="Alto contraste" sub="Resalta los textos sobre los fondos.">
+          <AccToggle on={v.highContrast} onChange={()=>set("highContrast", !v.highContrast)}/>
+        </AccRow>
+
+        <AccRow titulo="Reducir animaciones" sub="Recomendado si te marean o usas teclado.">
+          <AccToggle on={v.reduceMotion} onChange={()=>set("reduceMotion", !v.reduceMotion)}/>
+        </AccRow>
+
+        <AccRow titulo="Mejor lectura" sub="Aumenta interlineado para texto largo.">
+          <AccToggle on={v.betterReading} onChange={()=>set("betterReading", !v.betterReading)}/>
+        </AccRow>
+
+        <AccRow titulo="Modo oscuro" sub="Cambia toda la paleta a tema oscuro." last>
+          <div style={{display:"flex", alignItems:"center", gap:8}}>
+            <span style={{
+              fontSize:9.5, fontWeight:600,
+              color:"rgba(198,169,107,0.95)",
+              background:"rgba(198,169,107,0.10)",
+              border:"1px solid rgba(198,169,107,0.22)",
+              padding:"3px 8px", borderRadius:6,
+              textTransform:"uppercase", letterSpacing:"0.12em",
+            }}>Próximamente</span>
+            <AccToggle on={false} onChange={()=>{}} disabled/>
+          </div>
+        </AccRow>
+      </div>
+    </div>
+  );
+}
+
+function AccRow({ titulo, sub, children, last }) {
+  return (
+    <div style={{
+      display:"flex", alignItems:"center", gap:14,
+      padding:"16px 22px",
+      borderBottom: last ? "none" : "1px solid rgba(10,31,68,0.04)",
+    }}>
+      <div style={{flex:1, minWidth:0}}>
+        <div style={{fontSize:13.5, fontWeight:500, color:"#0A1F44", letterSpacing:"-0.005em"}}>{titulo}</div>
+        {sub && <div style={{fontSize:11.5, color:"rgba(10,31,68,0.50)", marginTop:2, lineHeight:1.45}}>{sub}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function AccToggle({ on, onChange, disabled }) {
+  return (
+    <button onClick={disabled ? undefined : onChange} disabled={disabled} style={{
+      width:38, height:22, borderRadius:11,
+      border:"none",
+      background: on ? "#0A1F44" : "rgba(10,31,68,0.15)",
+      position:"relative",
+      cursor: disabled ? "not-allowed" : "pointer",
+      opacity: disabled ? 0.5 : 1,
+      transition:"background var(--mf-t-fast) var(--mf-ease-out)",
+      padding:0,
+    }}>
+      <span style={{
+        position:"absolute", top:3, left: on ? 19 : 3,
+        width:16, height:16, borderRadius:"50%",
+        background:"#fff",
+        boxShadow:"0 1px 3px rgba(10,31,68,0.20)",
+        transition:"left var(--mf-t-fast) var(--mf-ease-out)",
+      }}/>
+    </button>
+  );
+}
+
+function Configuracion({ usuario, idleTimeoutMin, onChangeIdleTimeout, accesibilidad, onChangeAccesibilidad }) {
   const [bioActivada, setBioActivada] = useState(() => biometriaActiva(usuario?.id));
   const [bioPlataforma, setBioPlataforma] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -1925,8 +2280,8 @@ function Seguridad({ usuario, idleTimeoutMin, onChangeIdleTimeout }) {
   const soportada = biometriaSoportada();
 
   return (
-    <div className="mf-fade-in" style={{maxWidth:680, margin:"0 auto"}}>
-      <div style={{marginBottom:24}}>
+    <div className="mf-fade-in" style={{maxWidth:720, margin:"0 auto"}}>
+      <div style={{marginBottom:32}}>
         <div style={{
           fontSize:10.5, fontWeight:500,
           color:"rgba(10,31,68,0.45)",
@@ -1938,11 +2293,18 @@ function Seguridad({ usuario, idleTimeoutMin, onChangeIdleTimeout }) {
           fontSize:32, fontWeight:500,
           color:"#0A1F44", letterSpacing:"-0.02em",
           margin:"0 0 8px", lineHeight:1.1,
-        }}>Seguridad</h1>
+        }}>Configuración</h1>
         <p style={{fontSize:14, color:"rgba(10,31,68,0.55)", margin:0, lineHeight:1.5}}>
-          Controla cómo accedes a MarFlow desde este dispositivo.
+          Controla cómo accedes a MarFlow, revisa la actividad reciente y ajusta la experiencia visual.
         </p>
       </div>
+
+      {/* ═══ Sección · Actividad reciente ═══ */}
+      <SeccionActividadReciente usuario={usuario}/>
+
+      {/* ═══ Sección · Biométrico y acceso ═══ */}
+      <SeccionTitulo eyebrow="Acceso" titulo="Biométrico y sesión"
+        sub="Cómo te identifica MarFlow en este dispositivo."/>
 
       {/* Tarjeta biometría */}
       <div style={{
@@ -2113,6 +2475,9 @@ function Seguridad({ usuario, idleTimeoutMin, onChangeIdleTimeout }) {
           })}
         </div>
       </div>
+
+      {/* ═══ Sección · Accesibilidad ═══ */}
+      <SeccionAccesibilidad accesibilidad={accesibilidad} onChange={onChangeAccesibilidad}/>
     </div>
   );
 }
@@ -2636,9 +3001,34 @@ function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFil
   const [drawerPend, setDrawerPend] = useState(false);
   const [drawerRenov, setDrawerRenov] = useState(false);
   const [leadActDash, setLeadActDash] = useState(null);
-  function saveDash(d){ setLeads(p => p.find(l=>l.id===d.id) ? p.map(l=>l.id===d.id?d:l) : [...p, d]); }
-  function delDash(id){ setLeads(p => p.filter(l=>l.id!==id)); }
+  function saveDash(d){
+    const adminId = getAdminId(usuario);
+    const viejo = leads.find(l => l.id === d.id);
+    if (!viejo) {
+      registrarActividad({ adminId, autor: usuario, tipo: "lead.creado",
+        entidad: "lead", entidadId: d.id, entidadNombre: d.nombre });
+    } else {
+      const diff = diffLead(viejo, d);
+      if (diff) registrarActividad({ adminId, autor: usuario, ...diff,
+        entidad: "lead", entidadId: d.id, entidadNombre: d.nombre });
+    }
+    setLeads(p => p.find(l=>l.id===d.id) ? p.map(l=>l.id===d.id?d:l) : [...p, d]);
+  }
+  function delDash(id){
+    const viejo = leads.find(l => l.id === id);
+    if (viejo) registrarActividad({ adminId: getAdminId(usuario), autor: usuario,
+      tipo: "lead.eliminado", entidad: "lead", entidadId: id, entidadNombre: viejo.nombre });
+    setLeads(p => p.filter(l=>l.id!==id));
+  }
   function togglePendDash(leadId, pendId){
+    const lead = leads.find(l => l.id === leadId);
+    const pend = lead?.pendientes?.find(p => p.id === pendId);
+    if (lead && pend && !pend.hecho) {
+      registrarActividad({ adminId: getAdminId(usuario), autor: usuario,
+        tipo: "lead.pendiente_done", entidad: "lead",
+        entidadId: leadId, entidadNombre: lead.nombre,
+        metadata: { texto: pend.texto } });
+    }
     setLeads(p => p.map(l => l.id !== leadId ? l : {
       ...l,
       pendientes: (l.pendientes || []).map(pp => pp.id !== pendId ? pp : {
@@ -4552,8 +4942,25 @@ function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
   const [filtTemp,setFiltTemp]=useState("");
   const fileRef=useRef();
   const emptyL={id:uid(),nombre:"",telefono:"",correo:"",edad:"",producto:PRODUCTOS_LEAD[0],estado:"",etapa:"nuevo",ultimoContacto:hoy(),notas:"",objeciones:"",intereses:"",motivador:"",checklist:{...EMPTY_CHECK},seguimientos:[],sinSeguimiento:false,asignadoA:null,pendientes:[],polizas:[],mesCreacion:hoy().slice(0,7)};
-  function save(d){setLeads(p=>p.find(l=>l.id===d.id)?p.map(l=>l.id===d.id?d:l):[...p,d]);}
-  function del(id){setLeads(p=>p.filter(l=>l.id!==id));}
+  function save(d){
+    const adminId = getAdminId(usuario);
+    const viejo = leads.find(l => l.id === d.id);
+    if (!viejo) {
+      registrarActividad({ adminId, autor: usuario, tipo: "lead.creado",
+        entidad: "lead", entidadId: d.id, entidadNombre: d.nombre });
+    } else {
+      const diff = diffLead(viejo, d);
+      if (diff) registrarActividad({ adminId, autor: usuario, ...diff,
+        entidad: "lead", entidadId: d.id, entidadNombre: d.nombre });
+    }
+    setLeads(p => p.find(l => l.id === d.id) ? p.map(l => l.id === d.id ? d : l) : [...p, d]);
+  }
+  function del(id){
+    const viejo = leads.find(l => l.id === id);
+    if (viejo) registrarActividad({ adminId: getAdminId(usuario), autor: usuario,
+      tipo: "lead.eliminado", entidad: "lead", entidadId: id, entidadNombre: viejo.nombre });
+    setLeads(p => p.filter(l => l.id !== id));
+  }
   let vis=leads;
   if(filtroNav==="activos") vis=vis.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa));
   else if(filtroNav&&filtroNav!=="todos") vis=vis.filter(l=>l.etapa===filtroNav);
@@ -4826,11 +5233,30 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
     if(!form.titulo.trim()||!form.fechaInicio)return;
     const fi=form.fechaInicio;const ff=form.fechaFin&&form.fechaFin>=fi?form.fechaFin:fi;
     const saved={...form,fechaInicio:fi,fechaFin:ff,fecha:fi};
-    if(editId)setEventos(p=>p.map(ev=>ev.id===editId?saved:ev));else setEventos(p=>[...p,saved]);
+    const adminId = getAdminId(usuario);
+    if (editId) {
+      const viejo = eventos.find(ev => ev.id === editId);
+      const cambioFecha = viejo && (viejo.fechaInicio||viejo.fecha) !== saved.fechaInicio;
+      registrarActividad({ adminId, autor: usuario,
+        tipo: cambioFecha ? "evento.fecha" : "evento.editado",
+        entidad: "evento", entidadId: saved.id, entidadNombre: saved.titulo,
+        metadata: cambioFecha ? { de: viejo?.fechaInicio||viejo?.fecha||"", a: saved.fechaInicio } : {} });
+      setEventos(p=>p.map(ev=>ev.id===editId?saved:ev));
+    } else {
+      registrarActividad({ adminId, autor: usuario, tipo: "evento.creado",
+        entidad: "evento", entidadId: saved.id, entidadNombre: saved.titulo,
+        metadata: { fecha: saved.fechaInicio, tipo: saved.tipo } });
+      setEventos(p=>[...p,saved]);
+    }
     setModalEv(false);
     if(form.recordatorioCot&&form.tipo==="cita"){const lead=leads.find(l=>l.id===form.leadId);const payload={titulo:form.titulo,leadNombre:lead?.nombre||""};setTimeout(()=>setPopupCot(payload),30*60*1000);}
   }
-  function elimEv(id){setEventos(p=>p.filter(ev=>ev.id!==id));setModalDia(false);}
+  function elimEv(id){
+    const viejo = eventos.find(ev => ev.id === id);
+    if (viejo) registrarActividad({ adminId: getAdminId(usuario), autor: usuario,
+      tipo: "evento.eliminado", entidad: "evento", entidadId: id, entidadNombre: viejo.titulo });
+    setEventos(p=>p.filter(ev=>ev.id!==id));setModalDia(false);
+  }
   const diasMes=getDias(anio,mes);const primerDia=getPrimerDia(anio,mes);const diasMesAnt=getDias(anio,mes===0?11:mes-1);
   const strFull=(y,m,d)=>`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
   const celdas=[
@@ -5635,8 +6061,25 @@ function ListaLeads({leads,setLeads,cuentas,usuario,esAsistente}) {
   const vis=base;
   const total=vis.length;const activos=vis.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa)).length;const sinSeg=vis.filter(l=>l.sinSeguimiento).length;const calientes=vis.filter(l=>getTempLead(l)?.nivel==="caliente").length;
   const seguAnt=tab==="actual"?leadsActual.filter(l=>{const mc=l.mesCreacion||l.ultimoContacto?.slice(0,7)||mesHoy;return mc<mesHoy&&l.etapa==="seguimiento"&&!l.sinSeguimiento;}).length:0;
-  function save(d){setLeads(p=>p.find(l=>l.id===d.id)?p.map(l=>l.id===d.id?d:l):[...p,d]);}
-  function del(id){setLeads(p=>p.filter(l=>l.id!==id));}
+  function save(d){
+    const adminId = getAdminId(usuario);
+    const viejo = leads.find(l => l.id === d.id);
+    if (!viejo) {
+      registrarActividad({ adminId, autor: usuario, tipo: "lead.creado",
+        entidad: "lead", entidadId: d.id, entidadNombre: d.nombre });
+    } else {
+      const diff = diffLead(viejo, d);
+      if (diff) registrarActividad({ adminId, autor: usuario, ...diff,
+        entidad: "lead", entidadId: d.id, entidadNombre: d.nombre });
+    }
+    setLeads(p => p.find(l => l.id === d.id) ? p.map(l => l.id === d.id ? d : l) : [...p, d]);
+  }
+  function del(id){
+    const viejo = leads.find(l => l.id === id);
+    if (viejo) registrarActividad({ adminId: getAdminId(usuario), autor: usuario,
+      tipo: "lead.eliminado", entidad: "lead", entidadId: id, entidadNombre: viejo.nombre });
+    setLeads(p => p.filter(l => l.id !== id));
+  }
 
   // ── Selección múltiple ──
   function toggleSeleccion(id, e){
@@ -6752,6 +7195,22 @@ export default function App() {
   const [idleWarning,setIdleWarning]=useState(false);
   const [bioLocked,setBioLocked]=useState(false);
   const [idleTimeoutMin,setIdleTimeoutMin]=useState(()=>getIdleTimeoutMin());
+  const [accesibilidad,setAccesibilidad]=useState(()=>{
+    try { return { ...ACCESIBILIDAD_DEFAULT, ...(JSON.parse(localStorage.getItem("mf_accesibilidad")||"{}")) }; }
+    catch { return ACCESIBILIDAD_DEFAULT; }
+  });
+  function cambiarAccesibilidad(v){
+    setAccesibilidad(v);
+    try { localStorage.setItem("mf_accesibilidad", JSON.stringify(v)); } catch {}
+  }
+  // Aplicar accesibilidad al <html> mediante data-attributes (CSS hace el resto)
+  useEffect(() => {
+    const el = document.documentElement;
+    el.dataset.mfFont = accesibilidad.fontSize || "normal";
+    el.dataset.mfContrast = accesibilidad.highContrast ? "high" : "normal";
+    el.dataset.mfMotion = accesibilidad.reduceMotion ? "reduce" : "normal";
+    el.dataset.mfReading = accesibilidad.betterReading ? "wide" : "normal";
+  }, [accesibilidad]);
   const [confirmingLogout,setConfirmingLogout]=useState(false);
   const [toasts,setToasts]=useState([]);
   const toastIdRef = useRef(0);
@@ -7172,7 +7631,7 @@ export default function App() {
     ...(esAdmin?[{id:"mensajes",icon:<IconMail size={14}/>,l:"Mensajes"}]:[]),
     ...(esAdmin?[{id:"cobranza",icon:<IconDollar size={14}/>,l:"Cobranza"}]:[]),
     ...(esAdmin?[{id:"usuarios",icon:<IconUser size={14}/>,l:"Usuarios"}]:[]),
-    {id:"seguridad",icon:<IconShield size={14}/>,l:"Seguridad"},
+    {id:"configuracion",icon:<IconShield size={14}/>,l:"Configuración"},
   ];
 
   const APP_CSS=`
@@ -7294,10 +7753,12 @@ export default function App() {
         {seccion==="mensajes"&&esAdmin&&<Mensajes/>}
         {seccion==="cobranza"&&esAdmin&&<Cobranza/>}
         {seccion==="usuarios"&&esAdmin&&<Usuarios usuario={usuario} cuentas={cuentas} setCuentas={cs=>{setCuentas(cs);LS.set("mf_cuentas",cs);}}/>}
-        {seccion==="seguridad"&&<Seguridad
+        {seccion==="configuracion"&&<Configuracion
           usuario={usuario}
           idleTimeoutMin={idleTimeoutMin}
           onChangeIdleTimeout={(min)=>{setIdleTimeoutMin(min); setIdleTimeoutMinLS(min);}}
+          accesibilidad={accesibilidad}
+          onChangeAccesibilidad={cambiarAccesibilidad}
         />}
       </main>
 

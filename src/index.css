@@ -154,3 +154,30 @@ button, a, [role="button"] {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ════════════════════════════════════════════
+   ACCESIBILIDAD — controlada por data-attributes en <html>
+   ════════════════════════════════════════════ */
+html[data-mf-font="small"]  body { font-size: 14px; }
+html[data-mf-font="normal"] body { font-size: 16px; }
+html[data-mf-font="large"]  body { font-size: 18px; }
+
+html[data-mf-motion="reduce"] *,
+html[data-mf-motion="reduce"] *::before,
+html[data-mf-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+html[data-mf-contrast="high"] body {
+  color: #000;
+}
+html[data-mf-contrast="high"] :focus-visible {
+  outline-width: 3px;
+  outline-color: #0A1F44;
+}
+
+html[data-mf-reading="wide"] body {
+  line-height: 1.7;
+}
