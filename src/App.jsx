@@ -1688,6 +1688,99 @@ function bioSessionDesbloqueada() {
   catch { return false; }
 }
 
+// ── Push notifications (Web Push API) ──────────────────────────
+// VAPID public key (segura para exponer al cliente). La privada vive en Supabase Edge Function.
+const VAPID_PUBLIC_KEY = "BETs4u0cIpY8XSHeG0dW0dYRjVv160i30zx3ECKoZtRtHvpGpuSAPTQ1JQyIuH9dbygQCE4RWzIGIymcqvzhPEo";
+
+function pushSoportado() {
+  return typeof window !== "undefined"
+    && "serviceWorker" in navigator
+    && "PushManager" in window
+    && "Notification" in window;
+}
+
+// Convierte la VAPID public key a Uint8Array (formato requerido por PushManager)
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function pedirPermisoPush() {
+  if (!pushSoportado()) throw new Error("Tu dispositivo no soporta notificaciones push. iOS necesita 16.4+ y MarFlow instalada como app.");
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") throw new Error("Permiso denegado. Activa las notificaciones en los ajustes del navegador.");
+  return permission;
+}
+
+async function suscribirPush(usuario) {
+  if (!pushSoportado()) throw new Error("Push no soportado.");
+  const reg = await navigator.serviceWorker.ready;
+  // Si ya hay suscripción activa, reusarla
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+  }
+  // Guardar suscripción en Supabase
+  const json = sub.toJSON();
+  const adminId = getAdminId(usuario);
+  const device = navigator.userAgent.slice(0, 120);
+  const { error } = await supabase.from("push_subscriptions").upsert({
+    user_id: usuario.id,
+    admin_id: adminId,
+    endpoint: json.endpoint,
+    p256dh: json.keys?.p256dh || "",
+    auth: json.keys?.auth || "",
+    device_info: device,
+    last_used: new Date().toISOString(),
+  }, { onConflict: "user_id,endpoint" });
+  if (error) throw error;
+  return sub;
+}
+
+async function desuscribirPush(usuario) {
+  if (!pushSoportado()) return;
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    const endpoint = sub.endpoint;
+    await sub.unsubscribe();
+    await supabase.from("push_subscriptions")
+      .delete()
+      .eq("user_id", usuario.id)
+      .eq("endpoint", endpoint);
+  }
+}
+
+async function getSuscripcionActiva() {
+  if (!pushSoportado()) return null;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    return await reg.pushManager.getSubscription();
+  } catch { return null; }
+}
+
+// Invocar la Edge Function para enviar una push de prueba
+async function enviarPushDePrueba(usuario) {
+  const adminId = getAdminId(usuario);
+  const { data, error } = await supabase.functions.invoke("send-push-notification", {
+    body: {
+      admin_id: adminId,
+      title: "Hola desde MarFlow",
+      body: "Tus notificaciones están funcionando correctamente.",
+      url: "/",
+    },
+  });
+  if (error) throw error;
+  return data;
+}
+
 // ── Timeout de inactividad configurable (5/10/15 min) ──
 const IDLE_TIMEOUT_KEY = "mf_idle_timeout_min";
 const IDLE_TIMEOUT_OPTIONS = [5, 10, 15];
@@ -2259,6 +2352,177 @@ function SeccionActividadReciente({ usuario }) {
 }
 
 // Sub-sección de Accesibilidad (toggles minimal)
+// Sub-sección · Notificaciones push (Web Push API)
+function SeccionNotificacionesPush({ usuario }) {
+  const [estado, setEstado] = useState("verificando"); // "verificando" | "no_soportado" | "denegado" | "inactiva" | "activa"
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function refrescar() {
+    if (!pushSoportado()) { setEstado("no_soportado"); return; }
+    if (Notification.permission === "denied") { setEstado("denegado"); return; }
+    const sub = await getSuscripcionActiva();
+    setEstado(sub ? "activa" : "inactiva");
+  }
+  useEffect(() => { refrescar(); }, []);
+
+  async function activar() {
+    setMsg(""); setLoading(true);
+    try {
+      await pedirPermisoPush();
+      await suscribirPush(usuario);
+      setMsg("Notificaciones activadas en este dispositivo.");
+      await refrescar();
+    } catch (e) {
+      setMsg(e?.message || "No se pudieron activar las notificaciones.");
+    } finally { setLoading(false); }
+  }
+
+  async function desactivar() {
+    setMsg(""); setLoading(true);
+    try {
+      await desuscribirPush(usuario);
+      setMsg("Notificaciones desactivadas en este dispositivo.");
+      await refrescar();
+    } catch (e) {
+      setMsg(e?.message || "No se pudieron desactivar.");
+    } finally { setLoading(false); }
+  }
+
+  async function probar() {
+    setMsg(""); setLoading(true);
+    try {
+      await enviarPushDePrueba(usuario);
+      setMsg("Notificación de prueba enviada. Debe llegarte en segundos.");
+    } catch (e) {
+      setMsg(e?.message || "No se pudo enviar la prueba. Verifica que la Edge Function esté desplegada.");
+    } finally { setLoading(false); }
+  }
+
+  const statusColor = estado === "activa" ? "#059669"
+                    : estado === "no_soportado" || estado === "denegado" ? "#dc2626"
+                    : "rgba(10,31,68,0.45)";
+  const statusLabel = estado === "verificando" ? "Verificando…"
+                    : estado === "no_soportado" ? "No disponible en este dispositivo"
+                    : estado === "denegado" ? "Permiso denegado"
+                    : estado === "activa" ? "Activas" : "Inactivas";
+
+  return (
+    <div>
+      <SeccionTitulo eyebrow="Notificaciones" titulo="Push al iPhone"
+        sub="Recibe avisos críticos cuando MarFlow está cerrada — renovaciones, citas, seguimientos."/>
+
+      <div style={{
+        background:"#fff",
+        border:"1px solid rgba(10,31,68,0.05)",
+        borderRadius:16,
+        padding:"22px 24px",
+        boxShadow:"var(--mf-shadow-xs)",
+      }}>
+        <div style={{display:"flex", alignItems:"flex-start", gap:14, marginBottom:14, flexWrap:"wrap"}}>
+          <div style={{
+            width:42, height:42, borderRadius:10,
+            background:"rgba(124,58,237,0.08)",
+            border:"1px solid rgba(124,58,237,0.18)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            flexShrink:0,
+          }}>
+            <IconBell size={18} color="#7c3aed"/>
+          </div>
+          <div style={{flex:"1 1 200px", minWidth:0}}>
+            <div style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:20, fontWeight:500,
+              color:"#0A1F44", letterSpacing:"-0.01em",
+              marginBottom:4,
+            }}>Notificaciones push</div>
+            <div style={{fontSize:13, color:"rgba(10,31,68,0.60)", lineHeight:1.55}}>
+              Te avisamos solo de lo importante. Pocas notificaciones, premium y discretas.
+            </div>
+          </div>
+          <span style={{
+            fontSize:10, fontWeight:600,
+            color: statusColor,
+            background: `${statusColor}10`,
+            border: `1px solid ${statusColor}28`,
+            padding:"4px 10px", borderRadius:8,
+            textTransform:"uppercase", letterSpacing:"0.10em",
+            whiteSpace:"nowrap", flexShrink:0,
+          }}>{statusLabel}</span>
+        </div>
+
+        {/* Advertencia iOS */}
+        {estado === "no_soportado" && (
+          <div style={{
+            padding:"10px 13px", borderRadius:10,
+            background:"rgba(10,31,68,0.03)",
+            border:"1px solid rgba(10,31,68,0.08)",
+            fontSize:12, color:"rgba(10,31,68,0.65)",
+            lineHeight:1.55, marginBottom:12,
+          }}>
+            <strong>Requisitos:</strong> iOS 16.4 o superior · MarFlow instalada en tu pantalla de inicio (no abierta en Safari) · navegador moderno.
+          </div>
+        )}
+
+        {/* Mensaje informativo */}
+        {msg && (
+          <div style={{
+            padding:"10px 13px", borderRadius:10,
+            background:"rgba(10,31,68,0.03)",
+            border:"1px solid rgba(10,31,68,0.06)",
+            fontSize:12.5, color:"rgba(10,31,68,0.70)",
+            lineHeight:1.5, marginBottom:12,
+          }}>{msg}</div>
+        )}
+
+        {/* Acciones */}
+        <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
+          {estado === "inactiva" && (
+            <button onClick={activar} disabled={loading} style={{
+              display:"inline-flex", alignItems:"center", gap:7,
+              padding:"10px 16px", borderRadius:10, border:"none",
+              background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+              color:"#fff", fontFamily:"'Poppins',sans-serif",
+              fontWeight:600, fontSize:12.5, cursor: loading ? "wait" : "pointer",
+              opacity: loading ? 0.7 : 1,
+            }}>
+              <IconBell size={13} color="#fff"/>
+              {loading ? "Activando…" : "Activar notificaciones"}
+            </button>
+          )}
+          {estado === "activa" && (
+            <>
+              <button onClick={probar} disabled={loading} style={{
+                display:"inline-flex", alignItems:"center", gap:7,
+                padding:"10px 16px", borderRadius:10,
+                border:"1px solid rgba(10,31,68,0.08)",
+                background:"#fff", color:"#0A1F44",
+                fontFamily:"'Poppins',sans-serif",
+                fontWeight:500, fontSize:12.5, cursor: loading ? "wait" : "pointer",
+                opacity: loading ? 0.7 : 1,
+              }}>{loading ? "Enviando…" : "Enviar prueba"}</button>
+              <button onClick={desactivar} disabled={loading} style={{
+                display:"inline-flex", alignItems:"center", gap:7,
+                padding:"10px 16px", borderRadius:10,
+                border:"1px solid rgba(220,38,38,0.20)",
+                background:"transparent", color:"#991b1b",
+                fontFamily:"'Poppins',sans-serif",
+                fontWeight:500, fontSize:12.5, cursor: loading ? "wait" : "pointer",
+                opacity: loading ? 0.7 : 1,
+              }}>Desactivar</button>
+            </>
+          )}
+          {estado === "denegado" && (
+            <div style={{fontSize:12, color:"rgba(10,31,68,0.55)", lineHeight:1.5}}>
+              Diste denegar antes. Activa las notificaciones para "MarFlow" en los ajustes de iPhone → Notificaciones → MarFlow.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const ACCESIBILIDAD_DEFAULT = { fontSize: "normal", reduceMotion: false, highContrast: false, betterReading: false, darkMode: false };
 
 function SeccionAccesibilidad({ accesibilidad, onChange }) {
@@ -2593,6 +2857,9 @@ function Configuracion({ usuario, idleTimeoutMin, onChangeIdleTimeout, accesibil
       </div>
 
       {/* ═══ Sección · Accesibilidad ═══ */}
+      {/* ═══ Sección · Notificaciones push ═══ */}
+      <SeccionNotificacionesPush usuario={usuario}/>
+
       <SeccionAccesibilidad accesibilidad={accesibilidad} onChange={onChangeAccesibilidad}/>
     </div>
   );
