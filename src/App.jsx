@@ -3236,73 +3236,58 @@ function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFil
     </div>
 
     {/* Separador editorial muy sutil */}
-    <div style={{height:1, background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.05), transparent)", margin:"6px 0 28px"}}/>
+    <div style={{height:1, background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.05), transparent)", margin:"6px 0 22px"}}/>
 
-    {/* ═══ Layout dos columnas: contenido principal + sidebar mini-métricas ═══ */}
-    <div className="mf-dash-grid" style={{
+    {/* ═══ Indicadores · 4 mini-métricas en fila horizontal ═══ */}
+    <div style={{
+      fontSize:10, fontWeight:500,
+      color:"rgba(10,31,68,0.40)",
+      textTransform:"uppercase", letterSpacing:"0.22em",
+      marginBottom:14,
+    }}>Indicadores</div>
+
+    <div style={{
       display:"grid",
-      gridTemplateColumns:"minmax(0,1fr) 210px",
-      gap:36,
-      alignItems:"start",
+      gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",
+      gap:0,
+      background:"#fff",
+      border:"1px solid rgba(10,31,68,0.05)",
+      borderRadius:16,
+      boxShadow:"var(--mf-shadow-xs)",
+      overflow:"hidden",
     }}>
-      <style>{`
-        @media (max-width: 860px) {
-          .mf-dash-grid { grid-template-columns: minmax(0,1fr) !important; gap: 28px !important; }
-          .mf-dash-side { order: 2; }
-        }
-      `}</style>
-
-      {/* Columna principal */}
-      <div style={{minWidth:0}}>
-        <ActividadReciente leads={leads}/>
-      </div>
-
-      {/* Sidebar mini-métricas estilo Linear/Stripe/banca privada */}
-      <aside className="mf-dash-side" style={{
-        display:"flex", flexDirection:"column",
-        gap:2,
-        paddingTop:4,
-      }}>
-        <div style={{
-          fontSize:10, fontWeight:500,
-          color:"rgba(10,31,68,0.40)",
-          textTransform:"uppercase", letterSpacing:"0.22em",
-          marginBottom:18,
-        }}>Indicadores</div>
-
-        {[
-          { l:"Leads activos",   v: activos.length,    nav:"activos",      color: B.navy },
-          { l:"Cierres del mes", v: cierresMes,        nav:"cierre",       color: "#059669" },
-          { l:"Riesgo pérdida",  v: riesgo.length,     nav:"seguimiento",  color: "#dc2626" },
-          { l:"Sin contacto",    v: sinC.length,       nav:"activos",      color: B.gold },
-        ].map((s, i) => (
-          <button
-            key={s.l}
-            onClick={()=>irA(s.nav)}
-            style={{
-              all:"unset", cursor:"pointer",
-              padding:"14px 0",
-              borderBottom: i < 3 ? "1px solid rgba(10,31,68,0.06)" : "none",
-              display:"flex", flexDirection:"column", gap:4,
-              transition:"opacity var(--mf-t-fast) var(--mf-ease-out)",
-            }}
-            onMouseEnter={e=>{e.currentTarget.style.opacity="0.7";}}
-            onMouseLeave={e=>{e.currentTarget.style.opacity="1";}}>
-            <div style={{
-              fontFamily:"'Cormorant Garamond', serif",
-              fontSize:34, fontWeight:500, lineHeight:1,
-              letterSpacing:"-0.025em",
-              color: s.v > 0 ? s.color : "rgba(10,31,68,0.22)",
-              fontVariantNumeric:"tabular-nums",
-            }}>{s.v}</div>
-            <div style={{
-              fontSize:11, fontWeight:500,
-              color:"rgba(10,31,68,0.55)",
-              letterSpacing:"0.01em",
-            }}>{s.l}</div>
-          </button>
-        ))}
-      </aside>
+      {[
+        { l:"Leads activos",   v: activos.length,    nav:"activos",      color: B.navy },
+        { l:"Cierres del mes", v: cierresMes,        nav:"cierre",       color: "#059669" },
+        { l:"Riesgo pérdida",  v: riesgo.length,     nav:"seguimiento",  color: "#dc2626" },
+        { l:"Sin contacto",    v: sinC.length,       nav:"activos",      color: B.gold },
+      ].map((s, i, arr) => (
+        <button
+          key={s.l}
+          onClick={()=>irA(s.nav)}
+          style={{
+            all:"unset", cursor:"pointer",
+            padding:"20px 22px",
+            borderRight: i < arr.length-1 ? "1px solid rgba(10,31,68,0.05)" : "none",
+            display:"flex", flexDirection:"column", gap:5,
+            transition:"background var(--mf-t-fast) var(--mf-ease-out)",
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.background="rgba(10,31,68,0.015)";}}
+          onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+          <div style={{
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:36, fontWeight:500, lineHeight:1,
+            letterSpacing:"-0.025em",
+            color: s.v > 0 ? s.color : "rgba(10,31,68,0.22)",
+            fontVariantNumeric:"tabular-nums",
+          }}>{s.v}</div>
+          <div style={{
+            fontSize:11, fontWeight:500,
+            color:"rgba(10,31,68,0.55)",
+            letterSpacing:"0.01em",
+          }}>{s.l}</div>
+        </button>
+      ))}
     </div>
 
     {/* ═══ Drawer de Pendientes (lista compacta nombre + pendientes) ═══ */}
