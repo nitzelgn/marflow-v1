@@ -4526,6 +4526,15 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
           {f.edad && <><span style={{opacity:0.4}}>·</span><span>{f.edad} años</span></>}
           {estadoOpLead && <BadgeEstado estado={estadoOpLead} size="xs"/>}
           {f.esReferido && <BadgeReferido size="xs"/>}
+          {f.source && f.source.startsWith("email_") && (
+            <span title={f.sourceDetail || "Importado desde correo"} style={{
+              display:"inline-flex", alignItems:"center", gap:4,
+              padding:"2px 8px", borderRadius:20,
+              background:B.cream, border:`1px solid ${B.goldBorder}`,
+              fontSize:9.5, fontWeight:600, letterSpacing:"0.04em", textTransform:"uppercase",
+              color:B.navy, opacity:0.85,
+            }}>Origen · Correo</span>
+          )}
         </div>
       </div>
       <button onClick={onClose} style={{
@@ -5474,6 +5483,13 @@ function leadFromDB(row, seguimientos = []) {
     pausaHasta: row.pausa_hasta || null,
     asignadoA: row.asignado_a || null,
     mesCreacion: row.mes_creacion || (row.created_at ? row.created_at.slice(0,7) : hoy().slice(0,7)),
+    // Metadata de importación (Email Lead Ingestion)
+    source: row.source || "manual",
+    sourceDetail: row.source_detail || "",
+    importedAt: row.imported_at || null,
+    rawEmailText: row.raw_email_text || "",
+    importedBy: row.imported_by || null,
+    importBatchId: row.import_batch_id || null,
     seguimientos: seguimientos
       .filter(s => s.lead_id === row.id)
       .map(s => ({ id: s.id, fecha: s.fecha, texto: s.texto, tipo: s.tipo, autorId: s.autor_id }))
@@ -5508,6 +5524,13 @@ function leadToDB(lead, adminId) {
     referido_por: lead.referidoPor || null,
     pausa_hasta: lead.pausaHasta || null,
     mes_creacion: lead.mesCreacion || hoy().slice(0,7),
+    // Metadata de importación (Email Lead Ingestion)
+    source: lead.source || "manual",
+    source_detail: lead.sourceDetail || null,
+    imported_at: lead.importedAt || null,
+    raw_email_text: lead.rawEmailText || null,
+    imported_by: lead.importedBy || null,
+    import_batch_id: lead.importBatchId || null,
   };
 }
 
@@ -5671,6 +5694,198 @@ function parsearLeads(rows) {
   }
 
   return { leads, warnings };
+}
+
+/* ═══════════════════════════════════════════
+   PARSEO DE LEADS DESDE CORREO (Email Lead Ingestion · Fase 1)
+   - Función pura, tolerante a formatos variados
+   - Detecta 1 o varios leads en un texto pegado
+   - Retorna leads con la misma forma que parsearLeads (Excel)
+     más metadata _avisos[] y _completo (bool)
+   - Heurística de source: detecta remitente típico (Allianz/Leslie/Ale)
+═══════════════════════════════════════════ */
+function detectarSourceDesdeTexto(texto) {
+  const t = String(texto || "").toLowerCase();
+  if (/\ballianz\b/.test(t)) return "email_allianz";
+  if (/\bleslie\b/.test(t))  return "email_leslie";
+  if (/\bale(jandr[ao])?\b/.test(t)) return "email_ale";
+  return "email_otro";
+}
+
+// Productos conocidos (se busca como sustring case-insensitive)
+const _PRODUCTOS_DETECTABLES = ["Auto","GMM","Hogar","Vida","Patrimonial","Ahorro","Educación","Educacion","Gastos Médicos","Gastos Medicos"];
+
+// Regex de email estándar (no exhaustivo pero suficiente)
+const _RX_EMAIL = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+
+// Teléfono: agarra secuencias con dígitos, espacios, guiones, paréntesis, +
+// Después se normaliza con normalizarTel
+const _RX_TEL_LABEL  = /(tel(?:[ée]fono)?|celular|m[oó]vil|cel|whats?app|wa)[^\d\+]{0,8}([\+\d][\d\s\-\.\(\)]{7,})/i;
+const _RX_TEL_LIBRE  = /(\+?\d[\d\s\-\.\(\)]{8,}\d)/;
+const _RX_EDAD       = /\bedad\b[^\d]{0,5}(\d{1,3})/i;
+const _RX_EDAD_LIBRE = /\b(\d{2})\s*a[ñn]os\b/i;
+const _RX_NOMBRE     = /^(?:nombre|cliente|prospecto|lead)\s*[:\-]\s*(.+)$/im;
+const _RX_EJEC       = /(?:ejecutivo|asesor|atiende|vendedor)\s*[:\-]\s*(.+)/i;
+const _RX_PROD_LBL   = /(?:producto|ramo|inter[eé]s|seguro)\s*[:\-]\s*(.+)/i;
+const _RX_ESTADO_LBL = /\bestado\s*[:\-]\s*(.+)/i;
+
+function _detectarEstadoMx(texto) {
+  const t = String(texto || "");
+  for (const est of ESTADOS_MX) {
+    // word boundary aproximado: precedido/seguido de inicio, fin, espacio, punctuation
+    const rx = new RegExp(`(^|[^a-záéíóúñ])${est.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-záéíóúñ]|$)`, "i");
+    if (rx.test(t)) return est;
+  }
+  return "";
+}
+
+function _detectarProducto(texto) {
+  const t = String(texto || "").toLowerCase();
+  for (const p of _PRODUCTOS_DETECTABLES) {
+    if (t.includes(p.toLowerCase())) {
+      // Normaliza Educacion → Educación, Gastos Medicos → Gastos Médicos
+      if (p === "Educacion") return "Educación";
+      if (p === "Gastos Medicos") return "Gastos Médicos";
+      return p;
+    }
+  }
+  return "";
+}
+
+// Separa el texto en bloques de lead. Si no encuentra separadores fuertes,
+// retorna un solo bloque (asumiendo que es un solo lead).
+function _separarBloques(texto) {
+  const s = String(texto || "").trim();
+  if (!s) return [];
+
+  // Separadores fuertes: "Lead 1:", "Lead #2", "Prospecto 1)", "---", "═══", "***"
+  // O dos+ líneas en blanco consecutivas
+  const rxFuerte = /(?:\n\s*\n\s*\n)|(?:\n\s*[-═*]{3,}\s*\n)|(?:\n\s*(?:lead|prospecto|cliente)\s*#?\s*\d+[\):\.\-]?\s*)/i;
+
+  if (rxFuerte.test(s)) {
+    return s.split(rxFuerte).map(b => b.trim()).filter(Boolean);
+  }
+
+  // Doble salto de línea (separación más débil)
+  // pero solo si detectamos múltiples emails O múltiples nombres etiquetados
+  const emails = (s.match(new RegExp(_RX_EMAIL.source, "gi")) || []).length;
+  const nombresLbl = (s.match(/^(?:nombre|cliente|prospecto)\s*[:\-]/gim) || []).length;
+  if (emails >= 2 || nombresLbl >= 2) {
+    return s.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+  }
+
+  return [s];
+}
+
+// Extrae 1 lead de 1 bloque de texto
+function _extraerLeadDeBloque(bloque) {
+  const avisos = [];
+  let nombre = "", telefono = "", correo = "", edad = "", estado = "", producto = "", ejecutivo = "";
+
+  // Correo (lo más fácil)
+  const mEmail = bloque.match(_RX_EMAIL);
+  if (mEmail) correo = mEmail[0].trim();
+
+  // Teléfono con etiqueta primero, luego libre
+  const mTelLbl = bloque.match(_RX_TEL_LABEL);
+  if (mTelLbl) {
+    telefono = mTelLbl[2].trim();
+  } else {
+    // En texto sin etiqueta: agarra la primera secuencia numérica larga,
+    // pero excluye lo que parezca parte de un correo
+    const sinEmail = bloque.replace(_RX_EMAIL, "");
+    const mTelL = sinEmail.match(_RX_TEL_LIBRE);
+    if (mTelL) telefono = mTelL[1].trim();
+  }
+
+  // Edad
+  const mEdad = bloque.match(_RX_EDAD) || bloque.match(_RX_EDAD_LIBRE);
+  if (mEdad) edad = mEdad[1];
+
+  // Nombre etiquetado
+  const mNombre = bloque.match(_RX_NOMBRE);
+  if (mNombre) {
+    nombre = mNombre[1].trim().replace(/[<>"]/g, "").slice(0, 80);
+  } else {
+    // Fallback: primera línea no vacía que no contenga email/teléfono/etiqueta conocida
+    const lineas = bloque.split("\n").map(l => l.trim()).filter(Boolean);
+    for (const linea of lineas) {
+      if (_RX_EMAIL.test(linea)) continue;
+      if (/^\d/.test(linea)) continue;
+      if (/^(tel|cel|edad|estado|producto|ramo|seguro|asesor|ejecutivo|whats?app|m[oó]vil)/i.test(linea)) continue;
+      // Si la línea es razonable (entre 3 y 80 chars, mayormente letras), úsala
+      if (linea.length >= 3 && linea.length <= 80 && /[a-záéíóúñ]/i.test(linea)) {
+        nombre = linea.replace(/^[\-•\*\d\.\)\s]+/, "").slice(0, 80);
+        break;
+      }
+    }
+  }
+
+  // Ejecutivo
+  const mEjec = bloque.match(_RX_EJEC);
+  if (mEjec) ejecutivo = mEjec[1].trim().split("\n")[0].slice(0, 60);
+
+  // Producto con etiqueta primero, luego heurística por sustring
+  const mProdLbl = bloque.match(_RX_PROD_LBL);
+  if (mProdLbl) {
+    const cand = mProdLbl[1].trim().split("\n")[0].slice(0, 40);
+    producto = cand;
+  } else {
+    producto = _detectarProducto(bloque);
+  }
+
+  // Estado con etiqueta primero, luego heurística por lista MX
+  const mEstadoLbl = bloque.match(_RX_ESTADO_LBL);
+  if (mEstadoLbl) {
+    const cand = mEstadoLbl[1].trim().split("\n")[0].slice(0, 40);
+    // Si coincide aproximadamente con un estado MX, usa el oficial
+    const match = ESTADOS_MX.find(e => e.toLowerCase() === cand.toLowerCase());
+    estado = match || cand;
+  } else {
+    estado = _detectarEstadoMx(bloque);
+  }
+
+  // Avisos / banderas
+  if (!nombre) avisos.push("Sin nombre detectado");
+  if (!telefono && !correo) avisos.push("Sin teléfono ni correo");
+  if (telefono) {
+    const digits = normalizarTel(telefono);
+    if (digits.length < 8) avisos.push("Teléfono inválido");
+  }
+
+  const completo = !!(nombre && (telefono || correo));
+
+  return {
+    // Misma forma que parsearLeads (Excel)
+    nombre,
+    edad,
+    telefono,
+    correo,
+    estado,
+    producto,
+    ejecutivo,
+    etapa: "nuevo",
+    ultimoContacto: hoy(),
+    sinSeguimiento: false,
+    notas: "",
+    objeciones: "",
+    intereses: "",
+    motivador: "",
+    checklist: { ...EMPTY_CHECK },
+    pendientes: [],
+    polizas: [],
+    mesCreacion: hoy().slice(0,7),
+    // Metadata específica del parser
+    _completo: completo,
+    _avisos: avisos,
+  };
+}
+
+function parsearLeadsDesdeCorreo(texto) {
+  const bloques = _separarBloques(texto);
+  const leads = bloques.map(_extraerLeadDeBloque).filter(l => l.nombre || l.telefono || l.correo);
+  const source = detectarSourceDesdeTexto(texto);
+  return { leads, source };
 }
 
 /* ═══════════════════════════════════════════
@@ -7981,6 +8196,391 @@ function Usuarios({usuario,cuentas,setCuentas}) {
   </div>;
 }
 
+/* ═══════════════════════════════════════════
+   IMPORTAR CORREO — Email Lead Ingestion (Fase 1)
+   - Pega texto del correo, detecta 1+ leads, preview editable, importa batch
+   - Reusa parsearLeadsDesdeCorreo + clasificarDuplicados + leadFromDB/leadToDB
+   - Tras importar: redirect a Pipeline filtrado a etapa=nuevo
+═══════════════════════════════════════════ */
+function ImportarCorreo({ leads, setLeads, usuario, setSeccion, setFiltroNav }) {
+  const [texto, setTexto] = useState("");
+  const [parseados, setParseados] = useState([]); // [{lead, dup, incluido}]
+  const [sourceDetectado, setSourceDetectado] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [mensaje, setMensaje] = useState("");
+
+  const editable = parseados.length > 0;
+
+  function analizar() {
+    setMensaje("");
+    const { leads: detectados, source } = parsearLeadsDesdeCorreo(texto);
+    if (!detectados.length) {
+      setParseados([]);
+      setSourceDetectado("");
+      setMensaje("No se detectaron leads. Revisa el texto pegado.");
+      return;
+    }
+    // Clasifica duplicados contra leads actuales
+    const filas = detectados.map(l => {
+      const dup = esDuplicado(l, leads);
+      return {
+        lead: l,
+        dup,
+        incluido: !dup, // duplicados desmarcados por default (decisión: excluir automático)
+      };
+    });
+    setParseados(filas);
+    setSourceDetectado(source);
+  }
+
+  function actualizarCampo(idx, campo, valor) {
+    setParseados(prev => prev.map((f, i) => {
+      if (i !== idx) return f;
+      const nuevoLead = { ...f.lead, [campo]: valor };
+      // Reevalúa duplicado en vivo si cambia tel/correo
+      let dup = f.dup;
+      if (campo === "telefono" || campo === "correo") {
+        dup = esDuplicado(nuevoLead, leads);
+      }
+      // Reevalúa completo
+      const completo = !!(nuevoLead.nombre && (nuevoLead.telefono || nuevoLead.correo));
+      const avisos = [];
+      if (!nuevoLead.nombre) avisos.push("Sin nombre detectado");
+      if (!nuevoLead.telefono && !nuevoLead.correo) avisos.push("Sin teléfono ni correo");
+      if (nuevoLead.telefono && normalizarTel(nuevoLead.telefono).length < 8) avisos.push("Teléfono inválido");
+      nuevoLead._completo = completo;
+      nuevoLead._avisos = avisos;
+      return { ...f, lead: nuevoLead, dup };
+    }));
+  }
+
+  function toggleFila(idx) {
+    setParseados(prev => prev.map((f, i) => i === idx ? { ...f, incluido: !f.incluido } : f));
+  }
+
+  function limpiar() {
+    setTexto("");
+    setParseados([]);
+    setSourceDetectado("");
+    setMensaje("");
+  }
+
+  async function importar() {
+    const aImportar = parseados.filter(f => f.incluido).map(f => f.lead);
+    if (!aImportar.length) {
+      setMensaje("Selecciona al menos un lead para importar.");
+      return;
+    }
+    setGuardando(true);
+    setMensaje("");
+    try {
+      const batchId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : uid();
+      const ahora = new Date().toISOString();
+      const detalle = `Correo recibido — ${aImportar.length} lead${aImportar.length === 1 ? "" : "s"}`;
+      const nuevos = aImportar.map(l => ({
+        ...l,
+        id: uid(),
+        // Metadata de importación
+        source: sourceDetectado || "email_otro",
+        sourceDetail: detalle,
+        importedAt: ahora,
+        rawEmailText: texto,
+        importedBy: usuario?.id || null,
+        importBatchId: batchId,
+        // Quita banderas internas del parser antes de guardar
+        _completo: undefined,
+        _avisos: undefined,
+      }));
+      setLeads(prev => [...prev, ...nuevos]);
+      // Redirect a Pipeline filtrado a "nuevo" (decisión confirmada)
+      if (setFiltroNav) setFiltroNav("nuevo");
+      if (setSeccion) setSeccion("pipeline");
+    } catch (e) {
+      setMensaje("Error al importar: " + (e?.message || e));
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const totalDetectados = parseados.length;
+  const totalNuevos = parseados.filter(f => !f.dup).length;
+  const totalDup = parseados.filter(f => f.dup).length;
+  const totalIncompletos = parseados.filter(f => !f.lead._completo).length;
+  const totalSeleccionados = parseados.filter(f => f.incluido).length;
+
+  const SOURCE_LABEL = {
+    email_allianz: "Allianz",
+    email_leslie:  "Leslie",
+    email_ale:     "Ale",
+    email_otro:    "Correo",
+  };
+
+  return (
+    <div style={{maxWidth:980, margin:"0 auto", padding:"8px 0 40px"}}>
+      {/* Header editorial */}
+      <div style={{marginBottom:28}}>
+        <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:34, fontWeight:500, color:B.navy, letterSpacing:"-0.01em", lineHeight:1.1}}>
+          Importar desde correo
+        </div>
+        <div style={{fontSize:13, color:"#6b7280", marginTop:8, fontWeight:400, letterSpacing:"0.005em", maxWidth:560}}>
+          Pega el texto de un correo de Allianz, Leslie o Ale. MarFlow detecta los leads automáticamente y los agrega al pipeline.
+        </div>
+      </div>
+
+      {/* Bloque de pegado */}
+      <div style={{background:B.white, border:`1px solid ${B.gray}`, borderRadius:14, padding:"22px 22px 18px", boxShadow:"0 1px 2px rgba(10,31,68,0.03)"}}>
+        <div style={{fontSize:11, fontWeight:600, color:B.navy, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:10}}>
+          Texto del correo
+        </div>
+        <textarea
+          value={texto}
+          onChange={e=>setTexto(e.target.value)}
+          placeholder={"Pega aquí el contenido completo del correo...\n\nEjemplo:\nNombre: Juan Pérez\nTeléfono: 55 1234 5678\nCorreo: juan@ejemplo.com\nProducto: Vida\nEstado: Jalisco"}
+          rows={10}
+          style={{
+            width:"100%",
+            border:`1px solid ${B.gray}`,
+            borderRadius:10,
+            padding:"14px 16px",
+            fontFamily:"'Poppins', sans-serif",
+            fontSize:13,
+            lineHeight:1.55,
+            color:"#1A1A1A",
+            background:"#FAFAF7",
+            resize:"vertical",
+            outline:"none",
+            transition:"border-color var(--mf-t-fast) var(--mf-ease-out), background var(--mf-t-fast) var(--mf-ease-out)",
+          }}
+          onFocus={e=>{e.target.style.borderColor=B.gold; e.target.style.background=B.white;}}
+          onBlur={e=>{e.target.style.borderColor=B.gray; e.target.style.background="#FAFAF7";}}
+        />
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:14, gap:12, flexWrap:"wrap"}}>
+          <div style={{fontSize:11, color:"#9ca3af", letterSpacing:"0.02em"}}>
+            {texto.length > 0 ? `${texto.length.toLocaleString("es-MX")} caracteres` : "Sin texto"}
+          </div>
+          <div style={{display:"flex", gap:8}}>
+            {(texto || parseados.length > 0) && (
+              <button
+                onClick={limpiar}
+                style={{
+                  padding:"9px 16px", borderRadius:9, border:`1px solid ${B.gray}`,
+                  background:"transparent", color:"#6b7280",
+                  fontFamily:"'Poppins', sans-serif", fontSize:12, fontWeight:500, cursor:"pointer",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor="#9ca3af"; e.currentTarget.style.color=B.navy;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=B.gray; e.currentTarget.style.color="#6b7280";}}
+              >Limpiar</button>
+            )}
+            <button
+              onClick={analizar}
+              disabled={!texto.trim()}
+              style={{
+                padding:"9px 18px", borderRadius:9, border:`1px solid ${texto.trim() ? B.navy : B.gray}`,
+                background: texto.trim() ? B.navy : "transparent",
+                color: texto.trim() ? "#fff" : "#9ca3af",
+                fontFamily:"'Poppins', sans-serif", fontSize:12, fontWeight:600, letterSpacing:"0.02em",
+                cursor: texto.trim() ? "pointer" : "not-allowed",
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}
+            >Detectar leads</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mensaje informativo */}
+      {mensaje && (
+        <div style={{marginTop:16, padding:"12px 16px", background:B.cream, border:`1px solid ${B.goldBorder}`, borderRadius:10, fontSize:12, color:B.navy}}>
+          {mensaje}
+        </div>
+      )}
+
+      {/* Vista previa */}
+      {editable && (
+        <div style={{marginTop:28}}>
+          {/* Resumen */}
+          <div style={{display:"flex", gap:24, marginBottom:18, padding:"4px 4px 18px", borderBottom:`1px solid ${B.gray}`, flexWrap:"wrap"}}>
+            <div>
+              <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:28, fontWeight:500, color:B.navy, lineHeight:1}}>
+                {totalDetectados}
+              </div>
+              <div style={{fontSize:10, color:"#9ca3af", letterSpacing:"0.1em", textTransform:"uppercase", marginTop:4}}>
+                Detectados
+              </div>
+            </div>
+            <div>
+              <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:28, fontWeight:500, color:B.green || "#0a7c4a", lineHeight:1}}>
+                {totalNuevos}
+              </div>
+              <div style={{fontSize:10, color:"#9ca3af", letterSpacing:"0.1em", textTransform:"uppercase", marginTop:4}}>
+                Nuevos
+              </div>
+            </div>
+            {totalDup > 0 && (
+              <div>
+                <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:28, fontWeight:500, color:"#9ca3af", lineHeight:1}}>
+                  {totalDup}
+                </div>
+                <div style={{fontSize:10, color:"#9ca3af", letterSpacing:"0.1em", textTransform:"uppercase", marginTop:4}}>
+                  Duplicados
+                </div>
+              </div>
+            )}
+            {totalIncompletos > 0 && (
+              <div>
+                <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:28, fontWeight:500, color:B.amber || "#a16207", lineHeight:1}}>
+                  {totalIncompletos}
+                </div>
+                <div style={{fontSize:10, color:"#9ca3af", letterSpacing:"0.1em", textTransform:"uppercase", marginTop:4}}>
+                  Incompletos
+                </div>
+              </div>
+            )}
+            <div style={{marginLeft:"auto", textAlign:"right"}}>
+              <div style={{fontSize:11, color:"#6b7280", letterSpacing:"0.04em"}}>
+                Origen detectado
+              </div>
+              <div style={{fontSize:13, color:B.navy, fontWeight:600, marginTop:4}}>
+                {SOURCE_LABEL[sourceDetectado] || "Correo"}
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla preview editable */}
+          <div style={{background:B.white, border:`1px solid ${B.gray}`, borderRadius:14, overflow:"hidden", boxShadow:"0 1px 2px rgba(10,31,68,0.03)"}}>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%", borderCollapse:"collapse", fontSize:12, fontFamily:"'Poppins', sans-serif"}}>
+                <thead>
+                  <tr style={{background:"#FAFAF7", borderBottom:`1px solid ${B.gray}`}}>
+                    <th style={_thStyle}></th>
+                    <th style={_thStyle}>Nombre</th>
+                    <th style={_thStyle}>Teléfono</th>
+                    <th style={_thStyle}>Correo</th>
+                    <th style={{..._thStyle, width:60}}>Edad</th>
+                    <th style={_thStyle}>Estado</th>
+                    <th style={_thStyle}>Producto</th>
+                    <th style={{..._thStyle, textAlign:"right"}}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parseados.map((f, i) => {
+                    const opacity = f.incluido ? 1 : 0.45;
+                    return (
+                      <tr key={i} style={{borderBottom:`1px solid ${B.gray}`, opacity, transition:"opacity var(--mf-t-fast) var(--mf-ease-out)"}}>
+                        <td style={{..._tdStyle, width:38, textAlign:"center"}}>
+                          <input
+                            type="checkbox"
+                            checked={f.incluido}
+                            onChange={()=>toggleFila(i)}
+                            style={{cursor:"pointer", accentColor:B.gold}}
+                          />
+                        </td>
+                        <td style={_tdStyle}><_CellInput value={f.lead.nombre}    onChange={v=>actualizarCampo(i,"nombre",v)} placeholder="—"/></td>
+                        <td style={_tdStyle}><_CellInput value={f.lead.telefono}  onChange={v=>actualizarCampo(i,"telefono",v)} placeholder="—"/></td>
+                        <td style={_tdStyle}><_CellInput value={f.lead.correo}    onChange={v=>actualizarCampo(i,"correo",v)} placeholder="—"/></td>
+                        <td style={_tdStyle}><_CellInput value={f.lead.edad}      onChange={v=>actualizarCampo(i,"edad",v)} placeholder="—"/></td>
+                        <td style={_tdStyle}><_CellInput value={f.lead.estado}    onChange={v=>actualizarCampo(i,"estado",v)} placeholder="—"/></td>
+                        <td style={_tdStyle}><_CellInput value={f.lead.producto}  onChange={v=>actualizarCampo(i,"producto",v)} placeholder="—"/></td>
+                        <td style={{..._tdStyle, textAlign:"right", whiteSpace:"nowrap"}}>
+                          {f.dup ? (
+                            <_StatusPill color="#6b7280" bg="#f3f4f6" label="Duplicado"/>
+                          ) : !f.lead._completo ? (
+                            <_StatusPill color={B.amber || "#a16207"} bg={B.goldDim || "#fef3c7"} label="Incompleto"/>
+                          ) : (
+                            <_StatusPill color={B.green || "#0a7c4a"} bg="#ecfdf5" label="Completo"/>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Acción final */}
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:22, gap:12, flexWrap:"wrap"}}>
+            <div style={{fontSize:12, color:"#6b7280"}}>
+              {totalSeleccionados > 0
+                ? <>Se importarán <strong style={{color:B.navy, fontWeight:600}}>{totalSeleccionados}</strong> lead{totalSeleccionados===1?"":"s"} al pipeline.</>
+                : <>Selecciona los leads que quieras importar.</>}
+            </div>
+            <button
+              onClick={importar}
+              disabled={guardando || totalSeleccionados === 0}
+              style={{
+                padding:"11px 22px", borderRadius:10,
+                border:`1px solid ${(guardando || totalSeleccionados===0) ? B.gray : B.navy}`,
+                background:(guardando || totalSeleccionados===0) ? "transparent" : B.navy,
+                color:(guardando || totalSeleccionados===0) ? "#9ca3af" : "#fff",
+                fontFamily:"'Poppins', sans-serif", fontSize:13, fontWeight:600, letterSpacing:"0.02em",
+                cursor:(guardando || totalSeleccionados===0) ? "not-allowed" : "pointer",
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}
+            >{guardando ? "Importando..." : `Importar ${totalSeleccionados || ""} lead${totalSeleccionados===1?"":"s"}`}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Helpers visuales internos de ImportarCorreo
+const _thStyle = {
+  padding:"11px 14px",
+  textAlign:"left",
+  fontSize:10,
+  fontWeight:600,
+  letterSpacing:"0.08em",
+  textTransform:"uppercase",
+  color:"#6b7280",
+  borderBottom:"none",
+};
+const _tdStyle = {
+  padding:"4px 10px",
+  fontSize:12,
+  color:"#1A1A1A",
+  verticalAlign:"middle",
+};
+function _CellInput({ value, onChange, placeholder }) {
+  return (
+    <input
+      value={value || ""}
+      onChange={e=>onChange(e.target.value)}
+      placeholder={placeholder}
+      style={{
+        width:"100%", minWidth:80,
+        border:"1px solid transparent",
+        borderRadius:6,
+        padding:"7px 9px",
+        background:"transparent",
+        fontFamily:"'Poppins', sans-serif",
+        fontSize:12,
+        color:"#1A1A1A",
+        outline:"none",
+        transition:"border-color var(--mf-t-fast) var(--mf-ease-out), background var(--mf-t-fast) var(--mf-ease-out)",
+      }}
+      onFocus={e=>{e.target.style.borderColor=B.goldBorder || "#e7d9b8"; e.target.style.background="#FAFAF7";}}
+      onBlur={e=>{e.target.style.borderColor="transparent"; e.target.style.background="transparent";}}
+    />
+  );
+}
+function _StatusPill({ color, bg, label }) {
+  return (
+    <span style={{
+      display:"inline-block",
+      padding:"3px 9px",
+      borderRadius:20,
+      background:bg,
+      color,
+      fontSize:10,
+      fontWeight:600,
+      letterSpacing:"0.04em",
+      textTransform:"uppercase",
+    }}>{label}</span>
+  );
+}
+
 // Detecta si la URL viene del link de recuperación (#access_token=...&type=recovery)
 function detectarRecovery() {
   if (typeof window === "undefined") return false;
@@ -8441,6 +9041,7 @@ export default function App() {
     {id:"agenda",icon:<IconCalendar size={14}/>,l:"Agenda"},
     ...(esAdmin?[{id:"metricas",icon:<IconBarChart size={14}/>,l:"Métricas"}]:[]),
     ...(esAdmin?[{id:"mensajes",icon:<IconMail size={14}/>,l:"Mensajes"}]:[]),
+    ...(esAdmin?[{id:"importar_correo",icon:<IconDownload size={14}/>,l:"Importar"}]:[]),
     ...(esAdmin?[{id:"cobranza",icon:<IconDollar size={14}/>,l:"Cobranza"}]:[]),
     ...(esAdmin?[{id:"usuarios",icon:<IconUser size={14}/>,l:"Usuarios"}]:[]),
     {id:"configuracion",icon:<IconShield size={14}/>,l:"Configuración"},
@@ -8698,6 +9299,7 @@ export default function App() {
         {seccion==="agenda"&&<Agenda eventos={eventos} setEventos={setEventos} leads={leads} esAsistente={esAsistente} usuario={usuario}/>}
         {seccion==="metricas"&&esAdmin&&<Metricas leads={leads}/>}
         {seccion==="mensajes"&&esAdmin&&<Mensajes/>}
+        {seccion==="importar_correo"&&esAdmin&&<ImportarCorreo leads={leads} setLeads={setLeads} usuario={usuario} setSeccion={setSeccion} setFiltroNav={setFiltroNav}/>}
         {seccion==="cobranza"&&esAdmin&&<Cobranza/>}
         {seccion==="usuarios"&&esAdmin&&<Usuarios usuario={usuario} cuentas={cuentas} setCuentas={cs=>{setCuentas(cs);LS.set("mf_cuentas",cs);}}/>}
         {seccion==="configuracion"&&<Configuracion
