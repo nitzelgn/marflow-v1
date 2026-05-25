@@ -1777,8 +1777,65 @@ async function enviarPushDePrueba(usuario) {
       url: "/",
     },
   });
-  if (error) throw error;
+  if (error) {
+    const msg = error?.context?.body
+      ? (typeof error.context.body === "string" ? error.context.body : JSON.stringify(error.context.body))
+      : (error?.message || "Error desconocido en backend");
+    throw new Error(`Backend: ${msg}`);
+  }
+  if (!data) throw new Error("Backend no devolvió respuesta.");
+  if (data.error) throw new Error(`Backend: ${data.error}`);
+  if (typeof data.sent !== "number") throw new Error("Respuesta inválida del backend.");
+  if (data.sent === 0) {
+    const errs = (data.errors || []).join(" · ");
+    if (data.total === 0) throw new Error("Sin suscripciones activas en este dispositivo. Activa de nuevo.");
+    throw new Error(`No se envió ninguna push (${data.total} suscripciones). ${errs || ""}`);
+  }
   return data;
+}
+
+// Diagnóstico completo del estado de push en este dispositivo
+async function diagnosticoPush(usuario) {
+  const result = {
+    soporta: pushSoportado(),
+    permiso: typeof Notification !== "undefined" ? Notification.permission : "n/a",
+    swRegistrado: false,
+    swActivo: false,
+    suscripcion: null,
+    endpoint: null,
+    enSupabase: null,
+  };
+  if (!result.soporta) return result;
+
+  try {
+    const reg = await navigator.serviceWorker.getRegistration("/");
+    result.swRegistrado = !!reg;
+    result.swActivo = !!reg?.active;
+    if (reg) {
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        const json = sub.toJSON();
+        result.suscripcion = "presente";
+        result.endpoint = json.endpoint;
+      } else {
+        result.suscripcion = "ausente";
+      }
+    }
+  } catch (e) {
+    result.swRegistrado = "error";
+  }
+
+  // Ver si la suscripción del cliente coincide con alguna en Supabase
+  if (result.endpoint && usuario?.id) {
+    const { data, error } = await supabase.from("push_subscriptions")
+      .select("id")
+      .eq("user_id", usuario.id)
+      .eq("endpoint", result.endpoint)
+      .maybeSingle();
+    if (error) result.enSupabase = `error: ${error.message}`;
+    else result.enSupabase = data ? "guardada" : "no encontrada";
+  }
+  return result;
 }
 
 // ── Timeout de inactividad configurable (5/10/15 min) ──
@@ -2357,6 +2414,9 @@ function SeccionNotificacionesPush({ usuario }) {
   const [estado, setEstado] = useState("verificando"); // "verificando" | "no_soportado" | "denegado" | "inactiva" | "activa"
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [msgTipo, setMsgTipo] = useState("info"); // "ok" | "err" | "info"
+  const [diag, setDiag] = useState(null);
+  const [diagAbierto, setDiagAbierto] = useState(false);
 
   async function refrescar() {
     if (!pushSoportado()) { setEstado("no_soportado"); return; }
@@ -2364,17 +2424,27 @@ function SeccionNotificacionesPush({ usuario }) {
     const sub = await getSuscripcionActiva();
     setEstado(sub ? "activa" : "inactiva");
   }
-  useEffect(() => { refrescar(); }, []);
+  async function refrescarDiagnostico() {
+    try { setDiag(await diagnosticoPush(usuario)); }
+    catch (e) { setDiag({ error: String(e?.message || e) }); }
+  }
+  useEffect(() => { refrescar(); refrescarDiagnostico(); /* eslint-disable-next-line */ }, []);
+
+  function setMsgOk(t)  { setMsg(t); setMsgTipo("ok"); }
+  function setMsgErr(t) { setMsg(t); setMsgTipo("err"); }
 
   async function activar() {
     setMsg(""); setLoading(true);
     try {
       await pedirPermisoPush();
       await suscribirPush(usuario);
-      setMsg("Notificaciones activadas en este dispositivo.");
-      await refrescar();
+      setMsgOk("Notificaciones activadas en este dispositivo.");
+      await refrescar(); await refrescarDiagnostico();
     } catch (e) {
-      setMsg(e?.message || "No se pudieron activar las notificaciones.");
+      const m = e?.message || "";
+      if (/Permiso denegado/i.test(m)) setMsgErr("Diste denegar. Ve a Ajustes de iPhone → Notificaciones → MarFlow y habilita.");
+      else if (/no soporta|no soportado/i.test(m)) setMsgErr("Este dispositivo no soporta push. iOS 16.4+ con MarFlow instalada como app.");
+      else setMsgErr(m || "No se pudieron activar las notificaciones.");
     } finally { setLoading(false); }
   }
 
@@ -2382,20 +2452,28 @@ function SeccionNotificacionesPush({ usuario }) {
     setMsg(""); setLoading(true);
     try {
       await desuscribirPush(usuario);
-      setMsg("Notificaciones desactivadas en este dispositivo.");
-      await refrescar();
+      setMsgOk("Notificaciones desactivadas en este dispositivo.");
+      await refrescar(); await refrescarDiagnostico();
     } catch (e) {
-      setMsg(e?.message || "No se pudieron desactivar.");
+      setMsgErr(e?.message || "No se pudieron desactivar.");
     } finally { setLoading(false); }
   }
 
   async function probar() {
     setMsg(""); setLoading(true);
     try {
-      await enviarPushDePrueba(usuario);
-      setMsg("Notificación de prueba enviada. Debe llegarte en segundos.");
+      await refrescarDiagnostico();
+      const d = await diagnosticoPush(usuario);
+      if (!d.soporta) throw new Error("Este dispositivo no soporta push. iOS 16.4+ y MarFlow instalada como app.");
+      if (d.permiso !== "granted") throw new Error(`Permisos: "${d.permiso}". Activa las notificaciones primero.`);
+      if (!d.swActivo) throw new Error("Service Worker no activo. Cierra MarFlow y reábrela desde la pantalla de inicio.");
+      if (d.suscripcion !== "presente") throw new Error("No hay suscripción local. Activa de nuevo.");
+      if (d.enSupabase !== "guardada") throw new Error("La suscripción no está guardada en Supabase. Desactiva y reactiva.");
+
+      const r = await enviarPushDePrueba(usuario);
+      setMsgOk(`Push enviada · ${r.sent}/${r.total} dispositivos. Si tarda más de 30s, revisa Ajustes iOS.`);
     } catch (e) {
-      setMsg(e?.message || "No se pudo enviar la prueba. Verifica que la Edge Function esté desplegada.");
+      setMsgErr(e?.message || "No se pudo enviar la prueba.");
     } finally { setLoading(false); }
   }
 
@@ -2464,14 +2542,20 @@ function SeccionNotificacionesPush({ usuario }) {
           </div>
         )}
 
-        {/* Mensaje informativo */}
+        {/* Mensaje informativo (con color según tipo) */}
         {msg && (
           <div style={{
             padding:"10px 13px", borderRadius:10,
-            background:"rgba(10,31,68,0.03)",
-            border:"1px solid rgba(10,31,68,0.06)",
-            fontSize:12.5, color:"rgba(10,31,68,0.70)",
-            lineHeight:1.5, marginBottom:12,
+            background: msgTipo === "ok"  ? "rgba(5,150,105,0.06)"
+                      : msgTipo === "err" ? "rgba(220,38,38,0.05)"
+                                          : "rgba(10,31,68,0.03)",
+            border: msgTipo === "ok"  ? "1px solid rgba(5,150,105,0.22)"
+                  : msgTipo === "err" ? "1px solid rgba(220,38,38,0.20)"
+                                      : "1px solid rgba(10,31,68,0.06)",
+            color: msgTipo === "ok"  ? "#047857"
+                 : msgTipo === "err" ? "#991b1b"
+                                     : "rgba(10,31,68,0.70)",
+            fontSize:12.5, lineHeight:1.5, marginBottom:12,
           }}>{msg}</div>
         )}
 
@@ -2515,6 +2599,41 @@ function SeccionNotificacionesPush({ usuario }) {
           {estado === "denegado" && (
             <div style={{fontSize:12, color:"rgba(10,31,68,0.55)", lineHeight:1.5}}>
               Diste denegar antes. Activa las notificaciones para "MarFlow" en los ajustes de iPhone → Notificaciones → MarFlow.
+            </div>
+          )}
+        </div>
+
+        {/* Bloque DIAGNÓSTICO colapsable — útil para depurar */}
+        <div style={{marginTop:16, borderTop:"1px solid rgba(10,31,68,0.06)", paddingTop:12}}>
+          <button onClick={()=>{ setDiagAbierto(o=>!o); refrescarDiagnostico(); }} style={{
+            all:"unset", cursor:"pointer", width:"100%",
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            fontSize:11, color:"rgba(10,31,68,0.55)", letterSpacing:"0.01em",
+          }}>
+            <span style={{textTransform:"uppercase", letterSpacing:"0.18em", fontWeight:500}}>Diagnóstico técnico</span>
+            <span style={{fontSize:9}}>{diagAbierto ? "▲" : "▼"}</span>
+          </button>
+          {diagAbierto && diag && (
+            <div style={{
+              marginTop:10, padding:"12px 14px", borderRadius:10,
+              background:"rgba(10,31,68,0.03)",
+              border:"1px solid rgba(10,31,68,0.06)",
+              fontFamily:"ui-monospace, 'SF Mono', Menlo, monospace",
+              fontSize:11, lineHeight:1.7, color:"rgba(10,31,68,0.75)",
+              wordBreak:"break-all",
+            }}>
+              <div>Soporta push: <strong>{String(diag.soporta)}</strong></div>
+              <div>Permiso Notification: <strong>{String(diag.permiso)}</strong></div>
+              <div>SW registrado: <strong>{String(diag.swRegistrado)}</strong></div>
+              <div>SW activo: <strong>{String(diag.swActivo)}</strong></div>
+              <div>Suscripción local: <strong>{String(diag.suscripcion)}</strong></div>
+              <div>En Supabase: <strong>{String(diag.enSupabase)}</strong></div>
+              {diag.endpoint && (
+                <div style={{marginTop:6, fontSize:10, color:"rgba(10,31,68,0.50)"}}>
+                  endpoint: {diag.endpoint.slice(0, 80)}…
+                </div>
+              )}
+              {diag.error && <div style={{color:"#991b1b", marginTop:6}}>error: {diag.error}</div>}
             </div>
           )}
         </div>
