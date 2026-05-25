@@ -3110,8 +3110,7 @@ function getMicrocopyDelDia() {
 }
 
 function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas = [], setFiltroNav, setSeccion}) {
-  const activos=leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa));
-  function irA(f){setFiltroNav(f);setSeccion("pipeline");}
+  // (Variables activos/irA/riesgo/sinC eliminadas: ya no se renderea sidebar de indicadores)
 
   // Drawer de pendientes + lead seleccionado (modal completo)
   const [drawerPend, setDrawerPend] = useState(false);
@@ -3183,9 +3182,7 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
   const fechaLargaCap = fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1);
   const microcopy = getMicrocopyDelDia();
 
-  // Variables usadas por la sidebar mini-métricas (En riesgo / Sin contacto)
-  const riesgo = leads.filter(l => getAlertas(l).some(a => a.tipo === "riesgo"));
-  const sinC   = leads.filter(l => getAlertas(l).some(a => a.tipo === "sin_contacto"));
+  // (riesgo / sinC eliminadas con la sidebar de indicadores)
 
   // ── 4 Prioridades de hoy (lógica sector asegurador/patrimonial) ──
   const prioridades = [
@@ -3260,6 +3257,28 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
       }}>
         {microcopy}
       </p>
+
+      {/* Discreto "scoreboard" de cierres del mes — solo si hay al menos 1 */}
+      {cierresMes > 0 && (
+        <div style={{
+          marginTop:18, paddingTop:14,
+          display:"inline-flex", alignItems:"baseline", gap:10,
+          borderTop:"1px solid rgba(10,31,68,0.06)",
+          paddingRight:24,
+        }}>
+          <span style={{
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:32, fontWeight:500, lineHeight:1,
+            color:"#059669", letterSpacing:"-0.025em",
+            fontVariantNumeric:"tabular-nums",
+          }}>{cierresMes}</span>
+          <span style={{
+            fontSize:10, fontWeight:500,
+            color:"rgba(10,31,68,0.50)",
+            textTransform:"uppercase", letterSpacing:"0.22em",
+          }}>{cierresMes === 1 ? "cierre este mes" : "cierres este mes"}</span>
+        </div>
+      )}
     </div>
 
     {/* ═══ PRIORIDADES DE HOY (sector asegurador/patrimonial) ═══ */}
@@ -3351,60 +3370,7 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
       </div>
     </div>
 
-    {/* Separador editorial muy sutil */}
-    <div style={{height:1, background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.05), transparent)", margin:"6px 0 22px"}}/>
-
-    {/* ═══ Indicadores · 4 mini-métricas en fila horizontal ═══ */}
-    <div style={{
-      fontSize:10, fontWeight:500,
-      color:"rgba(10,31,68,0.40)",
-      textTransform:"uppercase", letterSpacing:"0.22em",
-      marginBottom:14,
-    }}>Indicadores</div>
-
-    <div style={{
-      display:"grid",
-      gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",
-      gap:0,
-      background:"#fff",
-      border:"1px solid rgba(10,31,68,0.05)",
-      borderRadius:16,
-      boxShadow:"var(--mf-shadow-xs)",
-      overflow:"hidden",
-    }}>
-      {[
-        { l:"Leads activos",   v: activos.length,    nav:"activos",      color: B.navy },
-        { l:"Cierres del mes", v: cierresMes,        nav:"cierre",       color: "#059669" },
-        { l:"Riesgo pérdida",  v: riesgo.length,     nav:"seguimiento",  color: "#dc2626" },
-        { l:"Sin contacto",    v: sinC.length,       nav:"activos",      color: B.gold },
-      ].map((s, i, arr) => (
-        <button
-          key={s.l}
-          onClick={()=>irA(s.nav)}
-          style={{
-            all:"unset", cursor:"pointer",
-            padding:"20px 22px",
-            borderRight: i < arr.length-1 ? "1px solid rgba(10,31,68,0.05)" : "none",
-            display:"flex", flexDirection:"column", gap:5,
-            transition:"background var(--mf-t-fast) var(--mf-ease-out)",
-          }}
-          onMouseEnter={e=>{e.currentTarget.style.background="rgba(10,31,68,0.015)";}}
-          onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{
-            fontFamily:"'Cormorant Garamond', serif",
-            fontSize:36, fontWeight:500, lineHeight:1,
-            letterSpacing:"-0.025em",
-            color: s.v > 0 ? s.color : "rgba(10,31,68,0.22)",
-            fontVariantNumeric:"tabular-nums",
-          }}>{s.v}</div>
-          <div style={{
-            fontSize:11, fontWeight:500,
-            color:"rgba(10,31,68,0.55)",
-            letterSpacing:"0.01em",
-          }}>{s.l}</div>
-        </button>
-      ))}
-    </div>
+    {/* (Indicadores eliminados — cierres del mes ahora vive integrado en el saludo arriba) */}
 
     {/* ═══ Drawer de Pendientes (lista compacta nombre + pendientes) ═══ */}
     {drawerPend && (
