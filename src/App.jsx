@@ -37,6 +37,9 @@ const PRODUCTOS_LEAD = ["Vida","GMM","Auto","Hogar","Retiro","Ahorro","Inversió
 const PRODUCTOS_RIESGOS = ["Vida","GMM","Auto","Hogar"];
 const PRODUCTOS_AHORRO  = ["Retiro","Ahorro","Inversión","Patrimonial","Educación"];
 
+// Productos que tienen póliza con fecha de renovación (cartera vigente)
+const POLIZA_PRODUCTOS = ["Auto","GMM","Hogar","Vida"];
+
 // Tipos de pendientes operativos (tareas dentro de cada lead)
 const PENDIENTE_TIPOS = [
   { v:"cotizacion",  l:"Enviar cotización" },
@@ -170,6 +173,29 @@ function totalPendientesAbiertos(leads) {
 }
 function leadsConPendientes(leads) {
   return (leads || []).filter(l => (l.pendientes || []).some(p => !p.hecho));
+}
+
+// 5) Renovaciones pendientes: pólizas Auto/GMM/Hogar/Vida que renuevan en ≤30 días
+//    sin seguimiento iniciado. Devuelve [{ lead, poliza, dias }] (1 por póliza).
+function diasParaFecha(fechaISO) {
+  if (!fechaISO) return null;
+  const target = new Date(fechaISO + "T00:00:00");
+  const today = new Date(hoy() + "T00:00:00");
+  return Math.round((target - today) / 86400000);
+}
+function renovacionesPendientes(leads) {
+  const out = [];
+  (leads || []).forEach(l => {
+    (l.polizas || []).forEach(p => {
+      if (!POLIZA_PRODUCTOS.includes(p.producto)) return;
+      if (p.seguimientoIniciado) return;
+      const d = diasParaFecha(p.fechaRenovacion);
+      if (d === null) return;
+      if (d < 0 || d > 30) return;
+      out.push({ lead: l, poliza: p, dias: d });
+    });
+  });
+  return out.sort((a, b) => a.dias - b.dias);
 }
 
 function getAlertas(lead) {
@@ -2604,11 +2630,11 @@ function getMicrocopyDelDia() {
 
 function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFiltroNav, setSeccion}) {
   const activos=leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa));
-  const cierres=leads.filter(l=>l.etapa==="cierre");
   function irA(f){setFiltroNav(f);setSeccion("pipeline");}
 
   // Drawer de pendientes + lead seleccionado (modal completo)
   const [drawerPend, setDrawerPend] = useState(false);
+  const [drawerRenov, setDrawerRenov] = useState(false);
   const [leadActDash, setLeadActDash] = useState(null);
   function saveDash(d){ setLeads(p => p.find(l=>l.id===d.id) ? p.map(l=>l.id===d.id?d:l) : [...p, d]); }
   function delDash(id){ setLeads(p => p.filter(l=>l.id!==id)); }
@@ -2622,12 +2648,23 @@ function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFil
       }),
     }));
   }
+  function iniciarSeguimientoPolDash(leadId, polId){
+    setLeads(p => p.map(l => l.id !== leadId ? l : {
+      ...l,
+      polizas: (l.polizas || []).map(pp => pp.id !== polId ? pp : { ...pp, seguimientoIniciado: true }),
+    }));
+  }
 
   // ── Prioridades de hoy (lógica sector asegurador/patrimonial) ──
   const cotizandoRiesgos = enCotizacionRiesgos(leads);
   const ahorroPendientes = asesoradosAhorroPendientes(leads);
   const urgentes         = seguimientoUrgente(leads);
   const totalPendientes  = totalPendientesAbiertos(leads);
+  const renovaciones     = renovacionesPendientes(leads);
+
+  // Mini-métricas (sidebar derecha)
+  const mesAct = hoy().slice(0,7);
+  const cierresMes = leads.filter(l => l.etapa === "cierre" && (l.mesCreacion === mesAct || (l.ultimoContacto||"").slice(0,7) === mesAct)).length;
 
   // ── Saludo dinámico según la hora ──
   const ahora = new Date();
@@ -2640,7 +2677,7 @@ function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFil
   const fechaLargaCap = fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1);
   const microcopy = getMicrocopyDelDia();
 
-  // Variables usadas por las cards inferiores (En riesgo / Sin contacto / Atención inmediata)
+  // Variables usadas por la sidebar mini-métricas (En riesgo / Sin contacto)
   const riesgo = leads.filter(l => getAlertas(l).some(a => a.tipo === "riesgo"));
   const sinC   = leads.filter(l => getAlertas(l).some(a => a.tipo === "sin_contacto"));
 
@@ -2681,6 +2718,15 @@ function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFil
       color: B.navy,
       icon: <IconClock size={16} color={B.navy}/>,
       action: ()=>{ setDrawerPend(true); },
+    },
+    {
+      key: "renovaciones",
+      v: renovaciones.length,
+      titulo: "Renovaciones pendientes",
+      sub: "Pólizas Auto · GMM · Hogar · Vida · renuevan en ≤30 días",
+      color: "#7c3aed", // violet — cartera vigente (patrimonial)
+      icon: <IconShield size={16} color="#7c3aed"/>,
+      action: ()=>{ setDrawerRenov(true); },
     },
   ];
 
@@ -2800,74 +2846,73 @@ function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFil
     </div>
 
     {/* Separador editorial muy sutil */}
-    <div style={{height:1, background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.06), transparent)", margin:"2px 0 24px"}}/>
+    <div style={{height:1, background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.05), transparent)", margin:"6px 0 28px"}}/>
 
-    <VentaDelDia leads={leads}/>
+    {/* ═══ Layout dos columnas: contenido principal + sidebar mini-métricas ═══ */}
+    <div className="mf-dash-grid" style={{
+      display:"grid",
+      gridTemplateColumns:"minmax(0,1fr) 210px",
+      gap:36,
+      alignItems:"start",
+    }}>
+      <style>{`
+        @media (max-width: 860px) {
+          .mf-dash-grid { grid-template-columns: minmax(0,1fr) !important; gap: 28px !important; }
+          .mf-dash-side { order: 2; }
+        }
+      `}</style>
 
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:18}}>
-      {/* Leads activos */}
-      <div onClick={()=>irA("activos")} style={{background:B.white,border:`1px solid ${B.gray}`,borderLeft:`4px solid ${B.navy}`,borderRadius:12,padding:"16px 18px",cursor:"pointer",transition:"all .15s",boxShadow:B.shadow}}
-        onMouseEnter={e=>{e.currentTarget.style.boxShadow=B.shadowMd;e.currentTarget.style.transform="translateY(-2px)";}}
-        onMouseLeave={e=>{e.currentTarget.style.boxShadow=B.shadow;e.currentTarget.style.transform="none";}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-          <div style={{fontSize:10,fontWeight:600,color:"#6b7280",textTransform:"uppercase",letterSpacing:".6px"}}>Leads activos</div>
-          <span style={{color:B.navy,fontSize:15}}>*</span>
-        </div>
-        <div style={{fontSize:32,fontWeight:800,color:B.navy,lineHeight:1,marginBottom:4}}>{activos.length}</div>
-        <div style={{fontSize:11,color:"#9ca3af"}}>En seguimiento activo</div>
+      {/* Columna principal */}
+      <div style={{minWidth:0}}>
+        <ActividadReciente leads={leads}/>
       </div>
 
-      {/* CAMBIO 2: Estrella de Cierres */}
-      <EstrellaCierres count={cierres.length} onClick={()=>irA("cierre")}/>
+      {/* Sidebar mini-métricas estilo Linear/Stripe/banca privada */}
+      <aside className="mf-dash-side" style={{
+        display:"flex", flexDirection:"column",
+        gap:2,
+        paddingTop:4,
+      }}>
+        <div style={{
+          fontSize:10, fontWeight:500,
+          color:"rgba(10,31,68,0.40)",
+          textTransform:"uppercase", letterSpacing:"0.22em",
+          marginBottom:18,
+        }}>Indicadores</div>
 
-      {/* En riesgo */}
-      <div onClick={()=>irA("seguimiento")} style={{background:B.white,border:`1px solid ${B.gray}`,borderLeft:`4px solid ${B.redBright}`,borderRadius:12,padding:"16px 18px",cursor:"pointer",transition:"all .15s",boxShadow:B.shadow}}
-        onMouseEnter={e=>{e.currentTarget.style.boxShadow=B.shadowMd;e.currentTarget.style.transform="translateY(-2px)";}}
-        onMouseLeave={e=>{e.currentTarget.style.boxShadow=B.shadow;e.currentTarget.style.transform="none";}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-          <div style={{fontSize:10,fontWeight:600,color:"#6b7280",textTransform:"uppercase",letterSpacing:".6px"}}>En riesgo pérdida</div>
-          <span style={{color:B.redBright,fontSize:15}}>⚠</span>
-        </div>
-        <div style={{fontSize:32,fontWeight:800,color:B.redBright,lineHeight:1,marginBottom:4}}>{riesgo.length}</div>
-        <div style={{fontSize:11,color:"#9ca3af"}}>Actuar hoy</div>
-      </div>
-
-      {/* Sin contacto */}
-      <div onClick={()=>irA("activos")} style={{background:B.white,border:`1px solid ${B.gray}`,borderLeft:`4px solid ${B.amber}`,borderRadius:12,padding:"16px 18px",cursor:"pointer",transition:"all .15s",boxShadow:B.shadow}}
-        onMouseEnter={e=>{e.currentTarget.style.boxShadow=B.shadowMd;e.currentTarget.style.transform="translateY(-2px)";}}
-        onMouseLeave={e=>{e.currentTarget.style.boxShadow=B.shadow;e.currentTarget.style.transform="none";}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-          <div style={{fontSize:10,fontWeight:600,color:"#6b7280",textTransform:"uppercase",letterSpacing:".6px"}}>Sin contacto</div>
-          <span style={{color:B.amber,fontSize:15}}>⏰</span>
-        </div>
-        <div style={{fontSize:32,fontWeight:800,color:B.amber,lineHeight:1,marginBottom:4}}>{sinC.length}</div>
-        <div style={{fontSize:11,color:"#9ca3af"}}>Requieren atención</div>
-      </div>
-    </div>
-
-    {/* Fila inferior: Atención inmediata + CAMBIO 3 Actividad Reciente */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:16}}>
-      <div style={{background:B.white,border:`1px solid ${B.gray}`,borderRadius:12,padding:"18px 20px",boxShadow:B.shadow}}>
-        <div style={{fontSize:14,fontWeight:700,color:B.navy,marginBottom:14}}>⚡ Atención inmediata</div>
-        {[...riesgo,...sinC.filter(l=>!riesgo.includes(l))].length===0
-          ?<div style={{fontSize:13,color:B.green,textAlign:"center",padding:"20px 0",fontWeight:500}}>✓ Todo en orden</div>
-          :[...riesgo,...sinC.filter(l=>!riesgo.includes(l))].slice(0,5).map(l=>{
-            const als=getAlertas(l);const temp=getTempLead(l);
-            return <div key={l.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${B.gray}`}}>
-              <div>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  {temp&&<span style={{fontSize:14}}>{temp.icon}</span>}
-                  <div style={{fontSize:12,fontWeight:600,color:B.navy}}>{l.nombre}</div>
-                </div>
-                {als.map((a,i)=><div key={i} style={{fontSize:10,color:a.color,fontWeight:600}}>{a.msg}</div>)}
-              </div>
-              <a href={`https://wa.me/52${l.telefono}`} target="_blank" rel="noreferrer" style={{width:30,height:30,borderRadius:"50%",background:"#dcfce7",border:"1px solid #bbf7d0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>💬</a>
-            </div>;
-          })}
-      </div>
-
-      {/* CAMBIO 3: Actividad Reciente con seguimientos reales */}
-      <ActividadReciente leads={leads}/>
+        {[
+          { l:"Leads activos",   v: activos.length,    nav:"activos",      color: B.navy },
+          { l:"Cierres del mes", v: cierresMes,        nav:"cierre",       color: "#059669" },
+          { l:"Riesgo pérdida",  v: riesgo.length,     nav:"seguimiento",  color: "#dc2626" },
+          { l:"Sin contacto",    v: sinC.length,       nav:"activos",      color: B.gold },
+        ].map((s, i) => (
+          <button
+            key={s.l}
+            onClick={()=>irA(s.nav)}
+            style={{
+              all:"unset", cursor:"pointer",
+              padding:"14px 0",
+              borderBottom: i < 3 ? "1px solid rgba(10,31,68,0.06)" : "none",
+              display:"flex", flexDirection:"column", gap:4,
+              transition:"opacity var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.opacity="0.7";}}
+            onMouseLeave={e=>{e.currentTarget.style.opacity="1";}}>
+            <div style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:34, fontWeight:500, lineHeight:1,
+              letterSpacing:"-0.025em",
+              color: s.v > 0 ? s.color : "rgba(10,31,68,0.22)",
+              fontVariantNumeric:"tabular-nums",
+            }}>{s.v}</div>
+            <div style={{
+              fontSize:11, fontWeight:500,
+              color:"rgba(10,31,68,0.55)",
+              letterSpacing:"0.01em",
+            }}>{s.l}</div>
+          </button>
+        ))}
+      </aside>
     </div>
 
     {/* ═══ Drawer de Pendientes (lista compacta nombre + pendientes) ═══ */}
@@ -2996,6 +3041,145 @@ function Dashboard({leads, setLeads, eventos = [], usuario, cuentas = [], setFil
                 );
               });
             })()}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ═══ Drawer de Renovaciones (cartera vigente: Auto/GMM/Hogar/Vida ≤30d) ═══ */}
+    {drawerRenov && (
+      <div
+        onClick={(e)=>{ if(e.target===e.currentTarget) setDrawerRenov(false); }}
+        style={{
+          position:"fixed", inset:0, zIndex:1100,
+          background:"rgba(10,31,68,0.40)",
+          backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)",
+          display:"flex", justifyContent:"flex-end",
+          animation:"mfFadeIn .25s var(--mf-ease-out)",
+        }}>
+        <div style={{
+          width:"min(480px, 100%)",
+          height:"100%",
+          background:"#F8F6F2",
+          boxShadow:"-12px 0 40px rgba(10,31,68,0.18)",
+          display:"flex", flexDirection:"column",
+          animation:"mfSlideInRight .35s var(--mf-ease-spring)",
+        }}>
+          {/* Header drawer */}
+          <div style={{
+            padding:"22px 24px 18px",
+            borderBottom:"1px solid rgba(10,31,68,0.06)",
+            display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:14,
+          }}>
+            <div>
+              <div style={{
+                fontSize:10, fontWeight:500,
+                color:"rgba(10,31,68,0.40)",
+                textTransform:"uppercase", letterSpacing:"0.22em",
+                marginBottom:6,
+              }}>Cartera vigente · Próximos 30 días</div>
+              <div style={{
+                fontFamily:"'Cormorant Garamond', serif",
+                fontSize:26, fontWeight:500,
+                letterSpacing:"-0.015em", color:B.navy, lineHeight:1.1,
+              }}>Renovaciones pendientes</div>
+            </div>
+            <button onClick={()=>setDrawerRenov(false)} style={{
+              width:32, height:32, borderRadius:8,
+              border:"1px solid rgba(10,31,68,0.08)",
+              background:B.white, cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              color:"rgba(10,31,68,0.55)",
+            }}><IconX size={14} color="currentColor"/></button>
+          </div>
+
+          {/* Lista scroll */}
+          <div style={{flex:1, overflowY:"auto", padding:"14px 18px 24px"}}>
+            {renovaciones.length === 0 ? (
+              <div style={{
+                textAlign:"center", padding:"60px 20px",
+                color:"rgba(10,31,68,0.50)", fontSize:13,
+              }}>
+                <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:20, color:B.navy, marginBottom:6}}>Cartera al día</div>
+                Ninguna póliza renueva en los próximos 30 días.
+              </div>
+            ) : renovaciones.map(({ lead: l, poliza: p, dias }) => {
+              const etapaObj = ETAPAS.find(e => e.id === l.etapa) || ETAPAS[0];
+              const urgColor = dias <= 7 ? "#dc2626" : dias <= 15 ? B.gold : "#7c3aed";
+              return (
+                <div key={p.id} style={{
+                  background:B.white,
+                  border:"1px solid rgba(10,31,68,0.06)",
+                  borderRadius:14,
+                  padding:"14px 16px",
+                  marginBottom:10,
+                  boxShadow:"var(--mf-shadow-xs)",
+                }}>
+                  {/* Header: producto + días restantes */}
+                  <div style={{display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10, marginBottom:10}}>
+                    <div>
+                      <div style={{fontSize:10, color:"rgba(10,31,68,0.45)", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:4}}>
+                        {p.producto}{p.numero ? ` · ${p.numero}` : ""}
+                      </div>
+                      <button onClick={()=>{ setLeadActDash(l); setDrawerRenov(false); }} style={{
+                        all:"unset", cursor:"pointer",
+                        fontSize:14, fontWeight:600, color:B.navy,
+                        letterSpacing:"-0.005em",
+                        display:"flex", alignItems:"center", gap:6,
+                      }}>
+                        {l.nombre}
+                        <IconChevronRight size={12} color="rgba(10,31,68,0.40)"/>
+                      </button>
+                    </div>
+                    <div style={{
+                      fontFamily:"'Cormorant Garamond', serif",
+                      fontSize:28, fontWeight:500, lineHeight:1,
+                      color:urgColor, letterSpacing:"-0.025em",
+                      textAlign:"right",
+                    }}>
+                      {dias === 0 ? "Hoy" : dias}
+                      {dias > 0 && <span style={{fontSize:10.5, fontFamily:"'Poppins',sans-serif", color:"rgba(10,31,68,0.50)", marginLeft:3, letterSpacing:"0.05em", textTransform:"uppercase"}}>días</span>}
+                    </div>
+                  </div>
+
+                  {/* Metadata */}
+                  <div style={{display:"flex", gap:14, fontSize:11.5, color:"rgba(10,31,68,0.55)", flexWrap:"wrap", marginBottom:10}}>
+                    {p.fechaRenovacion && <div>Renueva <strong style={{color:B.navy, fontWeight:500}}>{fmtF(p.fechaRenovacion)}</strong></div>}
+                    {p.primaAprox > 0 && <div>Prima ≈ <strong style={{color:B.navy, fontWeight:500}}>${Number(p.primaAprox).toLocaleString("es-MX")}</strong></div>}
+                    <div>Estatus <strong style={{color:etapaObj.color, fontWeight:500}}>{etapaObj.label}</strong></div>
+                  </div>
+
+                  {/* Acciones */}
+                  <div style={{display:"flex", gap:6}}>
+                    <button onClick={()=>iniciarSeguimientoPolDash(l.id, p.id)} style={{
+                      all:"unset", cursor:"pointer",
+                      flex:1, textAlign:"center",
+                      padding:"8px 10px", borderRadius:8,
+                      background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+                      color:"#fff",
+                      fontSize:11.5, fontWeight:500,
+                      letterSpacing:"0.01em",
+                    }}>Iniciar seguimiento</button>
+                    {l.telefono && (
+                      <a href={`https://wa.me/52${(l.telefono||"").replace(/\D/g,"")}`}
+                         target="_blank" rel="noreferrer"
+                         style={{
+                           textDecoration:"none",
+                           padding:"8px 12px", borderRadius:8,
+                           background:"rgba(37,211,102,0.10)",
+                           color:"#1f7d3b",
+                           border:"1px solid rgba(37,211,102,0.25)",
+                           fontSize:11.5, fontWeight:500,
+                           letterSpacing:"0.01em",
+                           display:"flex", alignItems:"center",
+                         }}>
+                        WhatsApp
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -3301,8 +3485,10 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
   }
   const pendActivos = (f.pendientes||[]).filter(p=>!p.hecho).length;
   const pendLabel = pendActivos > 0 ? `Pendientes (${pendActivos})` : "Pendientes";
-  const TABS_ADMIN=[{v:"info",l:"Info"},{v:"etapa",l:"Etapa"},{v:"pendientes",l:pendLabel},{v:"checklist",l:"Seguimiento"},{v:"historial",l:`Historial (${(f.seguimientos||[]).length})`},{v:"estrategia",l:"Estrategia"}];
-  const TABS_ASIST=[{v:"pendientes",l:pendLabel},{v:"checklist",l:"Seguimiento"},{v:"historial",l:`Historial (${(f.seguimientos||[]).length})`},{v:"info",l:"Info"}];
+  const polizasN = (f.polizas||[]).length;
+  const polizaLabel = polizasN > 0 ? `Póliza (${polizasN})` : "Póliza";
+  const TABS_ADMIN=[{v:"info",l:"Info"},{v:"poliza",l:polizaLabel},{v:"etapa",l:"Etapa"},{v:"pendientes",l:pendLabel},{v:"checklist",l:"Seguimiento"},{v:"historial",l:`Historial (${(f.seguimientos||[]).length})`},{v:"estrategia",l:"Estrategia"}];
+  const TABS_ASIST=[{v:"pendientes",l:pendLabel},{v:"poliza",l:polizaLabel},{v:"checklist",l:"Seguimiento"},{v:"historial",l:`Historial (${(f.seguimientos||[]).length})`},{v:"info",l:"Info"}];
   const TABS=esAsistente?TABS_ASIST:TABS_ADMIN;
 
   // Pendientes operativos del lead
@@ -3333,6 +3519,40 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
   function eliminarPendiente(id) {
     setF(p => ({ ...p, pendientes: (p.pendientes||[]).filter(x => x.id !== id) }));
   }
+
+  // Pólizas de cartera (Auto/GMM/Hogar/Vida con fecha de renovación)
+  const [polForm, setPolForm] = useState({
+    producto: POLIZA_PRODUCTOS[0], numero: "", fechaInicio: "",
+    fechaRenovacion: "", primaAprox: "", notas: "",
+  });
+  function agregarPoliza() {
+    if (!polForm.numero.trim() && !polForm.fechaRenovacion) return;
+    const nueva = {
+      id: uid(),
+      producto: polForm.producto,
+      numero: polForm.numero.trim(),
+      fechaInicio: polForm.fechaInicio || null,
+      fechaRenovacion: polForm.fechaRenovacion || null,
+      primaAprox: polForm.primaAprox ? Number(polForm.primaAprox) || 0 : 0,
+      notas: polForm.notas.trim(),
+      seguimientoIniciado: false,
+      fechaCreacion: hoy(),
+    };
+    setF(p => ({ ...p, polizas: [...(p.polizas||[]), nueva] }));
+    setPolForm({ producto: POLIZA_PRODUCTOS[0], numero: "", fechaInicio: "", fechaRenovacion: "", primaAprox: "", notas: "" });
+  }
+  function toggleSeguimientoPoliza(id) {
+    setF(p => ({
+      ...p,
+      polizas: (p.polizas||[]).map(x =>
+        x.id === id ? { ...x, seguimientoIniciado: !x.seguimientoIniciado } : x
+      ),
+    }));
+  }
+  function eliminarPoliza(id) {
+    setF(p => ({ ...p, polizas: (p.polizas||[]).filter(x => x.id !== id) }));
+  }
+
   const asistentes=(cuentas||[]).filter(c=>c.rol==="asistente"&&c.adminId===(usuario.rol==="superadmin"?c.adminId:usuario.id));
   const tipoColor={llamada:B.blue,whatsapp:"#25d366",visita:B.purple,correo:B.amber,nota:"#9ca3af"};
 
@@ -3643,6 +3863,157 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario}) {
         )}
       </div>
     )}
+    {tab==="poliza" && (
+      <div>
+        <div style={{
+          fontSize:11, fontWeight:500,
+          color:"rgba(10,31,68,0.45)",
+          textTransform:"uppercase", letterSpacing:"0.12em",
+          marginBottom:14,
+        }}>Cartera vigente · Auto · GMM · Hogar · Vida</div>
+
+        {/* Form alta de póliza */}
+        <div style={{
+          background:"#FBFAF6",
+          border:"1px solid rgba(10,31,68,0.06)",
+          borderRadius:12,
+          padding:"14px 14px 10px",
+          marginBottom:18,
+        }}>
+          <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:10, marginBottom:10}}>
+            <FL label="Producto">
+              <Sel value={polForm.producto}
+                onChange={v=>setPolForm(p=>({...p,producto:v}))}
+                options={POLIZA_PRODUCTOS.map(p=>({v:p,l:p}))}/>
+            </FL>
+            <FL label="No. Póliza">
+              <Inp value={polForm.numero}
+                onChange={v=>setPolForm(p=>({...p,numero:v}))}
+                placeholder="Ej. 12345678"/>
+            </FL>
+            <FL label="Inicio vigencia">
+              <Inp type="date" value={polForm.fechaInicio}
+                onChange={v=>setPolForm(p=>({...p,fechaInicio:v}))}/>
+            </FL>
+            <FL label="Renovación">
+              <Inp type="date" value={polForm.fechaRenovacion}
+                onChange={v=>setPolForm(p=>({...p,fechaRenovacion:v}))}/>
+            </FL>
+            <FL label="Prima aprox. (MXN)">
+              <Inp type="number" value={polForm.primaAprox}
+                onChange={v=>setPolForm(p=>({...p,primaAprox:v}))}
+                placeholder="0"/>
+            </FL>
+            <FL label="Notas">
+              <Inp value={polForm.notas}
+                onChange={v=>setPolForm(p=>({...p,notas:v}))}
+                placeholder="Coberturas, etc."/>
+            </FL>
+          </div>
+          <button onClick={agregarPoliza} style={{
+            width:"100%", padding:"10px 14px", borderRadius:8, border:"none",
+            background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+            color:"#fff", fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:13,
+            cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+          }}
+            onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
+            onMouseLeave={e=>{e.currentTarget.style.boxShadow="none"; e.currentTarget.style.transform="translateY(0)";}}>
+            <IconPlus size={13} color="#fff"/> Agregar póliza
+          </button>
+        </div>
+
+        {/* Lista de pólizas */}
+        {(f.polizas||[]).length === 0 ? (
+          <div style={{
+            textAlign:"center", padding:"36px 16px",
+            color:"rgba(10,31,68,0.45)",
+            fontFamily:"'Cormorant Garamond', serif", fontSize:18,
+            fontStyle:"italic",
+          }}>Aún sin pólizas registradas para este cliente.</div>
+        ) : (
+          <div style={{display:"flex", flexDirection:"column", gap:10}}>
+            {(f.polizas||[]).map(p => {
+              const dias = diasParaFecha(p.fechaRenovacion);
+              const renovUrg = dias !== null && dias >= 0 && dias <= 30;
+              const renovVencida = dias !== null && dias < 0;
+              const renovColor = renovVencida ? "#dc2626" : renovUrg ? B.gold : "rgba(10,31,68,0.35)";
+              return (
+                <div key={p.id} style={{
+                  background:B.white,
+                  border:"1px solid rgba(10,31,68,0.06)",
+                  borderRadius:12,
+                  padding:"14px 16px",
+                  boxShadow:"var(--mf-shadow-xs)",
+                }}>
+                  {/* Header */}
+                  <div style={{display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10, marginBottom:8}}>
+                    <div>
+                      <div style={{fontSize:13.5, fontWeight:600, color:B.navy, letterSpacing:"-0.005em"}}>
+                        {p.producto}{p.numero ? ` · ${p.numero}` : ""}
+                      </div>
+                      <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:2}}>
+                        {p.primaAprox > 0 ? `Prima ≈ $${Number(p.primaAprox).toLocaleString("es-MX")} MXN` : "Prima no registrada"}
+                      </div>
+                    </div>
+                    <button onClick={()=>eliminarPoliza(p.id)} style={{
+                      all:"unset", cursor:"pointer", color:"rgba(10,31,68,0.35)",
+                      width:24, height:24, display:"flex", alignItems:"center", justifyContent:"center",
+                      borderRadius:6, transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                    }}
+                      onMouseEnter={e=>{e.currentTarget.style.color="#dc2626"; e.currentTarget.style.background="rgba(220,38,38,0.06)";}}
+                      onMouseLeave={e=>{e.currentTarget.style.color="rgba(10,31,68,0.35)"; e.currentTarget.style.background="transparent";}}>
+                      <IconX size={13} color="currentColor"/>
+                    </button>
+                  </div>
+
+                  {/* Fechas */}
+                  <div style={{display:"flex", gap:18, fontSize:11.5, color:"rgba(10,31,68,0.55)", flexWrap:"wrap", marginBottom:10}}>
+                    {p.fechaInicio && <div>Vigencia desde <strong style={{color:B.navy, fontWeight:500}}>{fmtF(p.fechaInicio)}</strong></div>}
+                    {p.fechaRenovacion && (
+                      <div>Renueva <strong style={{color:renovColor, fontWeight:600}}>{fmtF(p.fechaRenovacion)}</strong>
+                        {dias !== null && (
+                          <span style={{color:renovColor, marginLeft:6, fontSize:10.5, fontWeight:500}}>
+                            ({renovVencida ? `vencida hace ${Math.abs(dias)}d` : dias === 0 ? "hoy" : `en ${dias}d`})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {p.notas && (
+                    <div style={{fontSize:11.5, color:"rgba(10,31,68,0.65)", marginBottom:10, fontStyle:"italic"}}>
+                      {p.notas}
+                    </div>
+                  )}
+
+                  {/* Toggle seguimiento iniciado */}
+                  <button onClick={()=>toggleSeguimientoPoliza(p.id)} style={{
+                    all:"unset", cursor:"pointer",
+                    display:"flex", alignItems:"center", gap:8,
+                    padding:"6px 10px", borderRadius:6,
+                    background: p.seguimientoIniciado ? "rgba(5,150,105,0.08)" : "rgba(10,31,68,0.03)",
+                    border: `1px solid ${p.seguimientoIniciado ? "rgba(5,150,105,0.20)" : "rgba(10,31,68,0.08)"}`,
+                  }}>
+                    <div style={{
+                      width:14, height:14, borderRadius:4,
+                      background: p.seguimientoIniciado ? "#059669" : "transparent",
+                      border: `1.5px solid ${p.seguimientoIniciado ? "#059669" : "rgba(10,31,68,0.30)"}`,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                    }}>
+                      {p.seguimientoIniciado && <IconCheck size={9} color="#fff"/>}
+                    </div>
+                    <span style={{fontSize:11.5, fontWeight:500, color: p.seguimientoIniciado ? "#059669" : "rgba(10,31,68,0.65)"}}>
+                      {p.seguimientoIniciado ? "Seguimiento de renovación iniciado" : "Marcar seguimiento iniciado"}
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    )}
     {tab==="checklist"&&<div>
       <div style={{
         fontSize:11, fontWeight:500,
@@ -3891,6 +4262,7 @@ function leadFromDB(row, seguimientos = []) {
     motivador: row.motivador || "",
     checklist: { ...EMPTY_CHECK, ...(row.checklist || {}) },
     pendientes: Array.isArray(row.pendientes) ? row.pendientes : [],
+    polizas: Array.isArray(row.polizas) ? row.polizas : [],
     asignadoA: row.asignado_a || null,
     mesCreacion: row.mes_creacion || (row.created_at ? row.created_at.slice(0,7) : hoy().slice(0,7)),
     seguimientos: seguimientos
@@ -3921,6 +4293,7 @@ function leadToDB(lead, adminId) {
     motivador: lead.motivador || null,
     checklist: lead.checklist || { ...EMPTY_CHECK },
     pendientes: Array.isArray(lead.pendientes) ? lead.pendientes : [],
+    polizas: Array.isArray(lead.polizas) ? lead.polizas : [],
     mes_creacion: lead.mesCreacion || hoy().slice(0,7),
   };
 }
@@ -4178,7 +4551,7 @@ function Pipeline({leads,setLeads,filtroNav,esAdmin,cuentas,usuario}) {
   const [filtProd,setFiltProd]=useState("");
   const [filtTemp,setFiltTemp]=useState("");
   const fileRef=useRef();
-  const emptyL={id:uid(),nombre:"",telefono:"",correo:"",edad:"",producto:PRODUCTOS_LEAD[0],estado:"",etapa:"nuevo",ultimoContacto:hoy(),notas:"",objeciones:"",intereses:"",motivador:"",checklist:{...EMPTY_CHECK},seguimientos:[],sinSeguimiento:false,asignadoA:null,mesCreacion:hoy().slice(0,7)};
+  const emptyL={id:uid(),nombre:"",telefono:"",correo:"",edad:"",producto:PRODUCTOS_LEAD[0],estado:"",etapa:"nuevo",ultimoContacto:hoy(),notas:"",objeciones:"",intereses:"",motivador:"",checklist:{...EMPTY_CHECK},seguimientos:[],sinSeguimiento:false,asignadoA:null,pendientes:[],polizas:[],mesCreacion:hoy().slice(0,7)};
   function save(d){setLeads(p=>p.find(l=>l.id===d.id)?p.map(l=>l.id===d.id?d:l):[...p,d]);}
   function del(id){setLeads(p=>p.filter(l=>l.id!==id));}
   let vis=leads;
