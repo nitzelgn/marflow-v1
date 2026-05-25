@@ -4089,50 +4089,279 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
 
   const estadoOpLead = getEstadoOportunidad(f);
 
-  return <MFModal onClose={onClose} width={640}>
-    <MHead
-      title={lead.nombre||"Nuevo lead"}
-      sub={
-        <span style={{display:"inline-flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+  // Estados nuevos para vista vertical premium
+  const [infoExpandida, setInfoExpandida] = useState(false);
+  const [historialCompleto, setHistorialCompleto] = useState(false);
+  const [polForm2Abierto, setPolForm2Abierto] = useState(false);
+  const [masAccionesAbierto, setMasAccionesAbierto] = useState(false);
+  const [sugIgnorada, setSugIgnorada] = useState(false);
+
+  // Algoritmo de sugerencia de etapa basado en patrones del checklist
+  function sugerirEtapaSiguiente() {
+    if (sugIgnorada) return null;
+    if (f.sinSeguimiento) return null;
+    const chk = f.checklist || {};
+    const tieneCita = (f.seguimientos||[]).some(s => /cita|agenda/i.test(s.texto||""));
+    // Nuevo + algún contacto → Contactado/Seguimiento
+    if (f.etapa === "nuevo" && (chk.wa1 || chk.call1 || chk.email)) {
+      return { id: "seguimiento", razon: "Detectamos contacto inicial." };
+    }
+    // Seguimiento + cita en historial → Cita
+    if (f.etapa === "seguimiento" && tieneCita) {
+      return { id: "cita", razon: "Hay cita registrada en el historial." };
+    }
+    // Cita + WhatsApp/llamada después → Asesorado
+    if (f.etapa === "cita" && (chk.wa2 || chk.call2)) {
+      return { id: "asesorado", razon: "Hubo seguimiento posterior a la cita." };
+    }
+    return null;
+  }
+  const sugerencia = sugerirEtapaSiguiente();
+
+  // Cadencia de contacto (compacta) — 5 pasos basados en checklist
+  const cadencia = [
+    { v: "email",  l: "Correo inicial",   done: !!f.checklist?.email },
+    { v: "call1",  l: "Primera llamada",  done: !!f.checklist?.call1 },
+    { v: "wa1",    l: "WhatsApp inicial", done: !!f.checklist?.wa1 },
+    { v: "wa2",    l: "Segundo intento",  done: !!f.checklist?.wa2 },
+    { v: "call2",  l: "Reactivación",     done: !!f.checklist?.call2 },
+  ];
+  function toggleCadencia(v) { setChk(v, !f.checklist?.[v]); }
+
+  // Etapas visibles del pipeline (no incluye terminales sinSeg)
+  const ETAPAS_PIPE = ETAPAS.filter(e => !e.sinSeg && e.id !== "no_localiz");
+
+  return <MFModal onClose={onClose} width={720}>
+    {/* ═══ HEADER PREMIUM EDITORIAL ═══ */}
+    <div style={{
+      display:"flex", alignItems:"flex-start", gap:14, marginBottom:18,
+      paddingBottom:18, borderBottom:"1px solid rgba(10,31,68,0.06)",
+    }}>
+      <div style={{
+        width:48, height:48, borderRadius:"50%", flexShrink:0,
+        background:"rgba(10,31,68,0.05)",
+        border:"1px solid rgba(10,31,68,0.08)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        fontSize:14, fontWeight:600, color:B.navy, letterSpacing:"-0.005em",
+      }}>{initials(f.nombre||"--")}</div>
+      <div style={{flex:1, minWidth:0}}>
+        <h2 style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:"clamp(22px, 4.5vw, 28px)", fontWeight:500,
+          color:B.navy, letterSpacing:"-0.02em",
+          margin:0, lineHeight:1.1,
+          overflow:"hidden", textOverflow:"ellipsis",
+        }}>{f.nombre || "Nuevo lead"}</h2>
+        <div style={{display:"flex", alignItems:"center", gap:7, flexWrap:"wrap", marginTop:6, fontSize:12, color:"rgba(10,31,68,0.55)"}}>
           <span>{f.producto || "—"}</span>
           {f.estado && <><span style={{opacity:0.4}}>·</span><span>{f.estado}</span></>}
-          {estadoOpLead && (
-            <>
-              <span style={{opacity:0.4}}>·</span>
-              <BadgeEstado estado={estadoOpLead} size="xs"/>
-            </>
-          )}
-          {f.esReferido && (
-            <>
-              <span style={{opacity:0.4}}>·</span>
-              <BadgeReferido size="xs"/>
-            </>
-          )}
-        </span>
-      }
-      onClose={onClose}
-    />
+          {f.edad && <><span style={{opacity:0.4}}>·</span><span>{f.edad} años</span></>}
+          {estadoOpLead && <BadgeEstado estado={estadoOpLead} size="xs"/>}
+          {f.esReferido && <BadgeReferido size="xs"/>}
+        </div>
+      </div>
+      <button onClick={onClose} style={{
+        width:30, height:30, borderRadius:8,
+        border:"1px solid rgba(10,31,68,0.08)",
+        background:B.white, cursor:"pointer", flexShrink:0,
+        display:"flex", alignItems:"center", justifyContent:"center",
+        color:"rgba(10,31,68,0.55)",
+      }}><IconX size={13} color="currentColor"/></button>
+    </div>
 
-    {/* Acciones rápidas con SVG icons (no emojis) */}
-    {f.telefono && lead.id === f.id && lead.nombre && (
-      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-        <button onClick={()=>setWam(true)}
-          style={{display:"inline-flex",alignItems:"center",gap:7,padding:"8px 14px",borderRadius:9,border:"none",background:"#25d366",color:"#fff",fontFamily:"'Poppins',sans-serif",fontWeight:600,fontSize:12.5,cursor:"pointer",boxShadow:"0 2px 8px rgba(37,211,102,0.20)",transition:"all var(--mf-t-fast) var(--mf-ease-out)"}}
-          onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)"; e.currentTarget.style.boxShadow="0 6px 16px rgba(37,211,102,0.30)";}}
-          onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 2px 8px rgba(37,211,102,0.20)";}}>
-          <svg width={13} height={13} viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-          Enviar WhatsApp
+    {/* ═══ ACCIONES RÁPIDAS ═══ */}
+    <div style={{display:"flex", gap:6, marginBottom:18, flexWrap:"wrap"}}>
+      {f.telefono && (
+        <button onClick={()=>setWam(true)} style={{
+          display:"inline-flex", alignItems:"center", gap:6,
+          padding:"8px 13px", borderRadius:8, border:"1px solid rgba(37,211,102,0.25)",
+          background:"rgba(37,211,102,0.06)", color:"#1f7d3b",
+          fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:11.5,
+          cursor:"pointer", letterSpacing:"0.01em",
+        }}>
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="#1f7d3b"><path d="M20.52 3.449C18.24 1.245 15.24 0 12.045 0 5.463 0 .104 5.334.101 11.893c0 2.096.549 4.14 1.595 5.945L0 24l6.335-1.652c1.746.943 3.71 1.444 5.71 1.447h.006c6.585 0 11.946-5.336 11.949-11.896 0-3.176-1.24-6.165-3.495-8.411zM12.05 21.785h-.003a9.876 9.876 0 01-5.03-1.378l-.36-.214-3.744.982 1-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c0-5.45 4.437-9.884 9.893-9.884 2.641 0 5.124 1.03 6.99 2.898a9.825 9.825 0 012.893 6.994c-.004 5.45-4.434 9.884-9.885 9.884z"/></svg>
+          WhatsApp
         </button>
+      )}
+      {f.telefono && (
         <a href={`tel:${f.telefono}`} style={{textDecoration:"none"}}>
-          <button style={{display:"inline-flex",alignItems:"center",gap:7,padding:"8px 14px",borderRadius:9,border:"1px solid rgba(10,31,68,0.08)",background:B.white,color:B.navy,fontFamily:"'Poppins',sans-serif",fontWeight:500,fontSize:12.5,cursor:"pointer",boxShadow:"var(--mf-shadow-xs)",transition:"all var(--mf-t-fast) var(--mf-ease-out)"}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
-            <IconPhoneCall size={13} color={B.navy}/>
+          <button style={{
+            display:"inline-flex", alignItems:"center", gap:6,
+            padding:"8px 13px", borderRadius:8, border:"1px solid rgba(10,31,68,0.08)",
+            background:B.white, color:B.navy,
+            fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:11.5,
+            cursor:"pointer", letterSpacing:"0.01em",
+          }}>
+            <IconPhoneCall size={12} color={B.navy}/>
             Llamar
           </button>
         </a>
+      )}
+      {f.correo && (
+        <a href={`mailto:${f.correo}`} style={{textDecoration:"none"}}>
+          <button style={{
+            display:"inline-flex", alignItems:"center", gap:6,
+            padding:"8px 13px", borderRadius:8, border:"1px solid rgba(10,31,68,0.08)",
+            background:B.white, color:B.navy,
+            fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:11.5,
+            cursor:"pointer", letterSpacing:"0.01em",
+          }}>
+            <IconMail size={12} color={B.navy}/>
+            Correo
+          </button>
+        </a>
+      )}
+      <button onClick={()=>{
+        if (typeof setEventos === "function") {
+          const evt = { id: uid(), titulo: `Cita · ${f.nombre || "Lead"}`,
+            tipo: "cita", subtipo: "info1",
+            fechaInicio: hoy(), fechaFin: hoy(), fecha: hoy(),
+            horaInicio: "10:00", horaFin: "11:00",
+            repeticion: "none", nota: "Creado desde lead.",
+            leadId: f.id, agendadoPor: usuario?.nombre || "",
+            recordatorioCot: false };
+          setEventos(p => [...(p||[]), evt]);
+          setF(p => ({ ...p, seguimientos: [
+            { id: uid(), fecha: hoy(), texto: "Cita agendada desde lead", tipo: "nota", autor: usuario?.nombre||"", rol: usuario?.rol||"", _auto: true },
+            ...(p.seguimientos||[])
+          ]}));
+        }
+      }} style={{
+        display:"inline-flex", alignItems:"center", gap:6,
+        padding:"8px 13px", borderRadius:8, border:"1px solid rgba(10,31,68,0.08)",
+        background:B.white, color:B.navy,
+        fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:11.5,
+        cursor:"pointer", letterSpacing:"0.01em",
+      }}>
+        <IconCalendar size={12} color={B.navy}/>
+        Agendar
+      </button>
+
+      {/* Más acciones (dropdown) */}
+      <div style={{position:"relative"}}>
+        <button onClick={()=>setMasAccionesAbierto(o=>!o)} style={{
+          display:"inline-flex", alignItems:"center", gap:6,
+          padding:"8px 13px", borderRadius:8, border:"1px solid rgba(10,31,68,0.08)",
+          background:B.white, color:"rgba(10,31,68,0.65)",
+          fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:11.5,
+          cursor:"pointer", letterSpacing:"0.01em",
+        }}>
+          Más
+          <span style={{fontSize:9, lineHeight:1}}>▾</span>
+        </button>
+        {masAccionesAbierto && (
+          <div onClick={e=>e.stopPropagation()} style={{
+            position:"absolute", top:38, right:0, zIndex:50,
+            width:200, background:"#F8F6F2",
+            border:"1px solid rgba(10,31,68,0.08)", borderRadius:12,
+            boxShadow:"0 12px 30px rgba(10,31,68,0.14)",
+            overflow:"hidden", animation:"mfFadeUp .18s var(--mf-ease-spring)",
+          }}>
+            <button onClick={()=>{setHistorialCompleto(true); setMasAccionesAbierto(false);}} style={{
+              all:"unset", cursor:"pointer", display:"block", width:"100%",
+              padding:"10px 14px", fontSize:12, color:B.navy, letterSpacing:"0.005em",
+              borderBottom:"1px solid rgba(10,31,68,0.04)",
+            }}>Ver historial completo</button>
+            <button onClick={()=>{toggleSinSeg(); setMasAccionesAbierto(false);}} style={{
+              all:"unset", cursor:"pointer", display:"block", width:"100%",
+              padding:"10px 14px", fontSize:12, color: f.sinSeguimiento ? "#059669" : B.navy,
+              letterSpacing:"0.005em",
+              borderBottom:"1px solid rgba(10,31,68,0.04)",
+            }}>{f.sinSeguimiento ? "Reactivar lead" : "Marcar sin seguimiento"}</button>
+            {!esAsistente && (
+              <button onClick={()=>{setConfirmDel(true); setMasAccionesAbierto(false);}} style={{
+                all:"unset", cursor:"pointer", display:"block", width:"100%",
+                padding:"10px 14px", fontSize:12, color:"#dc2626", letterSpacing:"0.005em",
+              }}>Eliminar lead</button>
+            )}
+          </div>
+        )}
       </div>
-    )}
+    </div>
+
+    {/* ═══ SUGERENCIA MARFLOW ═══ */}
+    {sugerencia && (() => {
+      const etL = ETAPAS.find(e => e.id === sugerencia.id)?.label || sugerencia.id;
+      return (
+        <div style={{
+          background:"linear-gradient(135deg, rgba(198,169,107,0.06), rgba(10,31,68,0.03))",
+          border:"1px solid rgba(198,169,107,0.20)",
+          borderRadius:12, padding:"12px 14px", marginBottom:16,
+          display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
+        }}>
+          <div style={{
+            width:30, height:30, borderRadius:"50%", flexShrink:0,
+            background:"rgba(198,169,107,0.15)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+          }}><IconStar size={13} color="#8b7340"/></div>
+          <div style={{flex:1, minWidth:140}}>
+            <div style={{fontSize:10, fontWeight:500, color:"rgba(10,31,68,0.45)", textTransform:"uppercase", letterSpacing:"0.18em", marginBottom:2}}>MarFlow sugiere</div>
+            <div style={{fontSize:12.5, color:B.navy, lineHeight:1.4}}>
+              Mover a <strong style={{fontWeight:600}}>{etL.replace(/[¡⭐!]/g,"").trim()}</strong> · <span style={{color:"rgba(10,31,68,0.55)"}}>{sugerencia.razon}</span>
+            </div>
+          </div>
+          <div style={{display:"flex", gap:6, flexShrink:0}}>
+            <button onClick={()=>{cambiarEtapa(sugerencia.id);}} style={{
+              padding:"7px 14px", borderRadius:8, border:"none",
+              background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+              color:"#fff", fontFamily:"'Poppins',sans-serif", fontSize:11.5, fontWeight:600, cursor:"pointer",
+            }}>Confirmar</button>
+            <button onClick={()=>setSugIgnorada(true)} style={{
+              padding:"7px 12px", borderRadius:8,
+              border:"1px solid rgba(10,31,68,0.08)",
+              background:"#fff", color:"rgba(10,31,68,0.55)",
+              fontFamily:"'Poppins',sans-serif", fontSize:11.5, fontWeight:500, cursor:"pointer",
+            }}>Ignorar</button>
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* ═══ PIPELINE VISUAL HORIZONTAL ═══ */}
+    {!f.sinSeguimiento && (() => {
+      const etapaIdx = ETAPAS_PIPE.findIndex(e => e.id === f.etapa);
+      return (
+        <div style={{marginBottom:20}}>
+          <div style={{
+            fontSize:10, fontWeight:500,
+            color:"rgba(10,31,68,0.40)",
+            textTransform:"uppercase", letterSpacing:"0.18em",
+            marginBottom:10,
+          }}>Pipeline</div>
+          <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+            {ETAPAS_PIPE.map((et, i) => {
+              const active = f.etapa === et.id;
+              const pasado = etapaIdx >= 0 && i < etapaIdx;
+              const color = active ? et.color : pasado ? "rgba(10,31,68,0.55)" : "rgba(10,31,68,0.30)";
+              return (
+                <button key={et.id} onClick={()=>cambiarEtapa(et.id)} style={{
+                  all:"unset", cursor:"pointer",
+                  display:"flex", alignItems:"center", gap:6,
+                  padding:"7px 11px", borderRadius:8,
+                  background: active ? `${et.color}10` : "transparent",
+                  border: `1px solid ${active ? `${et.color}40` : "rgba(10,31,68,0.06)"}`,
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}>
+                  <span style={{
+                    width:18, height:18, borderRadius:"50%",
+                    background: active ? et.color : pasado ? "rgba(10,31,68,0.40)" : "transparent",
+                    border: pasado ? "none" : `1.5px solid ${active ? et.color : "rgba(10,31,68,0.20)"}`,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    flexShrink:0,
+                  }}>
+                    {pasado && <IconCheck size={9} color="#fff"/>}
+                  </span>
+                  <span style={{
+                    fontSize:11.5, fontWeight: active ? 600 : 500,
+                    color, letterSpacing:"0.005em", whiteSpace:"nowrap",
+                  }}>{et.label.replace(/[¡⭐!]/g, "").trim()}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    })()}
 
     {/* Banner sin seguimiento sin emoji */}
     {f.sinSeguimiento && (
@@ -4151,36 +4380,7 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
       </div>
     )}
 
-    {/* Tabs estilo Linear con underline gold */}
-    <div style={{display:"flex",gap:0,marginBottom:18,borderBottom:"1px solid rgba(10,31,68,0.06)"}}>
-      {TABS.map(t=>{
-        const active = tab===t.v;
-        return (
-          <button key={t.v} onClick={()=>setTab(t.v)}
-            style={{
-              position:"relative",
-              padding:"10px 14px 11px",
-              border:"none",
-              background:"transparent",
-              color: active ? B.navy : "rgba(10,31,68,0.50)",
-              fontFamily:"'Poppins',sans-serif",
-              fontWeight: active ? 600 : 500,
-              fontSize:12.5,
-              letterSpacing:"0.005em",
-              cursor:"pointer",
-              transition:"color var(--mf-t-fast) var(--mf-ease-out)",
-              whiteSpace:"nowrap",
-            }}
-            onMouseEnter={e=>{if(!active) e.currentTarget.style.color="rgba(10,31,68,0.80)";}}
-            onMouseLeave={e=>{if(!active) e.currentTarget.style.color="rgba(10,31,68,0.50)";}}>
-            {t.l}
-            {active && (
-              <span style={{position:"absolute",left:6,right:6,bottom:-1,height:2,background:B.gold,borderRadius:"2px 2px 0 0"}}/>
-            )}
-          </button>
-        );
-      })}
-    </div>
+    {/* (Tabs removidas — vista única vertical) */}
 
     {/* Alertas con dots y mfPulseDot solo en riesgo */}
     {!f.sinSeguimiento && alerts.map((a,i)=>(
@@ -4199,176 +4399,10 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         {a.msg}
       </div>
     ))}
-    {tab==="info"&&<div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
-        <FL label="Nombre completo" span2><Inp value={f.nombre} onChange={v=>set("nombre",v)}/></FL>
-        <FL label="Teléfono / WhatsApp"><Inp value={f.telefono} onChange={v=>set("telefono",v)}/></FL>
-        <FL label="Edad"><Inp value={f.edad} onChange={v=>set("edad",v)} type="number"/></FL>
-        <FL label="Correo" span2><Inp value={f.correo} onChange={v=>set("correo",v)} type="email"/></FL>
-        <FL label="Estado de la República"><Sel value={f.estado} onChange={v=>set("estado",v)} options={[{v:"",l:"Seleccionar..."},...ESTADOS_MX.map(e=>({v:e,l:e}))]}/></FL>
-        <FL label="Producto"><Sel value={f.producto} onChange={v=>set("producto",v)} options={PRODUCTOS_LEAD}/></FL>
-        <FL label="Último contacto"><Inp value={f.ultimoContacto} onChange={v=>set("ultimoContacto",v)} type="date"/></FL>
-        <FL label="Asignar a"><Sel value={f.asignadoA||""} onChange={v=>set("asignadoA",v)} options={[{v:"",l:"-- Sin asignar --"},...asistentes.map(a=>({v:a.id,l:a.nombre}))]}/></FL>
-      </div>
-
-      {/* ═══ Estado de oportunidad ═══ */}
-      <div style={{marginTop:24}}>
-        <div style={{
-          fontSize:10, fontWeight:500,
-          color:"rgba(10,31,68,0.40)",
-          textTransform:"uppercase", letterSpacing:"0.18em",
-          marginBottom:10,
-        }}>Estado de oportunidad</div>
-
-        <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10}}>
-          <button onClick={()=>set("estadoOportunidad", null)} style={{
-            all:"unset", cursor:"pointer",
-            padding:"6px 12px", borderRadius:999,
-            border: `1px solid ${!f.estadoOportunidad ? "rgba(10,31,68,0.30)" : "rgba(10,31,68,0.08)"}`,
-            background: !f.estadoOportunidad ? "rgba(10,31,68,0.04)" : "#fff",
-            color: !f.estadoOportunidad ? B.navy : "rgba(10,31,68,0.50)",
-            fontSize:11, fontWeight:500, letterSpacing:"0.01em",
-          }}>Auto / sin estado</button>
-          {ESTADOS_OPORTUNIDAD.map(e => {
-            const active = f.estadoOportunidad === e.v;
-            return (
-              <button key={e.v} onClick={()=>set("estadoOportunidad", e.v)} style={{
-                all:"unset", cursor:"pointer",
-                display:"inline-flex", alignItems:"center", gap:6,
-                padding:"6px 12px", borderRadius:999,
-                border: `1px solid ${active ? `${e.color}55` : "rgba(10,31,68,0.08)"}`,
-                background: active ? `${e.color}10` : "#fff",
-                color: active ? e.color : "rgba(10,31,68,0.55)",
-                fontSize:11, fontWeight:active?600:500, letterSpacing:"0.01em",
-              }}>
-                <span style={{width:6, height:6, borderRadius:"50%", background: active ? e.color : "rgba(10,31,68,0.20)"}}/>
-                {e.l}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Si "En pausa" seleccionado → input fecha */}
-        {f.estadoOportunidad === "en_pausa" && (
-          <div style={{
-            background:"rgba(100,116,139,0.04)",
-            border:"1px solid rgba(100,116,139,0.15)",
-            borderRadius:10,
-            padding:"12px 14px",
-            marginTop:6,
-          }}>
-            <div style={{fontSize:11.5, color:"rgba(10,31,68,0.65)", marginBottom:8, lineHeight:1.45}}>
-              ¿Cuándo retomas el seguimiento? Al guardar, MarFlow agendará un evento y agregará un pendiente.
-            </div>
-            <FL label="Retomar el día">
-              <Inp type="date" value={f.pausaHasta||""} onChange={v=>set("pausaHasta", v)}/>
-            </FL>
-          </div>
-        )}
-
-        {/* Toggle referido */}
-        <div style={{
-          display:"flex", alignItems:"center", gap:12,
-          marginTop:14, padding:"12px 14px",
-          background:"rgba(198,169,107,0.05)",
-          border:"1px solid rgba(198,169,107,0.18)",
-          borderRadius:10,
-          flexWrap:"wrap",
-        }}>
-          <button onClick={()=>set("esReferido", !f.esReferido)} style={{
-            all:"unset", cursor:"pointer",
-            display:"flex", alignItems:"center", gap:9,
-          }}>
-            <span style={{
-              width:18, height:18, borderRadius:5,
-              background: f.esReferido ? "#C6A96B" : "#fff",
-              border: `1.5px solid ${f.esReferido ? "#C6A96B" : "rgba(10,31,68,0.20)"}`,
-              display:"flex", alignItems:"center", justifyContent:"center",
-              flexShrink:0,
-            }}>
-              {f.esReferido && <IconCheck size={11} color="#fff"/>}
-            </span>
-            <span style={{fontSize:12.5, fontWeight:600, color:B.navy, letterSpacing:"-0.005em"}}>Es referido</span>
-          </button>
-          {f.esReferido && (
-            <div style={{flex:"1 1 180px", minWidth:140}}>
-              <Inp value={f.referidoPor||""} onChange={v=>set("referidoPor", v)}
-                placeholder="¿Por quién? (opcional)"/>
-            </div>
-          )}
-        </div>
-        <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:8, lineHeight:1.45, fontStyle:"italic"}}>
-          Los referidos se marcan automáticamente como "Alta oportunidad" cuando no eliges otro estado manual.
-        </div>
-      </div>
-    </div>}
-    {tab==="estrategia"&&<div style={{display:"grid",gap:12}}>
-      <FL label="Objeciones del cliente"><Inp value={f.objeciones||""} onChange={v=>set("objeciones",v)} rows={2} placeholder="¿Qué lo detiene de comprar?"/></FL>
-      <FL label="Intereses y necesidades"><Inp value={f.intereses||""} onChange={v=>set("intereses",v)} rows={2} placeholder="¿Qué busca proteger o lograr?"/></FL>
-      <FL label="Motivador de compra"><Inp value={f.motivador||""} onChange={v=>set("motivador",v)} rows={2} placeholder="¿Qué lo haría decidir hoy?"/></FL>
-    </div>}
-    {tab==="etapa"&&<div>
-      <div style={{
-        fontSize:11, fontWeight:500,
-        color:"rgba(10,31,68,0.45)",
-        textTransform:"uppercase", letterSpacing:"0.12em",
-        marginBottom:14,
-      }}>Selecciona la etapa actual</div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
-        {ETAPAS.map(et=>{
-          const active = f.etapa === et.id;
-          return (
-            <button key={et.id} onClick={()=>cambiarEtapa(et.id)}
-              style={{
-                display:"inline-flex", alignItems:"center", gap:7,
-                padding:"8px 14px",
-                borderRadius:9,
-                border: `1px solid ${active ? et.color + "55" : "rgba(10,31,68,0.08)"}`,
-                background: active ? et.color + "0e" : B.white,
-                color: active ? et.color : "rgba(10,31,68,0.65)",
-                fontFamily:"'Poppins',sans-serif",
-                fontWeight: active ? 600 : 500,
-                fontSize:12,
-                cursor:"pointer",
-                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
-                letterSpacing:"0.005em",
-              }}>
-              <span style={{width:7,height:7,borderRadius:"50%",background:et.color}}/>
-              {et.label.replace(/[¡⭐!]/g,"").trim()}
-            </button>
-          );
-        })}
-      </div>
-      <div style={{
-        background: f.sinSeguimiento ? "rgba(220,38,38,0.04)" : "rgba(248,246,242,0.6)",
-        border: `1px solid ${f.sinSeguimiento ? "rgba(220,38,38,0.18)" : "rgba(10,31,68,0.06)"}`,
-        borderRadius:12,
-        padding:"14px 16px",
-      }}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <IconMinusCircle size={16} color={f.sinSeguimiento ? B.redBright : "rgba(10,31,68,0.40)"}/>
-            <div>
-              <div style={{fontSize:13,fontWeight:600,color:f.sinSeguimiento?B.redBright:B.navy}}>Sin seguimiento</div>
-              <div style={{fontSize:11,color:"rgba(10,31,68,0.50)",marginTop:2}}>No interesado / perdido definitivo.</div>
-            </div>
-          </div>
-          <button onClick={toggleSinSeg}
-            style={{
-              padding:"6px 12px", borderRadius:8,
-              border:`1px solid ${f.sinSeguimiento?B.green+"40":B.redBright+"40"}`,
-              background:"transparent",
-              color: f.sinSeguimiento ? B.green : B.redBright,
-              fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
-              cursor:"pointer", whiteSpace:"nowrap",
-            }}>
-            {f.sinSeguimiento ? "Reactivar" : "Marcar"}
-          </button>
-        </div>
-      </div>
-    </div>}
-    {tab==="pendientes" && (
-      <div>
+    {/* (Tab "Etapa" removida — ahora pipeline visual horizontal arriba) */}
+    {/* (Info / Estado / Estrategia movidos al bloque "Información completa" colapsable al final) */}
+    {!f.sinSeguimiento && (
+      <div style={{marginBottom:20}}>
         <div style={{
           fontSize:11, fontWeight:500,
           color:"rgba(10,31,68,0.45)",
@@ -4486,8 +4520,8 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         )}
       </div>
     )}
-    {tab==="poliza" && (
-      <div>
+    {!f.sinSeguimiento && (
+      <div style={{marginBottom:20}}>
         <div style={{
           fontSize:11, fontWeight:500,
           color:"rgba(10,31,68,0.45)",
@@ -4637,133 +4671,243 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         )}
       </div>
     )}
-    {tab==="checklist"&&<div>
-      <div style={{
-        fontSize:11, fontWeight:500,
-        color:"rgba(10,31,68,0.45)",
-        textTransform:"uppercase", letterSpacing:"0.12em",
-        marginBottom:14,
-      }}>Registra cada acción de contacto</div>
-      {CHECKLIST_DEF.map(item=>{
-        const done = f.checklist?.[item.key] || false;
-        const esNI = item.key === "noInteres";
-        return (
-          <div key={item.key} onClick={()=>{setChk(item.key,!done); if(item.key==="noInteres") setF(p=>({...p,sinSeguimiento:!done,etapa:!done?"perdido":p.etapa}));}}
-            style={{
-              display:"flex", alignItems:"center", gap:12,
-              padding:"11px 14px",
-              borderRadius:10,
-              background: done ? (esNI ? "rgba(220,38,38,0.04)" : "rgba(22,101,52,0.04)") : B.white,
-              border: `1px solid ${done ? (esNI ? "rgba(220,38,38,0.20)" : "rgba(22,101,52,0.20)") : "rgba(10,31,68,0.06)"}`,
-              marginBottom:6,
-              cursor:"pointer",
-              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
-            }}
-            onMouseEnter={e=>{if(!done) e.currentTarget.style.borderColor = "rgba(198,169,107,0.30)";}}
-            onMouseLeave={e=>{if(!done) e.currentTarget.style.borderColor = "rgba(10,31,68,0.06)";}}>
-            <div style={{
-              width:18, height:18, borderRadius:5,
-              border: `1.5px solid ${done ? (esNI ? B.redBright : B.green) : "rgba(10,31,68,0.20)"}`,
-              background: done ? (esNI ? B.redBright : B.green) : "transparent",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              flexShrink:0,
+    {/* ═══ CADENCIA DE CONTACTO (compacta) ═══ */}
+    {!f.sinSeguimiento && (
+      <div style={{marginBottom:20}}>
+        <div style={{
+          fontSize:10, fontWeight:500,
+          color:"rgba(10,31,68,0.40)",
+          textTransform:"uppercase", letterSpacing:"0.18em",
+          marginBottom:10,
+        }}>Cadencia de contacto</div>
+        <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+          {cadencia.map(c => (
+            <button key={c.v} onClick={()=>toggleCadencia(c.v)} style={{
+              all:"unset", cursor:"pointer",
+              display:"inline-flex", alignItems:"center", gap:6,
+              padding:"7px 11px", borderRadius:999,
+              background: c.done ? "rgba(5,150,105,0.06)" : "#fff",
+              border: `1px solid ${c.done ? "rgba(5,150,105,0.25)" : "rgba(10,31,68,0.08)"}`,
               transition:"all var(--mf-t-fast) var(--mf-ease-out)",
             }}>
-              {done && <IconCheck size={12} color="#fff"/>}
-            </div>
-            <span style={{
-              fontSize:13, fontWeight: done ? 600 : 500,
-              color: done ? (esNI ? B.redBright : B.green) : "rgba(10,31,68,0.85)",
-              letterSpacing:"0.005em",
-            }}>{item.label}</span>
-          </div>
-        );
-      })}
-    </div>}
-    {tab==="historial"&&<div>
-      <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
-        <Sel value={tipoN} onChange={setTipoN} options={[
-          {v:"llamada",  l:"● Llamada"},
-          {v:"whatsapp", l:"● WhatsApp"},
-          {v:"visita",   l:"● Visita"},
-          {v:"correo",   l:"● Correo"},
-          {v:"nota",     l:"● Nota"},
-        ]}/>
-        <div style={{flex:1, minWidth:180}}>
-          <Inp value={nota} onChange={setNota} placeholder="Escribe el registro…" onKeyDown={e=>e.key==="Enter"&&addNota()}/>
+              <span style={{
+                width:14, height:14, borderRadius:"50%",
+                background: c.done ? "#059669" : "transparent",
+                border: `1.5px solid ${c.done ? "#059669" : "rgba(10,31,68,0.22)"}`,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                flexShrink:0,
+              }}>{c.done && <IconCheck size={8} color="#fff"/>}</span>
+              <span style={{
+                fontSize:11.5, fontWeight: c.done ? 600 : 500,
+                color: c.done ? "#059669" : "rgba(10,31,68,0.65)",
+                letterSpacing:"0.01em",
+              }}>{c.l}</span>
+            </button>
+          ))}
         </div>
-        <button onClick={addNota}
-          style={{
-            display:"inline-flex", alignItems:"center", justifyContent:"center", gap:5,
-            padding:"0 14px", minHeight:44, borderRadius:8,
-            border:"none",
-            background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
-            color:"#fff",
-            fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12.5,
-            cursor:"pointer",
-            boxShadow:"0 1px 2px rgba(10,31,68,0.10)",
-            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
-          }}
-          onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
-          onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
-          <IconPlus size={13} color="#fff"/>
-        </button>
       </div>
+    )}
+    {/* ═══ HISTORIAL (últimas 3 + ver completo) ═══ */}
+    <div style={{marginBottom:20}}>
+      <div style={{
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        marginBottom:10, gap:10,
+      }}>
+        <div style={{
+          fontSize:10, fontWeight:500,
+          color:"rgba(10,31,68,0.40)",
+          textTransform:"uppercase", letterSpacing:"0.18em",
+        }}>Historial</div>
+        {(f.seguimientos||[]).length > 3 && (
+          <button onClick={()=>setHistorialCompleto(true)} style={{
+            all:"unset", cursor:"pointer",
+            fontSize:11, color:"rgba(10,31,68,0.55)",
+            letterSpacing:"0.01em",
+            display:"inline-flex", alignItems:"center", gap:4,
+          }}
+            onMouseEnter={e=>{e.currentTarget.style.color=B.navy;}}
+            onMouseLeave={e=>{e.currentTarget.style.color="rgba(10,31,68,0.55)";}}>
+            Ver historial completo
+            <IconChevronRight size={11} color="currentColor"/>
+          </button>
+        )}
+      </div>
+
+      {/* Form alta inline compacto */}
+      <div style={{display:"flex", gap:6, marginBottom:12, flexWrap:"wrap"}}>
+        <div style={{minWidth:120}}>
+          <Sel value={tipoN} onChange={setTipoN} options={[
+            {v:"llamada",l:"Llamada"},{v:"whatsapp",l:"WhatsApp"},{v:"visita",l:"Visita"},{v:"correo",l:"Correo"},{v:"nota",l:"Nota"},
+          ]}/>
+        </div>
+        <div style={{flex:1, minWidth:160}}>
+          <Inp value={nota} onChange={setNota} placeholder="Registro rápido…" onKeyDown={e=>e.key==="Enter"&&addNota()}/>
+        </div>
+        <button onClick={addNota} style={{
+          display:"inline-flex", alignItems:"center", justifyContent:"center",
+          padding:"0 12px", minHeight:44, borderRadius:8, border:"none",
+          background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+          color:"#fff", cursor:"pointer",
+        }}><IconPlus size={12} color="#fff"/></button>
+      </div>
+
+      {/* Solo últimas 3 actividades */}
       {(f.seguimientos||[]).length === 0 ? (
         <div style={{
-          fontSize:13, color:"rgba(10,31,68,0.30)",
-          textAlign:"center", padding:"32px 0",
+          fontSize:12, color:"rgba(10,31,68,0.45)",
+          textAlign:"center", padding:"20px 0",
           fontStyle:"italic", letterSpacing:"0.01em",
-        }}>Sin registros aún</div>
+        }}>Sin actividad registrada aún.</div>
       ) : (
-        <div style={{position:"relative", paddingLeft:22}}>
-          <div style={{position:"absolute", left:8, top:6, bottom:6, width:1, background:"rgba(10,31,68,0.08)"}}/>
-          {(f.seguimientos||[]).map((s,i)=>(
-            <div key={s.id||i} style={{position:"relative", marginBottom:12}}>
-              <div style={{
-                position:"absolute", left:-18, top:11,
-                width:9, height:9, borderRadius:"50%",
+        <div style={{display:"flex", flexDirection:"column", gap:8}}>
+          {(f.seguimientos||[]).slice(0, 3).map((s,i) => (
+            <div key={s.id||i} style={{
+              display:"flex", alignItems:"flex-start", gap:10,
+              padding:"10px 12px",
+              background:"rgba(248,246,242,0.6)",
+              border:"1px solid rgba(10,31,68,0.05)",
+              borderRadius:10,
+            }}>
+              <span style={{
+                width:8, height:8, borderRadius:"50%", flexShrink:0, marginTop:6,
                 background: tipoColor[s.tipo] || "rgba(10,31,68,0.30)",
-                border:"2px solid #fff",
-                boxShadow:"0 0 0 1px rgba(10,31,68,0.08)",
               }}/>
-              <div style={{
-                background:"rgba(248,246,242,0.6)",
-                border:"1px solid rgba(10,31,68,0.05)",
-                borderRadius:10,
-                padding:"10px 13px",
-              }}>
+              <div style={{flex:1, minWidth:0, overflowWrap:"anywhere"}}>
+                <div style={{fontSize:12.5, color:B.navy, lineHeight:1.45, letterSpacing:"-0.005em"}}>{s.texto}</div>
                 <div style={{
                   fontSize:10, color:"rgba(10,31,68,0.45)",
-                  marginBottom:4, display:"flex", alignItems:"center", gap:7, flexWrap:"wrap",
-                  fontWeight:500, letterSpacing:"0.01em",
-                }}>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
-                    <span style={{width:5,height:5,borderRadius:"50%",background:tipoColor[s.tipo]||"#9ca3af"}}/>
-                    {fmtF(s.fecha)} · {s.tipo}
-                  </span>
-                  {s.autor && (
-                    <span style={{
-                      display:"inline-flex", alignItems:"center", gap:4,
-                      padding:"1px 8px", borderRadius:12,
-                      background: s.rol === "asistente" ? "rgba(124,58,237,0.08)" : "rgba(10,31,68,0.06)",
-                      color: s.rol === "asistente" ? "#7c3aed" : B.navy,
-                      fontSize:10, fontWeight:500, textTransform:"none", letterSpacing:0,
-                    }}>
-                      {s.rol === "asistente" ? <IconUsers size={9}/> : <IconUser size={9}/>}
-                      {s.autor}
-                    </span>
-                  )}
-                  {s._auto && (
-                    <span style={{fontSize:10, color:"rgba(10,31,68,0.35)", fontStyle:"italic", textTransform:"none", letterSpacing:0}}>automático</span>
-                  )}
-                </div>
-                <div style={{fontSize:13, color:"rgba(10,31,68,0.85)", lineHeight:1.5}}>{s.texto}</div>
+                  marginTop:3, textTransform:"uppercase", letterSpacing:"0.10em",
+                }}>{fmtF(s.fecha)} · {s.tipo}{s.autor ? ` · ${s.autor}` : ""}</div>
               </div>
             </div>
           ))}
         </div>
       )}
+    </div>
+
+    {/* ═══ INFORMACIÓN COMPLETA (collapsable, cerrada por defecto) ═══ */}
+    <div style={{marginBottom:18, borderTop:"1px solid rgba(10,31,68,0.06)", paddingTop:16}}>
+      <button onClick={()=>setInfoExpandida(o=>!o)} style={{
+        all:"unset", cursor:"pointer", width:"100%",
+        display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
+        padding:"4px 0",
+      }}>
+        <div style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:18, fontWeight:500, color:B.navy,
+          letterSpacing:"-0.01em",
+        }}>Información completa</div>
+        <span style={{
+          fontSize:11, color:"rgba(10,31,68,0.50)", letterSpacing:"0.01em",
+          display:"inline-flex", alignItems:"center", gap:4,
+        }}>{infoExpandida ? "Ocultar" : "Mostrar"} <span style={{fontSize:9}}>{infoExpandida ? "▲" : "▼"}</span></span>
+      </button>
+    </div>
+    {infoExpandida && <div style={{marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
+        <FL label="Nombre completo" span2><Inp value={f.nombre} onChange={v=>set("nombre",v)}/></FL>
+        <FL label="Teléfono / WhatsApp"><Inp value={f.telefono} onChange={v=>set("telefono",v)}/></FL>
+        <FL label="Edad"><Inp value={f.edad} onChange={v=>set("edad",v)} type="number"/></FL>
+        <FL label="Correo" span2><Inp value={f.correo} onChange={v=>set("correo",v)} type="email"/></FL>
+        <FL label="Estado de la República"><Sel value={f.estado} onChange={v=>set("estado",v)} options={[{v:"",l:"Seleccionar..."},...ESTADOS_MX.map(e=>({v:e,l:e}))]}/></FL>
+        <FL label="Producto"><Sel value={f.producto} onChange={v=>set("producto",v)} options={PRODUCTOS_LEAD}/></FL>
+        <FL label="Último contacto"><Inp value={f.ultimoContacto} onChange={v=>set("ultimoContacto",v)} type="date"/></FL>
+        <FL label="Asignar a"><Sel value={f.asignadoA||""} onChange={v=>set("asignadoA",v)} options={[{v:"",l:"-- Sin asignar --"},...asistentes.map(a=>({v:a.id,l:a.nombre}))]}/></FL>
+      </div>
+
+      {/* Estado de oportunidad */}
+      <div style={{marginTop:24}}>
+        <div style={{
+          fontSize:10, fontWeight:500,
+          color:"rgba(10,31,68,0.40)",
+          textTransform:"uppercase", letterSpacing:"0.18em",
+          marginBottom:10,
+        }}>Estado de oportunidad</div>
+        <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10}}>
+          <button onClick={()=>set("estadoOportunidad", null)} style={{
+            all:"unset", cursor:"pointer",
+            padding:"6px 12px", borderRadius:999,
+            border: `1px solid ${!f.estadoOportunidad ? "rgba(10,31,68,0.30)" : "rgba(10,31,68,0.08)"}`,
+            background: !f.estadoOportunidad ? "rgba(10,31,68,0.04)" : "#fff",
+            color: !f.estadoOportunidad ? B.navy : "rgba(10,31,68,0.50)",
+            fontSize:11, fontWeight:500, letterSpacing:"0.01em",
+          }}>Auto / sin estado</button>
+          {ESTADOS_OPORTUNIDAD.map(e => {
+            const active = f.estadoOportunidad === e.v;
+            return (
+              <button key={e.v} onClick={()=>set("estadoOportunidad", e.v)} style={{
+                all:"unset", cursor:"pointer",
+                display:"inline-flex", alignItems:"center", gap:6,
+                padding:"6px 12px", borderRadius:999,
+                border: `1px solid ${active ? `${e.color}55` : "rgba(10,31,68,0.08)"}`,
+                background: active ? `${e.color}10` : "#fff",
+                color: active ? e.color : "rgba(10,31,68,0.55)",
+                fontSize:11, fontWeight:active?600:500, letterSpacing:"0.01em",
+              }}>
+                <span style={{width:6, height:6, borderRadius:"50%", background: active ? e.color : "rgba(10,31,68,0.20)"}}/>
+                {e.l}
+              </button>
+            );
+          })}
+        </div>
+        {f.estadoOportunidad === "en_pausa" && (
+          <div style={{
+            background:"rgba(100,116,139,0.04)",
+            border:"1px solid rgba(100,116,139,0.15)",
+            borderRadius:10, padding:"12px 14px", marginTop:6,
+          }}>
+            <div style={{fontSize:11.5, color:"rgba(10,31,68,0.65)", marginBottom:8, lineHeight:1.45}}>
+              ¿Cuándo retomas el seguimiento? Al guardar, MarFlow agendará un evento y agregará un pendiente.
+            </div>
+            <FL label="Retomar el día">
+              <Inp type="date" value={f.pausaHasta||""} onChange={v=>set("pausaHasta", v)}/>
+            </FL>
+          </div>
+        )}
+        <div style={{
+          display:"flex", alignItems:"center", gap:12, marginTop:14,
+          padding:"12px 14px",
+          background:"rgba(198,169,107,0.05)",
+          border:"1px solid rgba(198,169,107,0.18)",
+          borderRadius:10, flexWrap:"wrap",
+        }}>
+          <button onClick={()=>set("esReferido", !f.esReferido)} style={{
+            all:"unset", cursor:"pointer",
+            display:"flex", alignItems:"center", gap:9,
+          }}>
+            <span style={{
+              width:18, height:18, borderRadius:5,
+              background: f.esReferido ? "#C6A96B" : "#fff",
+              border: `1.5px solid ${f.esReferido ? "#C6A96B" : "rgba(10,31,68,0.20)"}`,
+              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+            }}>{f.esReferido && <IconCheck size={11} color="#fff"/>}</span>
+            <span style={{fontSize:12.5, fontWeight:600, color:B.navy, letterSpacing:"-0.005em"}}>Es referido</span>
+          </button>
+          {f.esReferido && (
+            <div style={{flex:"1 1 180px", minWidth:140}}>
+              <Inp value={f.referidoPor||""} onChange={v=>set("referidoPor", v)} placeholder="¿Por quién? (opcional)"/>
+            </div>
+          )}
+        </div>
+        <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:8, lineHeight:1.45, fontStyle:"italic"}}>
+          Los referidos se marcan automáticamente como "Alta oportunidad" cuando no eliges otro estado manual.
+        </div>
+      </div>
+
+      {/* Estrategia comercial */}
+      <div style={{marginTop:24}}>
+        <div style={{
+          fontSize:10, fontWeight:500,
+          color:"rgba(10,31,68,0.40)",
+          textTransform:"uppercase", letterSpacing:"0.18em",
+          marginBottom:10,
+        }}>Estrategia comercial</div>
+        <div style={{display:"grid",gap:12}}>
+          <FL label="Objeciones del cliente"><Inp value={f.objeciones||""} onChange={v=>set("objeciones",v)} rows={2} placeholder="¿Qué lo detiene de comprar?"/></FL>
+          <FL label="Intereses y necesidades"><Inp value={f.intereses||""} onChange={v=>set("intereses",v)} rows={2} placeholder="¿Qué busca proteger o lograr?"/></FL>
+          <FL label="Motivador de compra"><Inp value={f.motivador||""} onChange={v=>set("motivador",v)} rows={2} placeholder="¿Qué lo haría decidir hoy?"/></FL>
+        </div>
+      </div>
     </div>}
 
     {/* Footer: eliminar lead + cancelar/guardar */}
@@ -4825,6 +4969,76 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
       />
     )}
     {wam&&<EnviarWhatsAppModal lead={f} usuario={usuario} onClose={()=>setWam(false)} onEnviado={registrarSeguimientoWhatsApp}/>}
+
+    {/* Modal: Historial completo con todas las actividades */}
+    {historialCompleto && (
+      <div onClick={(e)=>{if(e.target===e.currentTarget) setHistorialCompleto(false);}} style={{
+        position:"fixed", inset:0, zIndex:1500,
+        background:"rgba(10,31,68,0.45)",
+        backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)",
+        display:"flex", justifyContent:"center", alignItems:"center", padding:20,
+        animation:"mfFadeIn .22s var(--mf-ease-out)",
+      }}>
+        <div style={{
+          background:"#F8F6F2", borderRadius:18,
+          width:"min(580px, 100%)", maxHeight:"86vh",
+          display:"flex", flexDirection:"column",
+          boxShadow:"0 24px 60px rgba(10,31,68,0.20)",
+          animation:"mfFadeUp .25s var(--mf-ease-spring)",
+        }}>
+          <div style={{
+            padding:"20px 24px 16px",
+            borderBottom:"1px solid rgba(10,31,68,0.06)",
+            display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12,
+          }}>
+            <div>
+              <div style={{fontSize:10, color:"rgba(10,31,68,0.45)", textTransform:"uppercase", letterSpacing:"0.18em", marginBottom:4}}>Timeline completo</div>
+              <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:22, fontWeight:500, color:B.navy, letterSpacing:"-0.015em"}}>
+                Historial de {f.nombre || "lead"}
+              </div>
+            </div>
+            <button onClick={()=>setHistorialCompleto(false)} style={{
+              width:30, height:30, borderRadius:8,
+              border:"1px solid rgba(10,31,68,0.08)",
+              background:"#fff", cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              color:"rgba(10,31,68,0.55)",
+            }}><IconX size={12} color="currentColor"/></button>
+          </div>
+          <div style={{flex:1, overflowY:"auto", padding:"16px 22px 22px"}}>
+            {(f.seguimientos||[]).length === 0 ? (
+              <div style={{textAlign:"center", padding:"40px 20px", color:"rgba(10,31,68,0.50)", fontStyle:"italic"}}>Sin actividad registrada aún.</div>
+            ) : (
+              <div style={{position:"relative", paddingLeft:22}}>
+                <div style={{position:"absolute", left:8, top:6, bottom:6, width:1, background:"rgba(10,31,68,0.08)"}}/>
+                {(f.seguimientos||[]).map((s,i) => (
+                  <div key={s.id||i} style={{position:"relative", marginBottom:14}}>
+                    <div style={{
+                      position:"absolute", left:-18, top:9,
+                      width:9, height:9, borderRadius:"50%",
+                      background: tipoColor[s.tipo] || "rgba(10,31,68,0.30)",
+                      border:"2px solid #F8F6F2",
+                      boxShadow:"0 0 0 1px rgba(10,31,68,0.08)",
+                    }}/>
+                    <div style={{
+                      background:"#fff",
+                      border:"1px solid rgba(10,31,68,0.05)",
+                      borderRadius:10,
+                      padding:"10px 14px",
+                    }}>
+                      <div style={{fontSize:10.5, color:"rgba(10,31,68,0.45)", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.10em"}}>
+                        {fmtF(s.fecha)} · {s.tipo}{s.autor ? ` · ${s.autor}` : ""}
+                      </div>
+                      <div style={{fontSize:13, color:B.navy, lineHeight:1.5, letterSpacing:"-0.005em"}}>{s.texto}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
   </MFModal>;
 }
 
