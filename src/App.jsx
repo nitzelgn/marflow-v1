@@ -1769,27 +1769,43 @@ async function getSuscripcionActiva() {
 // Invocar la Edge Function para enviar una push de prueba
 async function enviarPushDePrueba(usuario) {
   const adminId = getAdminId(usuario);
-  const { data, error } = await supabase.functions.invoke("send-push-notification", {
-    body: {
-      admin_id: adminId,
-      title: "Hola desde MarFlow",
-      body: "Tus notificaciones están funcionando correctamente.",
-      url: "/",
-    },
-  });
-  if (error) {
-    const msg = error?.context?.body
-      ? (typeof error.context.body === "string" ? error.context.body : JSON.stringify(error.context.body))
-      : (error?.message || "Error desconocido en backend");
-    throw new Error(`Backend: ${msg}`);
+  // Usar fetch directo para tener acceso al status code + body crudo (mejor para debug)
+  const session = (await supabase.auth.getSession()).data.session;
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push-notification`;
+  let resp, txt;
+  try {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": session ? `Bearer ${session.access_token}` : "",
+        "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+      },
+      body: JSON.stringify({
+        admin_id: adminId,
+        title: "Hola desde MarFlow",
+        body: "Tus notificaciones están funcionando correctamente.",
+        url: "/",
+      }),
+    });
+    txt = await resp.text();
+  } catch (e) {
+    throw new Error(`Red: ${e?.message || e}`);
   }
-  if (!data) throw new Error("Backend no devolvió respuesta.");
+  let data = null;
+  try { data = JSON.parse(txt); } catch {}
+
+  if (!resp.ok) {
+    const detalle = data?.error || data?.message || txt?.slice(0, 200) || resp.statusText;
+    throw new Error(`Backend ${resp.status}: ${detalle}`);
+  }
+  if (!data) throw new Error("Backend devolvió respuesta no-JSON.");
   if (data.error) throw new Error(`Backend: ${data.error}`);
-  if (typeof data.sent !== "number") throw new Error("Respuesta inválida del backend.");
+  if (typeof data.sent !== "number") throw new Error(`Respuesta inválida: ${txt.slice(0,200)}`);
   if (data.sent === 0) {
     const errs = (data.errors || []).join(" · ");
-    if (data.total === 0) throw new Error("Sin suscripciones activas en este dispositivo. Activa de nuevo.");
-    throw new Error(`No se envió ninguna push (${data.total} suscripciones). ${errs || ""}`);
+    if (data.total === 0) throw new Error("Sin suscripciones activas. Activa de nuevo.");
+    throw new Error(`No se envió (${data.total} suscripciones): ${errs}`);
   }
   return data;
 }
