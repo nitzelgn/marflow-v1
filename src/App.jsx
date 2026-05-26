@@ -5754,24 +5754,69 @@ function _detectarProducto(texto) {
 
 // Separa el texto en bloques de lead. Si no encuentra separadores fuertes,
 // retorna un solo bloque (asumiendo que es un solo lead).
+//
+// Estrategia en cascada (de más fuerte a más débil):
+//   1. Separadores explícitos: "Lead 1:", "Prospecto #2", "---", "═══"
+//   2. Repetición de etiquetas de inicio ("Nombre:" aparece 2+ veces) →
+//      cada aparición marca el inicio de un nuevo lead (caso típico Outlook,
+//      sin líneas en blanco entre leads)
+//   3. 3+ saltos de línea consecutivos
+//   4. Doble salto de línea (si hay 2+ emails o 2+ nombres etiquetados)
+//   5. Último recurso: cada línea no vacía como lead independiente
+//      (formato "Nombre - tel - correo" en una sola línea)
 function _separarBloques(texto) {
   const s = String(texto || "").trim();
   if (!s) return [];
 
-  // Separadores fuertes: "Lead 1:", "Lead #2", "Prospecto 1)", "---", "═══", "***"
-  // O dos+ líneas en blanco consecutivas
-  const rxFuerte = /(?:\n\s*\n\s*\n)|(?:\n\s*[-═*]{3,}\s*\n)|(?:\n\s*(?:lead|prospecto|cliente)\s*#?\s*\d+[\):\.\-]?\s*)/i;
-
-  if (rxFuerte.test(s)) {
-    return s.split(rxFuerte).map(b => b.trim()).filter(Boolean);
+  // 1) Separadores muy fuertes: "Lead 1:", "Prospecto #2", "---", "═══"
+  const rxMuyFuerte = /(?:\n\s*[-═*]{3,}\s*\n)|(?:\n\s*(?:lead|prospecto|cliente)\s*#?\s*\d+[\):\.\-]?\s*)/i;
+  if (rxMuyFuerte.test(s)) {
+    return s.split(rxMuyFuerte).map(b => b.trim()).filter(Boolean);
   }
 
-  // Doble salto de línea (separación más débil)
-  // pero solo si detectamos múltiples emails O múltiples nombres etiquetados
+  // 2) Repetición de líneas-etiqueta ("Nombre:" / "Cliente:" / "Prospecto:" / "Lead:"
+  //    aparece 2+ veces al inicio de línea). Cada aparición es un nuevo bloque.
+  //    Esto cubre el caso típico de Outlook donde los leads vienen pegados sin
+  //    separación en blanco entre ellos.
+  const lineas = s.split("\n");
+  const indicesInicio = [];
+  for (let i = 0; i < lineas.length; i++) {
+    if (/^\s*(?:nombre|cliente|prospecto|lead)\s*[:\-]/i.test(lineas[i])) {
+      indicesInicio.push(i);
+    }
+  }
+  if (indicesInicio.length >= 2) {
+    const bloques = [];
+    for (let i = 0; i < indicesInicio.length; i++) {
+      const start = indicesInicio[i];
+      const end = (i + 1 < indicesInicio.length) ? indicesInicio[i + 1] : lineas.length;
+      bloques.push(lineas.slice(start, end).join("\n").trim());
+    }
+    return bloques.filter(Boolean);
+  }
+
+  // 3) Triple salto de línea (separación muy explícita)
+  const rxTripleSalto = /\n\s*\n\s*\n/;
+  if (rxTripleSalto.test(s)) {
+    return s.split(rxTripleSalto).map(b => b.trim()).filter(Boolean);
+  }
+
+  // 4) Doble salto de línea (sólo si hay señal de múltiples leads)
   const emails = (s.match(new RegExp(_RX_EMAIL.source, "gi")) || []).length;
   const nombresLbl = (s.match(/^(?:nombre|cliente|prospecto)\s*[:\-]/gim) || []).length;
   if (emails >= 2 || nombresLbl >= 2) {
-    return s.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+    const partes = s.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+    if (partes.length >= 2) return partes;
+  }
+
+  // 5) Último recurso: formato "Nombre - tel - correo" por línea.
+  //    Si cada línea no vacía tiene un email y hay 2+, tratamos línea = lead.
+  if (emails >= 2 && nombresLbl === 0) {
+    const lineasNoVacias = lineas.map(l => l.trim()).filter(Boolean);
+    const conEmail = lineasNoVacias.filter(l => _RX_EMAIL.test(l)).length;
+    if (conEmail === lineasNoVacias.length) {
+      return lineasNoVacias;
+    }
   }
 
   return [s];
