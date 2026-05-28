@@ -1584,7 +1584,7 @@ function RecoveryPassword({onSuccess, onCancel}) {
           <button className="mfr-btn-secondary" onClick={onCancel}>Cancelar y volver al inicio</button>
         </div>
         <div style={{textAlign:"center",marginTop:24}}>
-          <div style={{fontSize:10,color:"rgba(198,169,107,0.25)",letterSpacing:2,textTransform:"uppercase"}}>© 2025 MarFlow</div>
+          <div style={{fontSize:10,color:"rgba(198,169,107,0.25)",letterSpacing:2,textTransform:"uppercase"}}>© 2026 MarFlow</div>
         </div>
       </div>
     </div>
@@ -6064,12 +6064,12 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
       // Clasificar contra los leads existentes en el pipeline
       const { nuevos, duplicados } = clasificarDuplicados(parsed.leads, leads);
       if (!nuevos.length && !duplicados.length && !parsed.warnings.omitidasSinNombre) {
-        alert("El archivo está vacío o no se detectaron filas con datos.");
+        window.__mfToast?.("El archivo está vacío o no se detectaron filas con datos.", "error");
       } else {
         setPreview({ nuevos, duplicados, warnings: parsed.warnings });
       }
     } catch(err){
-      alert("Error al leer el archivo: " + (err.message || err));
+      window.__mfToast?.("No pudimos leer el archivo. Verifica que sea un CSV/Excel válido.", "error");
     }
     e.target.value = "";
   }
@@ -6110,7 +6110,7 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
       XLSX.utils.book_append_sheet(wb, ws, "Leads MarFlow");
       XLSX.writeFile(wb, `marflow_leads_${hoy()}.xlsx`);
     } catch(err){
-      alert("Error al exportar: " + (err.message || err));
+      window.__mfToast?.("No pudimos exportar el archivo. Intenta de nuevo.", "error");
     }
   }
   // Botón de toolbar reusable estilo Linear
@@ -6255,19 +6255,30 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
               }}>{cols.length}</span>
             </div>
 
-            {/* Cards o estado vacío */}
+            {/* Cards o estado vacío premium */}
             {cols.length === 0 ? (
               <div style={{
-                border: "1px dashed rgba(10,31,68,0.10)",
-                borderRadius: 10,
-                padding: "22px 10px",
+                border: `1px dashed ${B.goldBorder}`,
+                borderRadius: 12,
+                padding: "26px 14px",
                 textAlign: "center",
-                color: "rgba(10,31,68,0.30)",
-                fontSize: 11,
-                background: "rgba(255,255,255,0.4)",
-                fontStyle: "italic",
-                letterSpacing: "0.01em",
-              }}>Sin leads</div>
+                background: "linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(248,246,242,0.5) 100%)",
+                display:"flex", flexDirection:"column", alignItems:"center", gap:8,
+              }}>
+                <div style={{
+                  width:32, height:32, borderRadius:"50%",
+                  background:B.cream, border:`1px solid ${B.goldBorder}`,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  color:B.gold,
+                }}><IconLayers size={14} color={B.gold}/></div>
+                <div style={{
+                  fontFamily:"'Cormorant Garamond', serif",
+                  fontSize:15, color:B.navy, lineHeight:1.2,
+                }}>Etapa libre</div>
+                <div style={{fontSize:10.5, color:"rgba(10,31,68,0.45)", letterSpacing:"0.02em", maxWidth:160, lineHeight:1.4}}>
+                  Arrastra un lead aquí o crea uno nuevo desde el botón “+”.
+                </div>
+              </div>
             ) : (
               cols.map(l => <LeadCard key={l.id} lead={l} onClick={setLeadAct} onContacto={setContactoL}/>)
             )}
@@ -7704,9 +7715,9 @@ function Cobranza() {
 
   function normFecha(v){if(!v)return null;const s=String(v).trim();if(/^\d{5}$/.test(s)){const d=new Date((Number(s)-25569)*86400000);return d.toISOString().split("T")[0];}if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){const[d,m,y]=s.split("/");return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;}if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;try{const d=new Date(s);if(!isNaN(d.getTime()))return d.toISOString().split("T")[0];}catch{}return null;}
 
-  async function cargarExcel(e){const file=e.target.files?.[0];if(!file)return;setCargando(true);try{const{default:XLSX}=await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");const ab=await file.arrayBuffer();const wb=XLSX.read(ab);const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{defval:""});const mapped=rows.map(r=>{const poliza=String(r["Póliza"]||r["Poliza"]||r["No. Póliza"]||r["POLIZA"]||r["poliza"]||"").trim();const nombre=String(r["Nombre"]||r["Cliente"]||r["NOMBRE"]||r["nombre"]||"").trim();const producto=String(r["Producto"]||r["PRODUCTO"]||r["producto"]||r["Ramo"]||"").trim();const vencStr=r["Vencimiento"]||r["Fecha Vencimiento"]||r["FechaVencimiento"]||r["VENCIMIENTO"]||r["Renovación"]||r["Renovacion"]||"";const vencimiento=normFecha(vencStr);const diasAtraso=Number(r["Días Atraso"]||r["Dias Atraso"]||r["DiasAtraso"]||r["dias_atraso"]||0)||0;const estatus=String(r["Estatus"]||r["Status"]||r["ESTATUS"]||"Al corriente").trim();const telefono=String(r["Teléfono"]||r["Telefono"]||r["TEL"]||"").trim();return{poliza,nombre,producto,vencimiento,diasAtraso,estatus,telefono};}).filter(r=>r.nombre||r.poliza);setDatos(mapped);setTab("dashboard");}catch{alert("Error al leer el archivo.");}setCargando(false);e.target.value="";}
+  async function cargarExcel(e){const file=e.target.files?.[0];if(!file)return;setCargando(true);try{const{default:XLSX}=await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");const ab=await file.arrayBuffer();const wb=XLSX.read(ab);const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{defval:""});const mapped=rows.map(r=>{const poliza=String(r["Póliza"]||r["Poliza"]||r["No. Póliza"]||r["POLIZA"]||r["poliza"]||"").trim();const nombre=String(r["Nombre"]||r["Cliente"]||r["NOMBRE"]||r["nombre"]||"").trim();const producto=String(r["Producto"]||r["PRODUCTO"]||r["producto"]||r["Ramo"]||"").trim();const vencStr=r["Vencimiento"]||r["Fecha Vencimiento"]||r["FechaVencimiento"]||r["VENCIMIENTO"]||r["Renovación"]||r["Renovacion"]||"";const vencimiento=normFecha(vencStr);const diasAtraso=Number(r["Días Atraso"]||r["Dias Atraso"]||r["DiasAtraso"]||r["dias_atraso"]||0)||0;const estatus=String(r["Estatus"]||r["Status"]||r["ESTATUS"]||"Al corriente").trim();const telefono=String(r["Teléfono"]||r["Telefono"]||r["TEL"]||"").trim();return{poliza,nombre,producto,vencimiento,diasAtraso,estatus,telefono};}).filter(r=>r.nombre||r.poliza);setDatos(mapped);setTab("dashboard");}catch{window.__mfToast?.("No pudimos leer el archivo Excel. Verifica el formato.", "error");}setCargando(false);e.target.value="";}
 
-  async function exportarFiltrado(lista,nombre){try{const{default:XLSX}=await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");const data=lista.map(r=>({Póliza:r.poliza,Cliente:r.nombre,Producto:r.producto,"Fecha vencimiento":fmtF(r.vencimiento),"Días atraso":r.diasAtraso,Estatus:r.estatus,Teléfono:r.telefono}));const ws=XLSX.utils.json_to_sheet(data);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Cobranza MarFlow");XLSX.writeFile(wb,`marflow_cobranza_${nombre}_${hoy()}.xlsx`);}catch{alert("Error al exportar.");}}
+  async function exportarFiltrado(lista,nombre){try{const{default:XLSX}=await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");const data=lista.map(r=>({Póliza:r.poliza,Cliente:r.nombre,Producto:r.producto,"Fecha vencimiento":fmtF(r.vencimiento),"Días atraso":r.diasAtraso,Estatus:r.estatus,Teléfono:r.telefono}));const ws=XLSX.utils.json_to_sheet(data);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Cobranza MarFlow");XLSX.writeFile(wb,`marflow_cobranza_${nombre}_${hoy()}.xlsx`);}catch{window.__mfToast?.("No pudimos exportar el archivo. Intenta de nuevo.", "error");}}
 
   const datosFilt = datos.filter(d=>!filtProd||d.producto.toLowerCase().includes(filtProd.toLowerCase()));
   const renovMes = datosFilt.filter(d=>d.vencimiento&&d.vencimiento.startsWith(mesBd));
@@ -8236,7 +8247,7 @@ function Usuarios({usuario,cuentas,setCuentas}) {
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:12}}>
       {visibles.map(c=>{const adminDe=c.adminId?cuentas.find(a=>a.id===c.adminId):null;return <div key={c.id} style={{background:B.white,border:`1px solid ${c.id===SUPERADMIN_ID?B.goldBorder:B.gray}`,borderRadius:12,padding:18,display:"flex",alignItems:"center",gap:13,boxShadow:B.shadow}}><Av name={c.nombre} size={44} color={rolColor[c.rol]||B.navy}/><div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:B.navy,fontSize:14}}>{c.nombre}</div><div style={{fontSize:11,color:"#9ca3af"}}>@{c.usuario}</div>{adminDe&&<div style={{fontSize:10,color:"#6b7280"}}>Asistente de: {adminDe.nombre}</div>}<div style={{marginTop:6,display:"flex",gap:4,flexWrap:"wrap"}}><Tag color={rolColor[c.rol]||B.navy} small>{rolLabel[c.rol]}</Tag>{c.id===usuario.id&&<Tag color={B.green} small>Tú</Tag>}</div></div>{c.id!==usuario.id&&c.id!==SUPERADMIN_ID&&(esSA||(usuario.rol==="admin"&&c.adminId===usuario.id))&&(<button onClick={()=>eliminar(c.id)} style={{background:"none",border:"none",color:"#d1d5db",cursor:"pointer",fontSize:18}} onMouseEnter={e=>e.target.style.color=B.redBright} onMouseLeave={e=>e.target.style.color="#d1d5db"}>✕</button>)}</div>;})}
     </div>
-    {modal&&<MFModal onClose={()=>setModal(false)} width={400}><MHead title="Crear usuario" onClose={()=>setModal(false)}/><div style={{display:"flex",flexDirection:"column",gap:12}}><FL label="Nombre completo"><Inp value={form.nombre} onChange={v=>setForm(f=>({...f,nombre:v}))}/></FL><FL label="Usuario"><Inp value={form.usuario} onChange={v=>setForm(f=>({...f,usuario:v}))}/></FL><FL label="ß"><Inp value={form.pass} onChange={v=>setForm(f=>({...f,pass:v}))} type="password"/></FL>{esSA&&<FL label="Tipo"><Sel value={form.rol} onChange={v=>setForm(f=>({...f,rol:v}))} options={[{v:"admin",l:"👤 Admin"},{v:"asistente",l:"🤝 Asistente"}]}/></FL>}{esSA&&form.rol==="asistente"&&<FL label="Usuario del administrador"><Inp value={form.adminRef} onChange={v=>setForm(f=>({...f,adminRef:v}))} placeholder="Usuario del admin"/></FL>}{!esSA&&<div style={{background:B.blueDim,border:`1px solid ${B.blue}20`,borderRadius:8,padding:"9px 13px",fontSize:12,color:B.blue,fontWeight:500}}>Los asistentes tendrán acceso solo a tu agenda.</div>}{err&&<div style={{fontSize:12,color:B.redBright,background:B.redDim,padding:"9px 13px",borderRadius:8,fontWeight:500}}>{err}</div>}</div><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:18}}><Btn onClick={()=>setModal(false)} color="#6b7280" outline small>Cancelar</Btn><Btn onClick={crear} bg={B.navy} small>Crear</Btn></div></MFModal>}
+    {modal&&<MFModal onClose={()=>setModal(false)} width={400}><MHead title="Crear usuario" onClose={()=>setModal(false)}/><div style={{display:"flex",flexDirection:"column",gap:12}}><FL label="Nombre completo"><Inp value={form.nombre} onChange={v=>setForm(f=>({...f,nombre:v}))}/></FL><FL label="Usuario"><Inp value={form.usuario} onChange={v=>setForm(f=>({...f,usuario:v}))}/></FL><FL label="Contraseña"><Inp value={form.pass} onChange={v=>setForm(f=>({...f,pass:v}))} type="password"/></FL>{esSA&&<FL label="Tipo"><Sel value={form.rol} onChange={v=>setForm(f=>({...f,rol:v}))} options={[{v:"admin",l:"👤 Admin"},{v:"asistente",l:"🤝 Asistente"}]}/></FL>}{esSA&&form.rol==="asistente"&&<FL label="Usuario del administrador"><Inp value={form.adminRef} onChange={v=>setForm(f=>({...f,adminRef:v}))} placeholder="Usuario del admin"/></FL>}{!esSA&&<div style={{background:B.blueDim,border:`1px solid ${B.blue}20`,borderRadius:8,padding:"9px 13px",fontSize:12,color:B.blue,fontWeight:500}}>Los asistentes tendrán acceso solo a tu agenda.</div>}{err&&<div style={{fontSize:12,color:B.redBright,background:B.redDim,padding:"9px 13px",borderRadius:8,fontWeight:500}}>{err}</div>}</div><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:18}}><Btn onClick={()=>setModal(false)} color="#6b7280" outline small>Cancelar</Btn><Btn onClick={crear} bg={B.navy} small>Crear</Btn></div></MFModal>}
     {confirmUser&&<ConfirmModal titulo="¿Eliminar usuario?" mensaje={`Vas a eliminar la cuenta de "${confirmUser.nombre}".`} icono="👤" textoConfirm="Sí, eliminar" colorConfirm={B.redBright} onConfirm={confirmarEliminar} onCancel={()=>setConfirmUser(null)}/>}
   </div>;
 }
@@ -8380,7 +8391,7 @@ function ImportarCorreo({ leads, setLeads, usuario, setSeccion, setFiltroNav }) 
         <textarea
           value={texto}
           onChange={e=>setTexto(e.target.value)}
-          placeholder={"Pega aquí el contenido completo del correo...\n\nEjemplo:\nNombre: Juan Pérez\nTeléfono: 55 1234 5678\nCorreo: juan@ejemplo.com\nProducto: Vida\nEstado: Jalisco"}
+          placeholder={"Pega aquí el contenido completo del correo...\n\nFormato sugerido:\nNombre: [Nombre del cliente]\nTeléfono: [10 dígitos]\nCorreo: [correo electrónico]\nProducto: [Vida / GMM / Auto / Hogar / Patrimonial]\nEstado: [Entidad federativa]"}
           rows={10}
           style={{
             width:"100%",
@@ -8678,6 +8689,11 @@ export default function App() {
     const id = ++toastIdRef.current;
     setToasts(prev => [...prev, { id, message, type }]);
   };
+  // Exponemos en window para que componentes hijos puedan invocar toasts
+  // sin necesidad de pasar showToast como prop (refactor menor pero útil).
+  if (typeof window !== "undefined") {
+    window.__mfToast = (msg, type = "success") => showToast.current?.(msg, type);
+  }
   function removeToast(id) {
     setToasts(prev => prev.filter(t => t.id !== id));
   }
