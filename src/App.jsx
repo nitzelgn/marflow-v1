@@ -5075,43 +5075,106 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
       );
     })()}
 
-    {/* ═══ PIPELINE VISUAL HORIZONTAL ═══ */}
+    {/* ═══ PIPELINE VISUAL · línea con puntos progresivos (stepper) ═══ */}
     {!f.sinSeguimiento && (() => {
       const etapaIdx = ETAPAS_PIPE.findIndex(e => e.id === f.etapa);
+      const total = ETAPAS_PIPE.length;
+      // Progress line fills from 0% hasta el centro del dot activo
+      const progressPct = etapaIdx >= 0 ? (etapaIdx / (total - 1)) * 100 : 0;
+
       return (
-        <div style={{marginBottom:20}}>
+        <div style={{marginBottom:24}}>
           <div style={{
             fontSize:10, fontWeight:500,
             color:"rgba(10,31,68,0.40)",
             textTransform:"uppercase", letterSpacing:"0.18em",
-            marginBottom:10,
+            marginBottom:18,
           }}>Pipeline</div>
-          <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+
+          {/* Track + dots */}
+          <div style={{
+            position:"relative",
+            display:"flex",
+            justifyContent:"space-between",
+            alignItems:"flex-start",
+            padding:"0 10px",
+          }}>
+            {/* Línea de fondo gris (full) */}
+            <div style={{
+              position:"absolute",
+              top: 9,
+              left: 19,    // ≈ centro del primer dot (10 padding + 9 mitad de dot 18)
+              right: 19,
+              height: 2,
+              background: "rgba(10,31,68,0.10)",
+              borderRadius: 1,
+              zIndex: 0,
+            }}/>
+            {/* Línea de progreso gold (hasta el activo) */}
+            {etapaIdx > 0 && (
+              <div style={{
+                position:"absolute",
+                top: 9,
+                left: 19,
+                width: `calc((100% - 38px) * ${progressPct / 100})`,
+                height: 2,
+                background: `linear-gradient(90deg, ${B.gold} 0%, ${B.gold} 90%, ${B.gold}55 100%)`,
+                borderRadius: 1,
+                zIndex: 1,
+                transition: "width var(--mf-t-slow) var(--mf-ease-spring)",
+              }}/>
+            )}
+
+            {/* Dots con label */}
             {ETAPAS_PIPE.map((et, i) => {
               const active = f.etapa === et.id;
               const pasado = etapaIdx >= 0 && i < etapaIdx;
-              const color = active ? et.color : pasado ? "rgba(10,31,68,0.55)" : "rgba(10,31,68,0.30)";
+              const future = !active && !pasado;
+
+              const dotBg = pasado ? B.gold
+                          : active ? et.color
+                          : B.white;
+              const dotBorder = pasado ? `1.5px solid ${B.gold}`
+                              : active ? `2px solid ${et.color}`
+                              : "1.5px solid rgba(10,31,68,0.18)";
+              const labelColor = active ? et.color
+                               : pasado ? "rgba(10,31,68,0.65)"
+                               : "rgba(10,31,68,0.35)";
+
               return (
                 <button key={et.id} onClick={()=>cambiarEtapa(et.id)} style={{
                   all:"unset", cursor:"pointer",
-                  display:"flex", alignItems:"center", gap:6,
-                  padding:"7px 11px", borderRadius:8,
-                  background: active ? `${et.color}10` : "transparent",
-                  border: `1px solid ${active ? `${et.color}40` : "rgba(10,31,68,0.06)"}`,
-                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                  display:"flex", flexDirection:"column",
+                  alignItems:"center", gap:8,
+                  position:"relative", zIndex: 2,
+                  flex:"0 0 auto",
                 }}>
+                  {/* Dot */}
                   <span style={{
                     width:18, height:18, borderRadius:"50%",
-                    background: active ? et.color : pasado ? "rgba(10,31,68,0.40)" : "transparent",
-                    border: pasado ? "none" : `1.5px solid ${active ? et.color : "rgba(10,31,68,0.20)"}`,
+                    background: dotBg,
+                    border: dotBorder,
                     display:"flex", alignItems:"center", justifyContent:"center",
-                    flexShrink:0,
+                    boxShadow: active ? `0 0 0 4px ${et.color}18` : "none",
+                    transition: "all var(--mf-t-normal) var(--mf-ease-spring)",
                   }}>
                     {pasado && <IconCheck size={9} color="#fff"/>}
+                    {active && (
+                      <span style={{
+                        width:6, height:6, borderRadius:"50%",
+                        background: et.color,
+                        boxShadow: `0 0 0 2px #fff`,
+                      }}/>
+                    )}
                   </span>
+                  {/* Label */}
                   <span style={{
-                    fontSize:11.5, fontWeight: active ? 600 : 500,
-                    color, letterSpacing:"0.005em", whiteSpace:"nowrap",
+                    fontSize: 10.5,
+                    fontWeight: active ? 600 : 500,
+                    color: labelColor,
+                    letterSpacing: "0.01em",
+                    whiteSpace: "nowrap",
+                    transition: "color var(--mf-t-fast) var(--mf-ease-out)",
                   }}>{et.label.replace(/[¡⭐!]/g, "").trim()}</span>
                 </button>
               );
