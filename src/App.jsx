@@ -8386,8 +8386,26 @@ function calcularRenovacion(vigenciaInicio) {
   }
 }
 
+// Key de localStorage para persistir el Excel de Cobranza entre sesiones.
+const _LS_COBRANZA = "mf_cobranza_datos";
+
 function Cobranza() {
-  const [datos,setDatos] = useState([]);
+  // Recupera el Excel cargado anteriormente y RE-CALCULA renovacion + estadoAuto
+  // contra la fecha de hoy (porque los flags dependen de "hoy" y se desactualizan
+  // entre sesiones).
+  const [datos,setDatos] = useState(() => {
+    const stored = LS.get(_LS_COBRANZA, []);
+    if (!Array.isArray(stored) || stored.length === 0) return [];
+    return stored.map(d => {
+      const nuevo = { ...d };
+      nuevo.esPeriodoComp = esPeriodoComprometidoRow(d._raw, d.producto);
+      nuevo.renovacion = emisorAplicaRenovacion(d.producto)
+        ? calcularRenovacion(d.vigenciaInicio)
+        : null;
+      nuevo.estadoAuto = clasificarCobranza(nuevo);
+      return nuevo;
+    });
+  });
   const [cargando,setCargando] = useState(false);
   const [filtProd,setFiltProd] = useState("");      // legacy: filtro por producto (input principal)
   const [busqueda,setBusqueda] = useState("");      // búsqueda global (cliente/póliza/producto/respuesta banco)
@@ -8484,9 +8502,10 @@ function Cobranza() {
       }).filter(r => r.nombre || r.poliza);
 
       setDatos(mapped);
+      LS.set(_LS_COBRANZA, mapped);                // ← persistencia entre sesiones
       setTab("dashboard");
       setExpandedRow(null);
-      window.__mfToast?.(`${mapped.length} registros importados.`, "success");
+      window.__mfToast?.(`${mapped.length} registros importados y guardados.`, "success");
     } catch (err) {
       window.__mfToast?.("No pudimos leer el archivo Excel. Verifica el formato.", "error");
     }
@@ -8915,6 +8934,31 @@ function Cobranza() {
           <option value="asc">Menor atraso primero</option>
           <option value="none">Orden del Excel</option>
         </select>
+
+        {/* Botón "Limpiar datos" — útil si Excel cambia de formato */}
+        {datos.length > 0 && (
+          <button
+            onClick={()=>{
+              if (window.confirm("¿Borrar el Excel cargado? Tendrás que subirlo de nuevo.")) {
+                setDatos([]);
+                LS.set(_LS_COBRANZA, []);
+                window.__mfToast?.("Datos de Cobranza borrados.", "success");
+              }
+            }}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:6,
+              padding:"8px 12px", minHeight:36, borderRadius:8,
+              border:"1px solid rgba(220,38,38,0.20)",
+              background:"transparent", color:"#991b1b",
+              fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+              cursor:"pointer",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.04)";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+            <IconTrash size={12}/>Limpiar
+          </button>
+        )}
 
         {/* Toggle "Ocultar periodo comprometido" */}
         <label style={{
