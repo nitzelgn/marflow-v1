@@ -3723,7 +3723,13 @@ function getMicrocopyDelDia() {
   return MF_MICROCOPY[diaDelAño % MF_MICROCOPY.length];
 }
 
-function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas = [], setFiltroNav, setSeccion}) {
+function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas = [], setFiltroNav, setSeccion, setLeadsSubtab}) {
+  // Helper para navegar a la sección Leads con una subtab específica.
+  const irALeads = (subtab = "pipeline", filtro) => {
+    if (filtro && setFiltroNav) setFiltroNav(filtro);
+    if (setLeadsSubtab) setLeadsSubtab(subtab);
+    if (setSeccion) setSeccion("leads");
+  };
   // (Variables activos/irA/riesgo/sinC eliminadas: ya no se renderea sidebar de indicadores)
 
   // Drawer de pendientes + lead seleccionado (modal completo)
@@ -3807,7 +3813,7 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
       sub: "Auto · GMM · Hogar · Vida · sin contacto >2 días",
       color: "#dc2626", // red — temperatura caliente
       icon: <IconFlame size={16} color="#dc2626"/>,
-      action: ()=>{ setFiltroNav("asesorado"); setSeccion("pipeline"); },
+      action: ()=>{ irALeads("pipeline", "asesorado"); },
     },
     {
       key: "ahorro",
@@ -3816,7 +3822,7 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
       sub: "Retiro · Ahorro · Inversión · sin contacto >2 semanas",
       color: B.gold,
       icon: <IconDollar size={16} color={B.gold}/>,
-      action: ()=>{ setFiltroNav("asesorado"); setSeccion("pipeline"); },
+      action: ()=>{ irALeads("pipeline", "asesorado"); },
     },
     {
       key: "urgente",
@@ -3825,7 +3831,7 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
       sub: "Leads activos en riesgo de perderse",
       color: B.redBright,
       icon: <IconAlertCircle size={16} color={B.redBright}/>,
-      action: ()=>{ setFiltroNav("activos"); setSeccion("pipeline"); },
+      action: ()=>{ irALeads("pipeline", "activos"); },
     },
     {
       key: "pendientes",
@@ -6227,6 +6233,159 @@ function ImportarLeadsModal({ datos, onConfirm, onClose }) {
   );
 }
 
+/* ═══════════════════════════════════════════
+   LEADS WRAPPER — consolida Pipeline + Lista + Importar/Exportar
+   bajo una sola sección con subtabs premium estilo Linear.
+   La lógica de cada subcomponente queda intacta — solo cambia la
+   navegación de arriba.
+═══════════════════════════════════════════ */
+function LeadsSubtabNav({ tabs, active, onChange }) {
+  return (
+    <div style={{
+      display:"flex",
+      gap:24,
+      borderBottom:"1px solid rgba(10,31,68,0.08)",
+      marginBottom:22,
+      overflowX:"auto",
+      WebkitOverflowScrolling:"touch",
+      scrollbarWidth:"none",
+      msOverflowStyle:"none",
+    }}>
+      <style>{`.mf-subtab-row::-webkit-scrollbar{display:none;}`}</style>
+      {tabs.map(t => {
+        const isActive = t.id === active;
+        return (
+          <button key={t.id} onClick={()=>onChange(t.id)}
+            style={{
+              background:"transparent",
+              border:"none",
+              padding:"14px 0",
+              fontSize:13,
+              fontWeight: isActive ? 600 : 500,
+              color: isActive ? B.navy : "rgba(10,31,68,0.55)",
+              cursor:"pointer",
+              position:"relative",
+              fontFamily:"'Poppins', sans-serif",
+              display:"inline-flex",
+              alignItems:"center",
+              gap:7,
+              whiteSpace:"nowrap",
+              flexShrink:0,
+              letterSpacing:"0.005em",
+              transition:"color var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{ if(!isActive) e.currentTarget.style.color = B.navy; }}
+            onMouseLeave={e=>{ if(!isActive) e.currentTarget.style.color = "rgba(10,31,68,0.55)"; }}
+          >
+            {t.icon}
+            {t.l}
+            {isActive && (
+              <span style={{
+                position:"absolute",
+                bottom:-1,
+                left:0,
+                right:0,
+                height:2,
+                background:B.gold,
+                borderRadius:"1px 1px 0 0",
+              }}/>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Leads({ leads, setLeads, setEventos, filtroNav, setFiltroNav, esAdmin, esAsistente, cuentas, usuario, setSeccion, subtab, setSubtab }) {
+  // Si por algún motivo un asistente quedó con subtab pipeline/importar (que no
+  // ve), lo redirigimos a "lista" silenciosamente.
+  useEffect(() => {
+    if (!esAdmin && (subtab === "pipeline" || subtab === "importar")) {
+      setSubtab("lista");
+    }
+  }, [esAdmin, subtab, setSubtab]);
+
+  const subtabs = [
+    ...(esAdmin ? [{ id:"pipeline", l:"Seguimiento",          icon:<IconLayers size={14}/> }] : []),
+    {                id:"lista",    l:"Lista",                icon:<IconUsers size={14}/>  },
+    ...(esAdmin ? [{ id:"importar", l:"Importar / Exportar",  icon:<IconDownload size={14}/> }] : []),
+  ];
+
+  return (
+    <div className="mf-fade-in" style={{width:"100%"}}>
+      {/* Header editorial de la sección */}
+      <div style={{marginBottom:18}}>
+        <div style={{
+          fontSize:10.5, fontWeight:500,
+          color:"rgba(10,31,68,0.45)",
+          textTransform:"uppercase", letterSpacing:"0.22em",
+          marginBottom:6,
+        }}>Cartera</div>
+        <h1 style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:"clamp(24px, 5vw, 30px)", fontWeight:500,
+          color:"#0A1F44", letterSpacing:"-0.02em",
+          margin:0, lineHeight:1.1,
+        }}>Leads</h1>
+      </div>
+
+      {/* Subtabs premium */}
+      <LeadsSubtabNav tabs={subtabs} active={subtab} onChange={setSubtab}/>
+
+      {/* Filtros del Pipeline (solo cuando esa subtab está activa) */}
+      {subtab === "pipeline" && esAdmin && (
+        <div className="mf-pipeline-filters" style={{margin:"0 -12px 14px", borderRadius:0}}>
+          {[{v:"todos",l:"Todos"},{v:"activos",l:"Activos"},...ETAPAS.map(et=>({v:et.id,l:`${et.icon} ${et.label}`,c:et.color}))].map(o=>(
+            <button key={o.v} onClick={()=>setFiltroNav(o.v)}
+              style={{
+                padding:"5px 12px", borderRadius:20,
+                border:`1.5px solid ${filtroNav===o.v?(o.c||B.navy):B.gray}`,
+                background:filtroNav===o.v?(o.c||B.navy)+"12":B.cream,
+                color:filtroNav===o.v?(o.c||B.navy):"#6b7280",
+                fontFamily:"Poppins", fontWeight:600, fontSize:11,
+                cursor:"pointer", whiteSpace:"nowrap", flexShrink:0,
+              }}>{o.l}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Render del subtab activo */}
+      {subtab === "pipeline" && esAdmin && (
+        <Pipeline
+          leads={leads}
+          setLeads={setLeads}
+          setEventos={setEventos}
+          filtroNav={filtroNav}
+          esAdmin={esAdmin}
+          cuentas={cuentas}
+          usuario={usuario}
+        />
+      )}
+      {subtab === "lista" && (
+        <ListaLeads
+          leads={leads}
+          setLeads={setLeads}
+          setEventos={setEventos}
+          cuentas={cuentas}
+          usuario={usuario}
+          esAsistente={esAsistente}
+        />
+      )}
+      {subtab === "importar" && esAdmin && (
+        <ImportarCorreo
+          leads={leads}
+          setLeads={setLeads}
+          usuario={usuario}
+          setSeccion={setSeccion}
+          setFiltroNav={setFiltroNav}
+          setSubtab={setSubtab}
+        />
+      )}
+    </div>
+  );
+}
+
 function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario}) {
   const [leadAct,setLeadAct]=useState(null);
   const [nuevoM,setNuevoM]=useState(false);
@@ -8470,7 +8629,7 @@ function Usuarios({usuario,cuentas,setCuentas}) {
    - Reusa parsearLeadsDesdeCorreo + clasificarDuplicados + leadFromDB/leadToDB
    - Tras importar: redirect a Pipeline filtrado a etapa=nuevo
 ═══════════════════════════════════════════ */
-function ImportarCorreo({ leads, setLeads, usuario, setSeccion, setFiltroNav }) {
+function ImportarCorreo({ leads, setLeads, usuario, setSeccion, setFiltroNav, setSubtab }) {
   const [texto, setTexto] = useState("");
   const [parseados, setParseados] = useState([]); // [{lead, dup, incluido}]
   const [sourceDetectado, setSourceDetectado] = useState("");
@@ -8562,7 +8721,10 @@ function ImportarCorreo({ leads, setLeads, usuario, setSeccion, setFiltroNav }) 
       setLeads(prev => [...prev, ...nuevos]);
       // Redirect a Pipeline filtrado a "nuevo" (decisión confirmada)
       if (setFiltroNav) setFiltroNav("nuevo");
-      if (setSeccion) setSeccion("pipeline");
+      // Si vivimos dentro de Leads (subtab), cambiar a la subtab "pipeline".
+      // Si por algún motivo no tenemos setSubtab, hacer fallback al seccion.
+      if (setSubtab) setSubtab("pipeline");
+      else if (setSeccion) setSeccion("leads");
     } catch (e) {
       setMensaje("Error al importar: " + (e?.message || e));
     } finally {
@@ -8862,6 +9024,9 @@ export default function App() {
   const [cuentas,setCuentas]=useState([]);
   const [seccion,setSeccion]=useState("dashboard");
   const [filtroNav,setFiltroNav]=useState("todos");
+  // Subtab activo dentro de la sección Leads (pipeline / lista / importar).
+  // Lifted al App para que Dashboard pueda navegar a una subtab específica.
+  const [leadsSubtab,setLeadsSubtab]=useState("pipeline");
   // Estado: leads/eventos vienen de Supabase (ya no de localStorage).
   // La estructura sigue siendo { [adminId]: [...] } por compatibilidad.
   const [allLeads,setAllLeads]=useState({});
@@ -9309,11 +9474,9 @@ export default function App() {
 
   const NAV=[
     ...(esAdmin?[{id:"dashboard",icon:<IconHome size={14}/>,l:"Hoy"}]:[]),
-    ...(esAdmin?[{id:"pipeline",icon:<IconLayers size={14}/>,l:"Seguimiento"}]:[]),
-    {id:"lista",icon:<IconUsers size={14}/>,l:"Leads"},
+    {id:"leads",icon:<IconUsers size={14}/>,l:"Leads"},
     {id:"agenda",icon:<IconCalendar size={14}/>,l:"Agenda"},
     ...(esAdmin?[{id:"metricas",icon:<IconBarChart size={14}/>,l:"Métricas"}]:[]),
-    ...(esAdmin?[{id:"importar_correo",icon:<IconDownload size={14}/>,l:"Importar"}]:[]),
     ...(esAdmin?[{id:"cobranza",icon:<IconDollar size={14}/>,l:"Cobranza"}]:[]),
     {id:"configuracion",icon:<IconShield size={14}/>,l:"Configuración"},
   ];
@@ -9557,19 +9720,11 @@ export default function App() {
         </div>
       </header>
 
-      {seccion==="pipeline"&&esAdmin&&(
-        <div className="mf-pipeline-filters">
-          {[{v:"todos",l:"Todos"},{v:"activos",l:"Activos"},...ETAPAS.map(et=>({v:et.id,l:`${et.icon} ${et.label}`,c:et.color}))].map(o=>(<button key={o.v} onClick={()=>setFiltroNav(o.v)} style={{padding:"5px 12px",borderRadius:20,border:`1.5px solid ${filtroNav===o.v?(o.c||B.navy):B.gray}`,background:filtroNav===o.v?(o.c||B.navy)+"12":B.cream,color:filtroNav===o.v?(o.c||B.navy):"#6b7280",fontFamily:"Poppins",fontWeight:600,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>{o.l}</button>))}
-        </div>
-      )}
-
       <main className="mf-main">
-        {seccion==="dashboard"&&esAdmin&&<Dashboard leads={leads} setLeads={setLeads} eventos={eventos} setEventos={setEventos} usuario={usuario} cuentas={cuentas} setFiltroNav={setFiltroNav} setSeccion={setSeccion}/>}
-        {seccion==="pipeline"&&esAdmin&&<Pipeline leads={leads} setLeads={setLeads} setEventos={setEventos} filtroNav={filtroNav} esAdmin={esAdmin} cuentas={cuentas} usuario={usuario}/>}
-        {seccion==="lista"&&<ListaLeads leads={leads} setLeads={setLeads} setEventos={setEventos} cuentas={cuentas} usuario={usuario} esAsistente={esAsistente}/>}
+        {seccion==="dashboard"&&esAdmin&&<Dashboard leads={leads} setLeads={setLeads} eventos={eventos} setEventos={setEventos} usuario={usuario} cuentas={cuentas} setFiltroNav={setFiltroNav} setSeccion={setSeccion} setLeadsSubtab={setLeadsSubtab}/>}
+        {seccion==="leads"&&<Leads leads={leads} setLeads={setLeads} setEventos={setEventos} filtroNav={filtroNav} setFiltroNav={setFiltroNav} esAdmin={esAdmin} esAsistente={esAsistente} cuentas={cuentas} usuario={usuario} setSeccion={setSeccion} subtab={leadsSubtab} setSubtab={setLeadsSubtab}/>}
         {seccion==="agenda"&&<Agenda eventos={eventos} setEventos={setEventos} leads={leads} esAsistente={esAsistente} usuario={usuario}/>}
         {seccion==="metricas"&&esAdmin&&<Metricas leads={leads}/>}
-        {seccion==="importar_correo"&&esAdmin&&<ImportarCorreo leads={leads} setLeads={setLeads} usuario={usuario} setSeccion={setSeccion} setFiltroNav={setFiltroNav}/>}
         {seccion==="cobranza"&&esAdmin&&<Cobranza/>}
         {seccion==="configuracion"&&<Configuracion
           usuario={usuario}
