@@ -3803,7 +3803,70 @@ function getMicrocopyDelDia() {
   return MF_MICROCOPY[diaDelAño % MF_MICROCOPY.length];
 }
 
+/* ───────────────────────────────────────────
+   DashboardSkeleton — placeholder premium que se ve mientras
+   carga el contenido real. Se muestra ~300ms al montar para
+   dar sensación de "preparando algo premium". Si la app está
+   lenta (red débil), también cubre la espera real.
+─────────────────────────────────────────── */
+function DashboardSkeleton() {
+  return (
+    <div className="mf-fade-in" style={{maxWidth:1280, margin:"0 auto"}}>
+      {/* Hero saludo skeleton */}
+      <div style={{marginBottom:32, padding:"4px 0 28px"}}>
+        <Shimmer width="120px" height={14} radius={4} style={{marginBottom:10}}/>
+        <Shimmer width="60%" height={36} radius={6} style={{marginBottom:14}}/>
+        <Shimmer width="40%" height={14} radius={4}/>
+      </div>
+
+      <GoldDivider marginY={16}/>
+
+      {/* Header "Prioridades de hoy" skeleton */}
+      <div style={{marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"baseline"}}>
+        <Shimmer width="180px" height={24} radius={5}/>
+        <Shimmer width="80px" height={12} radius={4}/>
+      </div>
+
+      {/* 4 cards skeleton (matching layout real) */}
+      <div style={{
+        display:"grid",
+        gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",
+        gap:14,
+        marginBottom:32,
+      }}>
+        {[0,1,2,3].map(i => (
+          <div key={i} style={{
+            background:B.white,
+            border:"1px solid rgba(10,31,68,0.06)",
+            borderRadius:16,
+            padding:"22px 22px 20px",
+            minHeight:148,
+            display:"flex", flexDirection:"column",
+          }}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12}}>
+              <Shimmer width={36} height={36} radius={10}/>
+              <Shimmer width={56} height={42} radius={6}/>
+            </div>
+            <div style={{flex:1, display:"flex", flexDirection:"column", justifyContent:"flex-end", gap:6}}>
+              <Shimmer width="70%" height={13} radius={4}/>
+              <Shimmer width="50%" height={11} radius={4}/>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas = [], setFiltroNav, setSeccion, setLeadsSubtab}) {
+  // Skeleton transitorio al entrar a Dashboard. Se desvanece a los
+  // 320ms (sensación premium sin retrasar la app si los datos ya están).
+  const [showSkeleton, setShowSkeleton] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setShowSkeleton(false), 320);
+    return () => clearTimeout(t);
+  }, []);
+  if (showSkeleton) return <DashboardSkeleton/>;
   // Helper para navegar a la sección Leads con una subtab específica.
   const irALeads = (subtab = "pipeline", filtro) => {
     if (filtro && setFiltroNav) setFiltroNav(filtro);
@@ -8247,9 +8310,14 @@ const ESTADOS_COBRANZA = {
    - O el producto es PLU3 (caso explícito Allianz)
    Estos registros se tratan como NO prioritarios — se ocultan por default.
 ─────────────────────────────────────────── */
+// Productos con periodo comprometido por convención Allianz.
+// Agregar aquí si aparecen nuevos (ej. PLU4, PLU5, OPED variantes, etc.).
+const _PRODUCTOS_PERIODO_COMPROMETIDO = ["PLU3", "OPED"];
+
 function esPeriodoComprometidoRow(rawRow, producto) {
-  // Caso explícito por producto
-  if (String(producto || "").toUpperCase().includes("PLU3")) return true;
+  // Caso explícito por producto (match contra catálogo conocido)
+  const prodUpper = String(producto || "").toUpperCase();
+  if (_PRODUCTOS_PERIODO_COMPROMETIDO.some(p => prodUpper.includes(p))) return true;
   // Recorre todos los valores del row buscando "periodo" + "comprometido"
   if (!rawRow) return false;
   for (const v of Object.values(rawRow)) {
