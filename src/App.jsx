@@ -10187,7 +10187,19 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
     const enRecovery = detectarRecovery();
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+
+    // RACE getSession vs timeout 4s — si la red está lenta, no se queda
+    // colgado en "Cargando..." infinito. Si hay timeout, mostramos login y
+    // dejamos que onAuthStateChange tome el control después si llega.
+    const SESSION_TIMEOUT_MS = 4000;
+    const sessionPromise = supabase.auth.getSession()
+      .then(r => ({ session: r?.data?.session || null, timedOut: false }))
+      .catch(() => ({ session: null, timedOut: false }));
+    const timeoutPromise = new Promise(resolve =>
+      setTimeout(() => resolve({ session: null, timedOut: true }), SESSION_TIMEOUT_MS)
+    );
+
+    Promise.race([sessionPromise, timeoutPromise]).then(async ({ session, timedOut }) => {
       if (!mounted) return;
       if (session?.user && !enRecovery) {
         const perfil = await cargarPerfil(session.user.id);
@@ -10200,7 +10212,11 @@ export default function App() {
           setDatosCargando(false);
         }
       }
+      // Aunque haya timeout, soltar la pantalla de Cargando para que se vea login.
       setAuthReady(true);
+      if (timedOut && !session) {
+        console.warn("getSession timeout — mostrando login.");
+      }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "PASSWORD_RECOVERY") { setRecoveryMode(true); return; }
@@ -10462,13 +10478,63 @@ export default function App() {
     </Fragment>
   ) : el;
 
-  if(!authReady) return wrap(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#060e1c",color:"#C6A96B",fontFamily:"'Poppins',sans-serif",fontSize:14}}>Cargando...</div>);
+  if(!authReady) return wrap(<div style={{
+    minHeight:"100vh", display:"flex", flexDirection:"column",
+    alignItems:"center", justifyContent:"center",
+    background:"linear-gradient(180deg, #060e1c 0%, #0A1F44 100%)",
+    color:"#C6A96B",
+    fontFamily:"'Poppins',sans-serif",
+    gap:18,
+  }}>
+    {/* Wordmark animado */}
+    <div style={{
+      fontFamily:"'Cormorant Garamond', serif",
+      fontSize: 36, letterSpacing:"0.06em", color:"#C6A96B",
+      fontWeight: 500, opacity: 0,
+      animation:"mfFadeIn .4s var(--mf-ease-spring) both",
+    }}>MarFlow</div>
+    {/* Dots pulsando */}
+    <div style={{display:"flex", gap:6}}>
+      {[0,1,2].map(i=>(
+        <span key={i} style={{
+          width:6, height:6, borderRadius:"50%",
+          background:"#C6A96B",
+          animation:"mfPulseDot 1.2s ease-in-out infinite",
+          animationDelay: `${i*0.18}s`,
+        }}/>
+      ))}
+    </div>
+    <div style={{fontSize:12, color:"rgba(198,169,107,0.55)", letterSpacing:"0.04em"}}>
+      Iniciando sesión
+    </div>
+  </div>);
 
   // Mientras se cargan datos desde Supabase tras el login
-  if(usuario && datosCargando) return wrap(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#F8F6F2",color:"#0A1F44",fontFamily:"'Poppins',sans-serif",gap:14}}>
-    <div style={{width:32,height:32,border:"3px solid #C6A96B33",borderTopColor:"#C6A96B",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>
-    <div style={{fontSize:13,fontWeight:500,color:"#64748b"}}>Cargando tus leads y eventos...</div>
-    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+  if(usuario && datosCargando) return wrap(<div style={{
+    minHeight:"100vh", display:"flex", flexDirection:"column",
+    alignItems:"center", justifyContent:"center",
+    background:"#F8F6F2", color:"#0A1F44",
+    fontFamily:"'Poppins',sans-serif", gap:18,
+  }}>
+    {/* Wordmark navy */}
+    <div style={{
+      fontFamily:"'Cormorant Garamond', serif",
+      fontSize: 36, letterSpacing:"0.06em",
+      color:"#0A1F44", fontWeight: 500,
+      animation:"mfFadeIn .4s var(--mf-ease-spring) both",
+    }}>MarFlow</div>
+    {/* Spinner gold */}
+    <div style={{
+      width:28, height:28,
+      border:"3px solid rgba(198,169,107,0.20)",
+      borderTopColor:"#C6A96B",
+      borderRadius:"50%",
+      animation:"mfSpin .8s linear infinite",
+    }}/>
+    <div style={{
+      fontSize:12, color:"rgba(10,31,68,0.55)",
+      letterSpacing:"0.04em",
+    }}>Cargando tu cartera, agenda y equipo</div>
   </div>);
 
   // Modo recuperación de contraseña (después del link del correo)
