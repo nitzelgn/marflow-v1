@@ -3930,7 +3930,23 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
   const ahorroPendientes = asesoradosAhorroPendientes(leads);
   const urgentes         = seguimientoUrgente(leads);
   const totalPendientes  = totalPendientesAbiertos(leads);
-  const renovaciones     = renovacionesPendientes(leads);
+  const renovacionesLeads = renovacionesPendientes(leads);
+
+  // Renovaciones también desde el Excel de Cobranza (lectura directa de LS).
+  // Reusa los helpers a nivel módulo, recalculando contra la fecha de hoy.
+  const cobranzaRaw = LS.get("mf_cobranza_datos", []);
+  const cobranzaRenovaciones = Array.isArray(cobranzaRaw)
+    ? cobranzaRaw
+        .filter(d => !esPeriodoComprometidoRow(d._raw, d.producto))
+        .map(d => ({
+          ...d,
+          _renov: emisorAplicaRenovacion(d.producto) ? calcularRenovacion(d.vigenciaInicio) : null,
+        }))
+        .filter(d => d._renov && (d._renov.esEsteMes || d._renov.esProxima30d))
+    : [];
+
+  // Total combinado: pólizas manuales de leads + renovaciones detectadas del Excel.
+  const renovaciones = [...renovacionesLeads, ...cobranzaRenovaciones];
 
   // Mini-métricas (sidebar derecha)
   const mesAct = hoy().slice(0,7);
@@ -8313,8 +8329,9 @@ const ESTADOS_COBRANZA = {
    Estos registros se tratan como NO prioritarios — se ocultan por default.
 ─────────────────────────────────────────── */
 // Productos con periodo comprometido por convención Allianz.
-// Agregar aquí si aparecen nuevos (ej. PLU4, PLU5, OPED variantes, etc.).
-const _PRODUCTOS_PERIODO_COMPROMETIDO = ["PLU3", "OPED"];
+// El Excel viene con variantes (OPED / OP3D — con cero/letra). Cualquier
+// nuevo código que aparezca con la misma lógica se agrega aquí.
+const _PRODUCTOS_PERIODO_COMPROMETIDO = ["PLU3", "OPED", "OP3D"];
 
 // Emisores/productos para los que SÍ aplican renovaciones reales (aniversarios).
 // El resto NO se marca como renovación, aunque tenga "Inicio de vigencia".
@@ -8590,9 +8607,15 @@ function Cobranza() {
   const renovacionesAlerta = datosOperativos.filter(d => d.renovacion && (d.renovacion.esEsteMes || d.renovacion.esProxima30d));
   const periodoComp        = datos.filter(d => d.esPeriodoComp); // métrica informativa
 
-  // Backward-compat para vistas viejas (tabs renovaciones por vencimiento)
-  const renovMes  = datosFilt.filter(d => d.vencimiento && d.vencimiento.startsWith(mesBd));
-  const renovSig  = datosFilt.filter(d => d.vencimiento && d.vencimiento.startsWith(mesSigBd));
+  // Renovaciones por mes calendario (basadas en aniversario calculado,
+  // NO en el campo "vencimiento" del Excel). Sólo se cuentan emisores
+  // que aplican renovación (AUIN/GMMI/HOFP/VIPP).
+  const renovMes = datosOperativos.filter(d =>
+    d.renovacion?.fechaEsteAnio && d.renovacion.fechaEsteAnio.startsWith(mesBd)
+  );
+  const renovSig = datosOperativos.filter(d =>
+    d.renovacion?.fechaEsteAnio && d.renovacion.fechaEsteAnio.startsWith(mesSigBd)
+  );
   const atraso35  = atrasoCrit;
   const alCorriente = corrientes;
 
