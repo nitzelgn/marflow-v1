@@ -3859,14 +3859,21 @@ function DashboardSkeleton() {
 }
 
 function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas = [], setFiltroNav, setSeccion, setLeadsSubtab}) {
-  // Skeleton transitorio al entrar a Dashboard. Se desvanece a los
-  // 320ms (sensación premium sin retrasar la app si los datos ya están).
+  // ── TODOS los hooks deben llamarse antes de cualquier return condicional
+  //    (Rules of Hooks). Si vuelves a agregar hooks, ponlos ARRIBA.
   const [showSkeleton, setShowSkeleton] = useState(true);
+  const [drawerPend, setDrawerPend] = useState(false);
+  const [drawerRenov, setDrawerRenov] = useState(false);
+  const [leadActDash, setLeadActDash] = useState(null);
+
   useEffect(() => {
     const t = setTimeout(() => setShowSkeleton(false), 320);
     return () => clearTimeout(t);
   }, []);
+
+  // Skeleton premium mientras la app "respira" antes de mostrar el dashboard real.
   if (showSkeleton) return <DashboardSkeleton/>;
+
   // Helper para navegar a la sección Leads con una subtab específica.
   const irALeads = (subtab = "pipeline", filtro) => {
     if (filtro && setFiltroNav) setFiltroNav(filtro);
@@ -3874,11 +3881,6 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
     if (setSeccion) setSeccion("leads");
   };
   // (Variables activos/irA/riesgo/sinC eliminadas: ya no se renderea sidebar de indicadores)
-
-  // Drawer de pendientes + lead seleccionado (modal completo)
-  const [drawerPend, setDrawerPend] = useState(false);
-  const [drawerRenov, setDrawerRenov] = useState(false);
-  const [leadActDash, setLeadActDash] = useState(null);
   function saveDash(d){
     const adminId = getAdminId(usuario);
     const viejo = leads.find(l => l.id === d.id);
