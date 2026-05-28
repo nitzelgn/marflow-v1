@@ -8370,6 +8370,12 @@ function calcularRenovacion(vigenciaInicio) {
     const hoyDate = new Date(hoy() + "T00:00:00");
     if (isNaN(inicio.getTime())) return null;
 
+    // GUARD: Una renovación REAL requiere que la póliza haya cumplido al menos
+    // 1 año (o sea: que el inicio sea de un año anterior al actual). Si la
+    // póliza inició este mismo año, todavía no hay aniversario — sólo es la
+    // fecha de inicio, no una renovación.
+    if (inicio.getFullYear() >= hoyDate.getFullYear()) return null;
+
     // Aniversario en el AÑO ACTUAL (puede haber sido en el pasado).
     // Esto es lo que captura "renovaciones del mes" aunque ya hayan pasado.
     const aniversarioEsteAnio = new Date(inicio);
@@ -8827,13 +8833,12 @@ function Cobranza() {
     );
   }
 
-  // KPIs hero estilo banca privada — 9 métricas (incluye 2 de Renovaciones).
+  // KPIs hero estilo banca privada — solo los que importan operativamente.
+  // (Al corriente y Atraso leve se omiten porque no requieren acción inmediata.
+  //  Siguen disponibles vía el dropdown "Todos los estados" en la toolbar).
   // Periodo comprometido se excluye de todas (ver datosOperativos).
-  // Cada KPI clickea al filtro correspondiente (o limpia si se hace click otra vez).
   const kpis = [
     { l:"Total operativo",       v:totalReg,                  dot:B.navy,      filtro:""             },
-    { l:"Al corriente",          v:corrientes.length,         dot:B.green,     filtro:"al_corriente" },
-    { l:"Atraso leve",           v:atrasoLeve.length,         dot:"#92400e",   filtro:"leve"         },
     { l:"Atraso medio",          v:atrasoMedio.length,        dot:"#b45309",   filtro:"medio"        },
     { l:"Atraso crítico +35d",   v:atrasoCrit.length,         dot:B.redBright, filtro:"critico"      },
     { l:"Cobros rechazados",     v:rechazados.length,         dot:"#991b1b",   filtro:"rechazado"    },
