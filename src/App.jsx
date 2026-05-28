@@ -8350,19 +8350,36 @@ function calcularRenovacion(vigenciaInicio) {
     const inicio = new Date(vigenciaInicio + "T00:00:00");
     const hoyDate = new Date(hoy() + "T00:00:00");
     if (isNaN(inicio.getTime())) return null;
-    // Siguiente aniversario >= hoy
-    const aniversario = new Date(inicio);
-    while (aniversario < hoyDate) {
-      aniversario.setFullYear(aniversario.getFullYear() + 1);
+
+    // Aniversario en el AÑO ACTUAL (puede haber sido en el pasado).
+    // Esto es lo que captura "renovaciones del mes" aunque ya hayan pasado.
+    const aniversarioEsteAnio = new Date(inicio);
+    aniversarioEsteAnio.setFullYear(hoyDate.getFullYear());
+
+    // Próximo aniversario futuro (o hoy mismo): si este año ya pasó, brinca al siguiente.
+    const proximo = new Date(aniversarioEsteAnio);
+    while (proximo < hoyDate) {
+      proximo.setFullYear(proximo.getFullYear() + 1);
     }
-    const diasHasta = Math.round((aniversario - hoyDate) / 86400000);
-    const aniosCumplidos = aniversario.getFullYear() - inicio.getFullYear();
+
+    const diasHasta = Math.round((proximo - hoyDate) / 86400000);
+    const aniosCumplidos = proximo.getFullYear() - inicio.getFullYear();
+
+    // esEsteMes: el aniversario del año actual cae en el mes calendario
+    // de hoy (independientemente de si ya pasó o sigue por venir).
+    const esEsteMes = aniversarioEsteAnio.getMonth() === hoyDate.getMonth()
+      && aniversarioEsteAnio.getFullYear() === hoyDate.getFullYear();
+
+    // esProxima30d: el próximo aniversario futuro está dentro de 30 días.
+    const esProxima30d = diasHasta >= 0 && diasHasta <= 30;
+
     return {
-      fecha: aniversario.toISOString().split("T")[0],
+      fecha: proximo.toISOString().split("T")[0],            // próximo aniversario futuro
+      fechaEsteAnio: aniversarioEsteAnio.toISOString().split("T")[0], // aniversario del año actual
       diasHasta,
       aniosCumplidos,
-      esProxima30d: diasHasta >= 0 && diasHasta <= 30,
-      esEsteMes: aniversario.getMonth() === hoyDate.getMonth() && aniversario.getFullYear() === hoyDate.getFullYear(),
+      esProxima30d,
+      esEsteMes,
     };
   } catch {
     return null;
@@ -8380,7 +8397,8 @@ function Cobranza() {
   const [expandedRow,setExpandedRow] = useState(null);
   // Filtros nuevos: ocultar periodo comprometido (default ON), sólo renovaciones, orden por atraso
   const [ocultarPeriodoComp,setOcultarPeriodoComp] = useState(true);
-  const [filtSoloRenov,setFiltSoloRenov] = useState(false);
+  const [filtSoloRenov,setFiltSoloRenov] = useState(false);      // próximos 30d
+  const [filtSoloRenovMes,setFiltSoloRenovMes] = useState(false); // mes actual
   const [ordenAtraso,setOrdenAtraso] = useState("desc"); // "desc" | "asc" | "none"
   const fileRef = useRef();
   const ahora = new Date();
@@ -8508,6 +8526,8 @@ function Cobranza() {
     if (ocultarPeriodoComp && d.esPeriodoComp) return false;
     // Filtro #2: Sólo renovaciones próximas 30d (cuando está activo)
     if (filtSoloRenov && !d.renovacion?.esProxima30d) return false;
+    // Filtro #2b: Sólo renovaciones del mes (cuando está activo)
+    if (filtSoloRenovMes && !d.renovacion?.esEsteMes) return false;
     // Filtros del Excel
     if (filtProd && !d.producto.toLowerCase().includes(filtProd.toLowerCase())) return false;
     if (filtEstado && d.estadoAuto !== filtEstado) return false;
@@ -8543,8 +8563,11 @@ function Cobranza() {
   const atrasoCrit   = datosOperativos.filter(d => d.estadoAuto === "critico");
   const rechazados   = datosOperativos.filter(d => d.estadoAuto === "rechazado");
   const proximos15   = datosOperativos.filter(d => d.estadoAuto === "proximo");
-  const renovaciones30d = datosOperativos.filter(d => d.renovacion?.esProxima30d);
-  const periodoComp     = datos.filter(d => d.esPeriodoComp); // métrica informativa
+  const renovaciones30d   = datosOperativos.filter(d => d.renovacion?.esProxima30d);
+  const renovacionesMes   = datosOperativos.filter(d => d.renovacion?.esEsteMes);
+  // Cualquiera relevante: este mes o próximos 30d (la unión, para el filtro/badge)
+  const renovacionesAlerta = datosOperativos.filter(d => d.renovacion && (d.renovacion.esEsteMes || d.renovacion.esProxima30d));
+  const periodoComp        = datos.filter(d => d.esPeriodoComp); // métrica informativa
 
   // Backward-compat para vistas viejas (tabs renovaciones por vencimiento)
   const renovMes  = datosFilt.filter(d => d.vencimiento && d.vencimiento.startsWith(mesBd));
@@ -8760,18 +8783,19 @@ function Cobranza() {
     );
   }
 
-  // KPIs hero estilo banca privada — 8 métricas (incluye Renovaciones).
+  // KPIs hero estilo banca privada — 9 métricas (incluye 2 de Renovaciones).
   // Periodo comprometido se excluye de todas (ver datosOperativos).
   // Cada KPI clickea al filtro correspondiente (o limpia si se hace click otra vez).
   const kpis = [
-    { l:"Total operativo",       v:totalReg,                dot:B.navy,      filtro:""             },
-    { l:"Al corriente",          v:corrientes.length,       dot:B.green,     filtro:"al_corriente" },
-    { l:"Atraso leve",           v:atrasoLeve.length,       dot:"#92400e",   filtro:"leve"         },
-    { l:"Atraso medio",          v:atrasoMedio.length,      dot:"#b45309",   filtro:"medio"        },
-    { l:"Atraso crítico +35d",   v:atrasoCrit.length,       dot:B.redBright, filtro:"critico"      },
-    { l:"Cobros rechazados",     v:rechazados.length,       dot:"#991b1b",   filtro:"rechazado"    },
-    { l:"Próximos cobros 15d",   v:proximos15.length,       dot:B.blue,      filtro:"proximo"      },
-    { l:"Renovaciones 30d",      v:renovaciones30d.length,  dot:B.gold,      filtro:"__renov__"    },
+    { l:"Total operativo",       v:totalReg,                  dot:B.navy,      filtro:""             },
+    { l:"Al corriente",          v:corrientes.length,         dot:B.green,     filtro:"al_corriente" },
+    { l:"Atraso leve",           v:atrasoLeve.length,         dot:"#92400e",   filtro:"leve"         },
+    { l:"Atraso medio",          v:atrasoMedio.length,        dot:"#b45309",   filtro:"medio"        },
+    { l:"Atraso crítico +35d",   v:atrasoCrit.length,         dot:B.redBright, filtro:"critico"      },
+    { l:"Cobros rechazados",     v:rechazados.length,         dot:"#991b1b",   filtro:"rechazado"    },
+    { l:"Próximos cobros 15d",   v:proximos15.length,         dot:B.blue,      filtro:"proximo"      },
+    { l:"Renovaciones del mes",  v:renovacionesMes.length,    dot:B.gold,      filtro:"__renovMes__" },
+    { l:"Renovaciones 30d",      v:renovaciones30d.length,    dot:B.gold,      filtro:"__renov__"    },
   ];
 
   const tabs = [
@@ -8970,12 +8994,19 @@ function Cobranza() {
           }}>
             {kpis.map((s, i) => {
               const esRenovKpi = s.filtro === "__renov__";
-              const isActive = esRenovKpi ? filtSoloRenov : (filtEstado === s.filtro && s.filtro !== "");
+              const esRenovMesKpi = s.filtro === "__renovMes__";
+              const isActive = esRenovKpi ? filtSoloRenov
+                              : esRenovMesKpi ? filtSoloRenovMes
+                              : (filtEstado === s.filtro && s.filtro !== "");
               return (
                 <button key={i}
                   onClick={()=>{
                     if (esRenovKpi) {
                       setFiltSoloRenov(v => !v);
+                      setFiltSoloRenovMes(false);
+                    } else if (esRenovMesKpi) {
+                      setFiltSoloRenovMes(v => !v);
+                      setFiltSoloRenov(false);
                     } else {
                       setFiltEstado(filtEstado === s.filtro ? "" : s.filtro);
                     }
@@ -9028,7 +9059,7 @@ function Cobranza() {
                   fontFamily:"'Cormorant Garamond', serif",
                   fontSize:22, fontWeight:500,
                   color:B.navy, letterSpacing:"-0.01em",
-                }}>{filtSoloRenov ? "Renovaciones próximas 30d" : filtEstado ? ESTADOS_COBRANZA[filtEstado]?.label : "Cartera completa"}</div>
+                }}>{filtSoloRenovMes ? "Renovaciones del mes" : filtSoloRenov ? "Renovaciones próximas 30d" : filtEstado ? ESTADOS_COBRANZA[filtEstado]?.label : "Cartera completa"}</div>
                 <div style={{
                   fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:2,
                   fontVariantNumeric:"tabular-nums",
@@ -9089,7 +9120,7 @@ function Cobranza() {
                             onMouseLeave={e=>{ if(!isExp) e.currentTarget.style.background = "transparent"; }}>
                             <td style={{padding:"11px 14px", fontSize:13, color: muted ? "rgba(10,31,68,0.65)" : B.navy, fontWeight:500}}>
                               {r.nombre || "—"}
-                              {(r.esPeriodoComp || r.renovacion?.esProxima30d) && (
+                              {(r.esPeriodoComp || r.renovacion?.esEsteMes || r.renovacion?.esProxima30d) && (
                                 <div style={{display:"flex", gap:6, marginTop:5, flexWrap:"wrap"}}>
                                   {r.esPeriodoComp && (
                                     <span style={{
@@ -9102,7 +9133,7 @@ function Cobranza() {
                                       letterSpacing:"0.03em", textTransform:"uppercase", whiteSpace:"nowrap",
                                     }}>Periodo comprometido</span>
                                   )}
-                                  {r.renovacion?.esProxima30d && (
+                                  {(r.renovacion?.esEsteMes || r.renovacion?.esProxima30d) && (
                                     <span style={{
                                       display:"inline-flex", alignItems:"center", gap:5,
                                       fontSize:9.5, fontWeight:600,
@@ -9111,7 +9142,9 @@ function Cobranza() {
                                       border:"1px solid rgba(198,169,107,0.28)",
                                       padding:"2px 8px", borderRadius:6,
                                       letterSpacing:"0.03em", textTransform:"uppercase", whiteSpace:"nowrap",
-                                    }}>Renovación · {r.renovacion.aniosCumplidos}° año</span>
+                                    }}
+                                    title={r.renovacion.fechaEsteAnio ? `Aniversario: ${fmtF(r.renovacion.fechaEsteAnio)}` : ""}
+                                    >Renovación · {r.renovacion.aniosCumplidos}° año</span>
                                   )}
                                 </div>
                               )}
