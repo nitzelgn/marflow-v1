@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
 import { supabase } from "./supabaseClient";
 
 const B = {
@@ -8073,11 +8073,101 @@ function Mensajes() {
   </div>;
 }
 
+/* ═══════════════════════════════════════════
+   COBRANZA — Helpers tolerantes a variaciones de Excel
+   - Normaliza headers: minúsculas, sin acentos, sin espacios extras
+   - Permite hacer pickField(row, "Días atraso", "DIAS_ATRASO", "Dias  Atraso")
+   - Clasificación automática por días de atraso + respuesta del banco
+═══════════════════════════════════════════ */
+function _normHeaderKey(s) {
+  return String(s || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // quita acentos
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Crea un mapa { headerNormalizado → valor } para una fila del Excel.
+function _buildRowIndex(row) {
+  const idx = {};
+  for (const k of Object.keys(row || {})) {
+    idx[_normHeaderKey(k)] = row[k];
+  }
+  return idx;
+}
+
+// Toma una fila ya indexada y busca el valor probando varios nombres de columna.
+function pickField(rowIndex, ...candidates) {
+  for (const c of candidates) {
+    const v = rowIndex[_normHeaderKey(c)];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+  }
+  return "";
+}
+
+// Detecta si la respuesta del banco indica un rechazo de cobro.
+function esRechazoBanco(respuesta) {
+  const s = String(respuesta || "").toLowerCase();
+  if (!s) return false;
+  const patrones = [
+    "fondos insuficientes", "saldo insuficiente",
+    "rechaz",         // rechazo, rechazado, rechazada
+    "tarjeta vencida", "tarjeta expirada",
+    "cuenta cancelada", "cuenta cerrada",
+    "error de cobro", "error en cobro",
+    "no autorizado", "no autorizada",
+    "operacion no permitida",
+    "tarjeta bloqueada", "bloqueada",
+    "denegad",        // denegado, denegada
+  ];
+  return patrones.some(p => s.includes(p));
+}
+
+// Clasifica un registro en un estado de cobranza único.
+// Prioridad: rechazo > crítico > medio > leve > próximo cobro > al corriente
+function clasificarCobranza(reg) {
+  if (esRechazoBanco(reg.respuestaBanco)) return "rechazado";
+  const d = Number(reg.diasAtraso) || 0;
+  if (d > 35) return "critico";
+  if (d > 15) return "medio";
+  if (d >= 1) return "leve";
+  // Si no hay atraso, evalúa próximo cobro
+  if (reg.fechaRecibo) {
+    const dias = _diasHastaFecha(reg.fechaRecibo);
+    if (dias != null && dias >= 0 && dias <= 15) return "proximo";
+  }
+  return "al_corriente";
+}
+
+// Días desde hoy hasta una fecha ISO (puede ser negativo si ya pasó).
+function _diasHastaFecha(isoFecha) {
+  if (!isoFecha) return null;
+  try {
+    const hoyMs = new Date(hoy() + "T00:00:00").getTime();
+    const fechaMs = new Date(isoFecha + "T00:00:00").getTime();
+    return Math.round((fechaMs - hoyMs) / 86400000);
+  } catch { return null; }
+}
+
+// Catálogo de estados de cobranza (visual + label)
+const ESTADOS_COBRANZA = {
+  al_corriente: { label: "Al corriente", color: "#166534", bg: "rgba(22,101,52,0.06)" },
+  proximo:      { label: "Próximo cobro", color: "#1e3a8a", bg: "rgba(30,58,138,0.06)" },
+  leve:         { label: "Atraso leve",   color: "#92400e", bg: "rgba(146,64,14,0.06)" },
+  medio:        { label: "Atraso medio",  color: "#b45309", bg: "rgba(180,83,9,0.06)" },
+  critico:      { label: "Crítico +35d",  color: "#dc2626", bg: "rgba(220,38,38,0.06)" },
+  rechazado:    { label: "Cobro rechazado", color: "#991b1b", bg: "rgba(153,27,27,0.08)" },
+};
+
 function Cobranza() {
   const [datos,setDatos] = useState([]);
   const [cargando,setCargando] = useState(false);
-  const [filtProd,setFiltProd] = useState("");
+  const [filtProd,setFiltProd] = useState("");      // legacy: filtro por producto (input principal)
+  const [busqueda,setBusqueda] = useState("");      // búsqueda global (cliente/póliza/producto/respuesta banco)
+  const [filtEstado,setFiltEstado] = useState("");  // filtro por estado clasificado
+  const [filtPeriodicidad,setFiltPeriodicidad] = useState("");
   const [tab,setTab] = useState("dashboard");
+  const [expandedRow,setExpandedRow] = useState(null);
   const fileRef = useRef();
   const ahora = new Date();
   const mesBd = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,"0")}`;
@@ -8086,21 +8176,151 @@ function Cobranza() {
 
   function normFecha(v){if(!v)return null;const s=String(v).trim();if(/^\d{5}$/.test(s)){const d=new Date((Number(s)-25569)*86400000);return d.toISOString().split("T")[0];}if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){const[d,m,y]=s.split("/");return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;}if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;try{const d=new Date(s);if(!isNaN(d.getTime()))return d.toISOString().split("T")[0];}catch{}return null;}
 
-  async function cargarExcel(e){const file=e.target.files?.[0];if(!file)return;setCargando(true);try{const{default:XLSX}=await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");const ab=await file.arrayBuffer();const wb=XLSX.read(ab);const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{defval:""});const mapped=rows.map(r=>{const poliza=String(r["Póliza"]||r["Poliza"]||r["No. Póliza"]||r["POLIZA"]||r["poliza"]||"").trim();const nombre=String(r["Nombre"]||r["Cliente"]||r["NOMBRE"]||r["nombre"]||"").trim();const producto=String(r["Producto"]||r["PRODUCTO"]||r["producto"]||r["Ramo"]||"").trim();const vencStr=r["Vencimiento"]||r["Fecha Vencimiento"]||r["FechaVencimiento"]||r["VENCIMIENTO"]||r["Renovación"]||r["Renovacion"]||"";const vencimiento=normFecha(vencStr);const diasAtraso=Number(r["Días Atraso"]||r["Dias Atraso"]||r["DiasAtraso"]||r["dias_atraso"]||0)||0;const estatus=String(r["Estatus"]||r["Status"]||r["ESTATUS"]||"Al corriente").trim();const telefono=String(r["Teléfono"]||r["Telefono"]||r["TEL"]||"").trim();return{poliza,nombre,producto,vencimiento,diasAtraso,estatus,telefono};}).filter(r=>r.nombre||r.poliza);setDatos(mapped);setTab("dashboard");}catch{window.__mfToast?.("No pudimos leer el archivo Excel. Verifica el formato.", "error");}setCargando(false);e.target.value="";}
+  async function cargarExcel(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCargando(true);
+    try {
+      const { default: XLSX } = await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
+      const ab = await file.arrayBuffer();
+      const wb = XLSX.read(ab);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
 
-  async function exportarFiltrado(lista,nombre){try{const{default:XLSX}=await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");const data=lista.map(r=>({Póliza:r.poliza,Cliente:r.nombre,Producto:r.producto,"Fecha vencimiento":fmtF(r.vencimiento),"Días atraso":r.diasAtraso,Estatus:r.estatus,Teléfono:r.telefono}));const ws=XLSX.utils.json_to_sheet(data);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Cobranza MarFlow");XLSX.writeFile(wb,`marflow_cobranza_${nombre}_${hoy()}.xlsx`);}catch{window.__mfToast?.("No pudimos exportar el archivo. Intenta de nuevo.", "error");}}
+      const mapped = rows.map(rawRow => {
+        const r = _buildRowIndex(rawRow);
 
-  const datosFilt = datos.filter(d=>!filtProd||d.producto.toLowerCase().includes(filtProd.toLowerCase()));
-  const renovMes = datosFilt.filter(d=>d.vencimiento&&d.vencimiento.startsWith(mesBd));
-  const renovSig = datosFilt.filter(d=>d.vencimiento&&d.vencimiento.startsWith(mesSigBd));
-  const atraso35 = datosFilt.filter(d=>d.diasAtraso>35);
-  const alCorriente = datosFilt.filter(d=>d.diasAtraso===0||d.estatus.toLowerCase().includes("corriente")||d.estatus.toLowerCase().includes("vigente"));
+        // === CAMPOS PRINCIPALES (visibles en tabla) ===
+        const nombre        = String(pickField(r, "Contratante", "Cliente", "Nombre")).trim();
+        const poliza        = String(pickField(r, "Póliza", "Poliza", "No. Póliza", "No Poliza", "Numero Poliza")).trim();
+        const producto      = String(pickField(r, "Emisor", "Producto", "Ramo")).trim();
+        const periodicidad  = String(pickField(r, "Periodicidad", "Frecuencia de pago", "Frecuencia")).trim();
+        const periodo       = String(pickField(r, "Periodo", "Periodo recibo")).trim();
+        const vigenciaInicio= normFecha(pickField(r, "Inicio de vigencia", "Inicio vigencia", "Fecha inicio vigencia"));
+        const vencimiento   = normFecha(pickField(r, "Vencimiento", "Fecha Vencimiento", "FechaVencimiento", "Renovación", "Renovacion", "Fin de vigencia"));
+        const fechaRecibo   = normFecha(pickField(r, "Fecha de recibo pendiente de cobro", "Fecha recibo pendiente", "Fecha recibo", "Fecha cobro"));
+        const respuestaBanco= String(pickField(r, "Respuesta banco", "Respuesta del banco", "Respuesta")).trim();
+        const montoProximo  = Number(String(pickField(r, "Monto próximo de pago", "Monto proximo de pago", "Monto proximo", "Próximo monto")).replace(/[^\d.-]/g, "")) || 0;
+        const diasAtraso    = Number(pickField(r, "Días de atraso", "Dias de atraso", "Días atraso", "Dias atraso", "DiasAtraso")) || 0;
+        const estatus       = String(pickField(r, "Estatus", "Status") || "Al corriente").trim();
+        const telefono      = String(pickField(r, "Teléfono", "Telefono", "TEL", "Celular")).trim();
 
-  // Estatus: dot color + label sin emoji
+        // === SECUNDARIOS (expandable detail) ===
+        const moneda         = String(pickField(r, "Moneda")).trim();
+        const primaNeta      = Number(String(pickField(r, "Prima neta")).replace(/[^\d.-]/g, "")) || 0;
+        const primaTotal     = Number(String(pickField(r, "Prima total")).replace(/[^\d.-]/g, "")) || 0;
+        const conductoCobro  = String(pickField(r, "Conducto cobro", "Conducto de cobro", "Forma de cobro")).trim();
+        const ultPago        = normFecha(pickField(r, "Última fecha de pago", "Ultima fecha de pago", "Último pago", "Ultimo pago"));
+        const vin            = String(pickField(r, "VIN", "Vin")).trim();
+        const valorPlanOrig  = Number(String(pickField(r, "Valor plan original")).replace(/[^\d.-]/g, "")) || 0;
+        const planContrato   = String(pickField(r, "Plan contrato", "Plan")).trim();
+
+        // === TÉCNICOS / OCULTOS (se guardan pero no se muestran) ===
+        const serieRecibo    = String(pickField(r, "Serie de recibo", "Serie recibo")).trim();
+        const noSolicitud    = String(pickField(r, "No de solicitud", "Número de solicitud", "Numero solicitud")).trim();
+        const plazoComp      = String(pickField(r, "Plazo comprometido")).trim();
+        const aportComp      = String(pickField(r, "Aportaciones comprometidas pagada", "Aportaciones comprometidas pagadas")).trim();
+        const aportIni       = String(pickField(r, "Aportaciones iniciales pagadas")).trim();
+        const montoAport     = String(pickField(r, "Monto de aportaciones")).trim();
+        const aportEsp       = String(pickField(r, "Aportaciones esperadas")).trim();
+        const montoAportEsp  = String(pickField(r, "Monto aportaciones esperadas")).trim();
+
+        const reg = {
+          // principales
+          nombre, poliza, producto, periodicidad, periodo,
+          vigenciaInicio, vencimiento, fechaRecibo, respuestaBanco,
+          montoProximo, diasAtraso, estatus, telefono,
+          // secundarios
+          moneda, primaNeta, primaTotal, conductoCobro, ultPago, vin,
+          valorPlanOrig, planContrato,
+          // técnicos
+          serieRecibo, noSolicitud, plazoComp, aportComp, aportIni,
+          montoAport, aportEsp, montoAportEsp,
+          // raw para inspección
+          _raw: rawRow,
+        };
+        // Clasificación automática (estado de cobranza)
+        reg.estadoAuto = clasificarCobranza(reg);
+        return reg;
+      }).filter(r => r.nombre || r.poliza);
+
+      setDatos(mapped);
+      setTab("dashboard");
+      setExpandedRow(null);
+      window.__mfToast?.(`${mapped.length} registros importados.`, "success");
+    } catch (err) {
+      window.__mfToast?.("No pudimos leer el archivo Excel. Verifica el formato.", "error");
+    }
+    setCargando(false);
+    e.target.value = "";
+  }
+
+  async function exportarFiltrado(lista,nombre){
+    try{
+      const{default:XLSX}=await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
+      const data=lista.map(r=>({
+        Cliente: r.nombre,
+        Producto: r.producto,
+        Póliza: r.poliza,
+        Periodicidad: r.periodicidad,
+        "Monto próximo": r.montoProximo || "",
+        "Fecha recibo": fmtF(r.fechaRecibo),
+        "Días atraso": r.diasAtraso,
+        "Respuesta banco": r.respuestaBanco,
+        Estado: ESTADOS_COBRANZA[r.estadoAuto]?.label || r.estadoAuto,
+        Teléfono: r.telefono,
+      }));
+      const ws=XLSX.utils.json_to_sheet(data);
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,"Cobranza MarFlow");
+      XLSX.writeFile(wb,`marflow_cobranza_${nombre}_${hoy()}.xlsx`);
+    }catch{
+      window.__mfToast?.("No pudimos exportar el archivo. Intenta de nuevo.", "error");
+    }
+  }
+
+  // === FILTRADO ===
+  // Búsqueda global cruza: cliente, póliza, producto, respuesta banco
+  const busqLower = busqueda.trim().toLowerCase();
+  const datosFilt = datos.filter(d => {
+    if (filtProd && !d.producto.toLowerCase().includes(filtProd.toLowerCase())) return false;
+    if (filtEstado && d.estadoAuto !== filtEstado) return false;
+    if (filtPeriodicidad && d.periodicidad !== filtPeriodicidad) return false;
+    if (busqLower) {
+      const hay = (d.nombre + " " + d.poliza + " " + d.producto + " " + d.respuestaBanco).toLowerCase();
+      if (!hay.includes(busqLower)) return false;
+    }
+    return true;
+  });
+
+  // === MÉTRICAS DEL NUEVO ESQUEMA (7 KPIs) ===
+  const totalReg     = datos.length;
+  const corrientes   = datosFilt.filter(d => d.estadoAuto === "al_corriente");
+  const atrasoLeve   = datosFilt.filter(d => d.estadoAuto === "leve");
+  const atrasoMedio  = datosFilt.filter(d => d.estadoAuto === "medio");
+  const atrasoCrit   = datosFilt.filter(d => d.estadoAuto === "critico");
+  const rechazados   = datosFilt.filter(d => d.estadoAuto === "rechazado");
+  const proximos15   = datosFilt.filter(d => d.estadoAuto === "proximo");
+
+  // Backward-compat para vistas viejas de renovaciones (los tabs siguen funcionando)
+  const renovMes  = datosFilt.filter(d => d.vencimiento && d.vencimiento.startsWith(mesBd));
+  const renovSig  = datosFilt.filter(d => d.vencimiento && d.vencimiento.startsWith(mesSigBd));
+  const atraso35  = atrasoCrit;
+  const alCorriente = corrientes;
+
+  // Periodicidades únicas (para el filtro dropdown)
+  const periodicidadesUnicas = Array.from(new Set(datos.map(d => d.periodicidad).filter(Boolean))).sort();
+
+  // Estado visual de un registro (color, badge, fila bg)
   const statusOf = (d) => {
-    if (d.diasAtraso > 35) return { color: B.redBright, label: "Crítico", bg: "rgba(220,38,38,0.025)" };
-    if (d.diasAtraso > 0)  return { color: B.amber,     label: "Atraso",  bg: "rgba(217,119,6,0.025)" };
-    return { color: B.green, label: "Al corriente", bg: "rgba(22,101,52,0.020)" };
+    const est = ESTADOS_COBRANZA[d.estadoAuto] || ESTADOS_COBRANZA.al_corriente;
+    return { color: est.color, label: est.label, bg: est.bg };
+  };
+
+  // Helpers de formato
+  const fmtMonto = (n) => {
+    if (!n) return "—";
+    return new Intl.NumberFormat("es-MX", { style:"currency", currency: "MXN", maximumFractionDigits: 0 }).format(n);
   };
 
   // Botón WhatsApp minimalista (SVG inline)
@@ -8296,13 +8516,16 @@ function Cobranza() {
     );
   }
 
-  // KPIs hero estilo banca privada
+  // KPIs hero estilo banca privada — 7 métricas del nuevo esquema.
+  // Cada KPI clickea al filtro correspondiente (o limpia si se hace click otra vez).
   const kpis = [
-    { l:"Total registros",      v:datosFilt.length, dot:B.navy      },
-    { l:"Renovaciones este mes", v:renovMes.length, dot:B.amber     },
-    { l:"Renovaciones próx. mes",v:renovSig.length, dot:B.blue      },
-    { l:"Atraso crítico +35d",  v:atraso35.length,  dot:B.redBright },
-    { l:"Al corriente",         v:alCorriente.length,dot:B.green    },
+    { l:"Total registros",       v:totalReg,            dot:B.navy,       filtro:""             },
+    { l:"Al corriente",          v:corrientes.length,   dot:B.green,      filtro:"al_corriente" },
+    { l:"Atraso leve",           v:atrasoLeve.length,   dot:"#92400e",    filtro:"leve"         },
+    { l:"Atraso medio",          v:atrasoMedio.length,  dot:"#b45309",    filtro:"medio"        },
+    { l:"Atraso crítico +35d",   v:atrasoCrit.length,   dot:B.redBright,  filtro:"critico"      },
+    { l:"Cobros rechazados",     v:rechazados.length,   dot:"#991b1b",    filtro:"rechazado"    },
+    { l:"Próximos cobros 15d",   v:proximos15.length,   dot:B.blue,       filtro:"proximo"      },
   ];
 
   const tabs = [
@@ -8362,15 +8585,15 @@ function Cobranza() {
           <span style={{position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"rgba(10,31,68,0.35)", pointerEvents:"none", display:"inline-flex"}}>
             <IconSearch size={15}/>
           </span>
-          <input value={filtProd} onChange={e=>setFiltProd(e.target.value)}
-            placeholder="Filtrar por producto…"
+          <input value={busqueda} onChange={e=>setBusqueda(e.target.value)}
+            placeholder="Buscar cliente, póliza, producto, respuesta banco…"
             style={{
               width:"100%", paddingLeft:38, paddingRight:14,
               paddingTop:10, paddingBottom:10, minHeight:38,
               borderRadius:10,
               border:"1px solid rgba(10,31,68,0.08)",
               background:B.white, color:B.navy,
-              fontFamily:"'Poppins',sans-serif", fontSize:14, fontWeight:400,
+              fontFamily:"'Poppins',sans-serif", fontSize:13, fontWeight:400,
               outline:"none", WebkitAppearance:"none",
               boxShadow:"var(--mf-shadow-xs)",
             }}
@@ -8378,6 +8601,37 @@ function Cobranza() {
             onBlur={e=>{e.target.style.borderColor="rgba(10,31,68,0.08)"; e.target.style.boxShadow="var(--mf-shadow-xs)";}}
           />
         </div>
+
+        {/* Dropdown filtros */}
+        <select value={filtEstado} onChange={e=>setFiltEstado(e.target.value)}
+          style={{
+            minHeight:38, padding:"0 28px 0 12px", borderRadius:10,
+            border:"1px solid rgba(10,31,68,0.08)", background:B.white,
+            fontFamily:"'Poppins',sans-serif", fontSize:12.5, color:B.navy,
+            cursor:"pointer", boxShadow:"var(--mf-shadow-xs)",
+          }}>
+          <option value="">Todos los estados</option>
+          <option value="al_corriente">Al corriente</option>
+          <option value="proximo">Próximo cobro</option>
+          <option value="leve">Atraso leve</option>
+          <option value="medio">Atraso medio</option>
+          <option value="critico">Crítico +35d</option>
+          <option value="rechazado">Cobro rechazado</option>
+        </select>
+
+        {periodicidadesUnicas.length > 0 && (
+          <select value={filtPeriodicidad} onChange={e=>setFiltPeriodicidad(e.target.value)}
+            style={{
+              minHeight:38, padding:"0 28px 0 12px", borderRadius:10,
+              border:"1px solid rgba(10,31,68,0.08)", background:B.white,
+              fontFamily:"'Poppins',sans-serif", fontSize:12.5, color:B.navy,
+              cursor:"pointer", boxShadow:"var(--mf-shadow-xs)",
+            }}>
+            <option value="">Toda periodicidad</option>
+            {periodicidadesUnicas.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        )}
+
         <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap"}}>
           {datosFilt.length} registros
         </div>
@@ -8422,44 +8676,216 @@ function Cobranza() {
       {/* ═══ Resumen (Dashboard tab) ═══ */}
       {tab === "dashboard" && (
         <div>
-          {/* 5 KPIs hero */}
+          {/* 7 KPIs hero — clickeables filtran por estado */}
           <div style={{
             display:"grid",
-            gridTemplateColumns:"repeat(auto-fit, minmax(170px, 1fr))",
-            gap:14, marginBottom:24,
+            gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",
+            gap:12, marginBottom:24,
           }}>
-            {kpis.map((s, i) => (
-              <div key={i} className={`mf-fade-up mf-stagger-${(i%4)+1}`}
-                style={{
-                  background:B.white,
-                  border:"1px solid rgba(10,31,68,0.06)",
-                  borderRadius:14,
-                  padding:"18px 18px 16px",
-                  boxShadow:"var(--mf-shadow-xs)",
-                  transition:"box-shadow var(--mf-t-normal) var(--mf-ease-out), transform var(--mf-t-normal) var(--mf-ease-out)",
-                }}
-                onMouseEnter={e=>{e.currentTarget.style.boxShadow="var(--mf-shadow-md)"; e.currentTarget.style.transform="translateY(-2px)";}}
-                onMouseLeave={e=>{e.currentTarget.style.boxShadow="var(--mf-shadow-xs)"; e.currentTarget.style.transform="translateY(0)";}}>
-                <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:8}}>
-                  <span style={{width:6, height:6, borderRadius:"50%", background:s.dot}}/>
+            {kpis.map((s, i) => {
+              const isActive = filtEstado === s.filtro && s.filtro !== "";
+              return (
+                <button key={i}
+                  onClick={()=>setFiltEstado(filtEstado === s.filtro ? "" : s.filtro)}
+                  className={`mf-fade-up mf-stagger-${(i%4)+1}`}
+                  style={{
+                    background: isActive ? `${s.dot}08` : B.white,
+                    border: `1px solid ${isActive ? `${s.dot}55` : "rgba(10,31,68,0.06)"}`,
+                    borderRadius:14,
+                    padding:"16px 16px 14px",
+                    boxShadow:"var(--mf-shadow-xs)",
+                    transition:"box-shadow var(--mf-t-normal) var(--mf-ease-out), transform var(--mf-t-normal) var(--mf-ease-out), border-color var(--mf-t-fast) var(--mf-ease-out), background var(--mf-t-fast) var(--mf-ease-out)",
+                    textAlign:"left", cursor:"pointer",
+                    fontFamily:"'Poppins', sans-serif",
+                  }}
+                  onMouseEnter={e=>{e.currentTarget.style.boxShadow="var(--mf-shadow-md)"; e.currentTarget.style.transform="translateY(-2px)";}}
+                  onMouseLeave={e=>{e.currentTarget.style.boxShadow="var(--mf-shadow-xs)"; e.currentTarget.style.transform="translateY(0)";}}>
+                  <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:6}}>
+                    <span style={{width:6, height:6, borderRadius:"50%", background:s.dot}}/>
+                    <div style={{
+                      fontSize:9.5, fontWeight:600,
+                      color:"rgba(10,31,68,0.50)",
+                      textTransform:"uppercase", letterSpacing:"0.10em",
+                    }}>{s.l}</div>
+                  </div>
                   <div style={{
-                    fontSize:10, fontWeight:600,
-                    color:"rgba(10,31,68,0.50)",
-                    textTransform:"uppercase", letterSpacing:"0.10em",
-                  }}>{s.l}</div>
-                </div>
-                <div style={{
-                  fontFamily:"'Cormorant Garamond', serif",
-                  fontSize:"clamp(32px, 4vw, 40px)",
-                  fontWeight:500, lineHeight:1,
-                  letterSpacing:"-0.02em",
-                  color:B.navy, fontVariantNumeric:"tabular-nums",
-                }}>{s.v}</div>
-              </div>
-            ))}
+                    fontFamily:"'Cormorant Garamond', serif",
+                    fontSize:"clamp(28px, 3.5vw, 36px)",
+                    fontWeight:500, lineHeight:1,
+                    letterSpacing:"-0.02em",
+                    color:B.navy, fontVariantNumeric:"tabular-nums",
+                  }}>{s.v}</div>
+                </button>
+              );
+            })}
           </div>
 
-          {/* 2 cards de alertas: Críticas + Renovaciones del mes */}
+          {/* ═══ TABLA PRINCIPAL DE COBRANZA ═══ */}
+          <div style={{
+            background:B.white,
+            border:"1px solid rgba(10,31,68,0.06)",
+            borderRadius:14,
+            padding:"22px 24px",
+            boxShadow:"var(--mf-shadow-xs)",
+            marginBottom:18,
+          }}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:14, flexWrap:"wrap", gap:8}}>
+              <div>
+                <div style={{
+                  fontFamily:"'Cormorant Garamond', serif",
+                  fontSize:22, fontWeight:500,
+                  color:B.navy, letterSpacing:"-0.01em",
+                }}>{filtEstado ? ESTADOS_COBRANZA[filtEstado]?.label : "Cartera completa"}</div>
+                <div style={{
+                  fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:2,
+                  fontVariantNumeric:"tabular-nums",
+                }}>{datosFilt.length} registro{datosFilt.length!==1?"s":""}{filtEstado || busqueda || filtPeriodicidad ? " (filtrado)" : ""}</div>
+              </div>
+              <button onClick={()=>exportarFiltrado(datosFilt, filtEstado || "todos")}
+                style={{
+                  display:"inline-flex", alignItems:"center", gap:6,
+                  padding:"8px 12px", borderRadius:8,
+                  border:"1px solid rgba(10,31,68,0.08)",
+                  background:B.white, color:"rgba(10,31,68,0.85)",
+                  fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+                  cursor:"pointer",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
+                <IconDownload size={13}/>Exportar
+              </button>
+            </div>
+
+            {datosFilt.length === 0 ? (
+              <div style={{textAlign:"center", padding:"48px 20px", color:"rgba(10,31,68,0.45)", fontSize:13, fontStyle:"italic"}}>
+                Sin registros con los filtros activos.
+              </div>
+            ) : (
+              <div style={{overflowX:"auto", WebkitOverflowScrolling:"touch"}}>
+                <table style={{width:"100%", borderCollapse:"collapse", minWidth:880, fontFamily:"'Poppins',sans-serif"}}>
+                  <thead>
+                    <tr style={{background:"rgba(248,246,242,0.6)"}}>
+                      {["Cliente","Producto","Póliza","Periodicidad","Monto próximo","Fecha recibo","Días atraso","Respuesta banco","Estado",""].map(c => (
+                        <th key={c} style={{
+                          textAlign:"left", padding:"11px 14px",
+                          fontSize:10, fontWeight:600,
+                          color:"rgba(10,31,68,0.50)",
+                          textTransform:"uppercase", letterSpacing:"0.10em",
+                          borderBottom:"1px solid rgba(10,31,68,0.06)",
+                          whiteSpace:"nowrap",
+                        }}>{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {datosFilt.map((r, i) => {
+                      const s = statusOf(r);
+                      const isExp = expandedRow === i;
+                      return (
+                        <Fragment key={i}>
+                          <tr style={{
+                            borderBottom: isExp ? "none" : "1px solid rgba(10,31,68,0.04)",
+                            cursor:"pointer",
+                            transition: "background-color var(--mf-t-fast) var(--mf-ease-out)",
+                          }}
+                            onClick={()=>setExpandedRow(isExp ? null : i)}
+                            onMouseEnter={e=>{ if(!isExp) e.currentTarget.style.background = "rgba(248,246,242,0.4)"; }}
+                            onMouseLeave={e=>{ if(!isExp) e.currentTarget.style.background = "transparent"; }}>
+                            <td style={{padding:"11px 14px", fontSize:13, color:B.navy, fontWeight:500}}>{r.nombre || "—"}</td>
+                            <td style={{padding:"11px 14px"}}>
+                              {r.producto ? (
+                                <span style={{fontSize:10.5, fontWeight:500, color:B.navy, background:"rgba(10,31,68,0.05)", padding:"3px 9px", borderRadius:6}}>{r.producto}</span>
+                              ) : "—"}
+                            </td>
+                            <td style={{padding:"11px 14px", fontSize:12, color:"rgba(10,31,68,0.75)", fontVariantNumeric:"tabular-nums"}}>{r.poliza || "—"}</td>
+                            <td style={{padding:"11px 14px", fontSize:11.5, color:"rgba(10,31,68,0.65)"}}>{r.periodicidad || "—"}</td>
+                            <td style={{padding:"11px 14px", fontSize:12, color:"rgba(10,31,68,0.85)", fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap", fontWeight:500}}>{fmtMonto(r.montoProximo)}</td>
+                            <td style={{padding:"11px 14px", fontSize:12, color:"rgba(10,31,68,0.65)", fontVariantNumeric:"tabular-nums"}}>{fmtF(r.fechaRecibo) || "—"}</td>
+                            <td style={{padding:"11px 14px"}}>
+                              {r.diasAtraso > 0 ? (
+                                <span style={{
+                                  fontFamily:"'Cormorant Garamond', serif",
+                                  fontSize:18, fontWeight:500, color:s.color,
+                                  fontVariantNumeric:"tabular-nums", lineHeight:1,
+                                }}>{r.diasAtraso}<span style={{fontSize:11, color:"rgba(10,31,68,0.40)", marginLeft:2}}>d</span></span>
+                              ) : <span style={{color:"rgba(10,31,68,0.30)", fontSize:12}}>—</span>}
+                            </td>
+                            <td style={{padding:"11px 14px", fontSize:11, color:"rgba(10,31,68,0.65)", maxWidth:200, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={r.respuestaBanco}>
+                              {r.respuestaBanco || "—"}
+                            </td>
+                            <td style={{padding:"11px 14px"}}>
+                              <span style={{
+                                display:"inline-flex", alignItems:"center", gap:6,
+                                fontSize:11, fontWeight:500,
+                                color:s.color,
+                                background:s.bg,
+                                border:`1px solid ${s.color}25`,
+                                padding:"2px 9px", borderRadius:6,
+                                letterSpacing:"0.005em", whiteSpace:"nowrap",
+                              }}>
+                                <span style={{width:5, height:5, borderRadius:"50%", background:s.color}}/>
+                                {s.label}
+                              </span>
+                            </td>
+                            <td style={{padding:"11px 14px", width:38, textAlign:"right"}}>
+                              <span style={{
+                                display:"inline-flex", color:"rgba(10,31,68,0.40)",
+                                transform: isExp ? "rotate(90deg)" : "rotate(0)",
+                                transition:"transform var(--mf-t-fast) var(--mf-ease-out)",
+                              }}>
+                                <IconChevronRight size={12}/>
+                              </span>
+                            </td>
+                          </tr>
+                          {isExp && (
+                            <tr style={{background:"rgba(248,246,242,0.5)", borderBottom:"1px solid rgba(10,31,68,0.04)"}}>
+                              <td colSpan={10} style={{padding:"16px 22px"}}>
+                                <div style={{
+                                  display:"grid",
+                                  gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",
+                                  gap:14,
+                                }}>
+                                  {[
+                                    ["Moneda", r.moneda],
+                                    ["Prima neta", r.primaNeta ? fmtMonto(r.primaNeta) : ""],
+                                    ["Prima total", r.primaTotal ? fmtMonto(r.primaTotal) : ""],
+                                    ["Conducto cobro", r.conductoCobro],
+                                    ["Última fecha de pago", fmtF(r.ultPago)],
+                                    ["VIN", r.vin],
+                                    ["Valor plan original", r.valorPlanOrig ? fmtMonto(r.valorPlanOrig) : ""],
+                                    ["Plan contrato", r.planContrato],
+                                    ["Inicio de vigencia", fmtF(r.vigenciaInicio)],
+                                    ["Periodo", r.periodo],
+                                  ].filter(([_, v]) => v && v !== "—").map(([k, v]) => (
+                                    <div key={k}>
+                                      <div style={{fontSize:9.5, fontWeight:600, color:"rgba(10,31,68,0.45)", textTransform:"uppercase", letterSpacing:"0.10em", marginBottom:4}}>{k}</div>
+                                      <div style={{fontSize:13, color:B.navy, fontVariantNumeric:"tabular-nums"}}>{v}</div>
+                                    </div>
+                                  ))}
+                                  {r.telefono && (
+                                    <div style={{display:"flex", alignItems:"center", gap:8}}>
+                                      <WAButton tel={r.telefono} small/>
+                                      <div>
+                                        <div style={{fontSize:9.5, fontWeight:600, color:"rgba(10,31,68,0.45)", textTransform:"uppercase", letterSpacing:"0.10em", marginBottom:4}}>Contacto</div>
+                                        <div style={{fontSize:13, color:B.navy, fontVariantNumeric:"tabular-nums"}}>{r.telefono}</div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* 2 cards de alertas: Críticas + Próximos cobros (legacy retainable) */}
           {(atraso35.length > 0 || renovMes.length > 0) && (
             <div style={{
               display:"grid",
