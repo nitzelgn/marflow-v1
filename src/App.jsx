@@ -5278,193 +5278,6 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         )}
       </div>
     )}
-    {!f.sinSeguimiento && (
-      <div style={{marginBottom:20}}>
-        <div style={{
-          fontSize:11, fontWeight:500,
-          color:"rgba(10,31,68,0.45)",
-          textTransform:"uppercase", letterSpacing:"0.12em",
-          marginBottom:14,
-        }}>Cartera vigente · Auto · GMM · Hogar · Vida</div>
-
-        {/* Form alta de póliza */}
-        <div style={{
-          background:"#FBFAF6",
-          border:"1px solid rgba(10,31,68,0.06)",
-          borderRadius:12,
-          padding:"14px 14px 10px",
-          marginBottom:18,
-        }}>
-          <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:10, marginBottom:10}}>
-            <FL label="Producto">
-              <Sel value={polForm.producto}
-                onChange={v=>setPolForm(p=>({...p,producto:v}))}
-                options={POLIZA_PRODUCTOS.map(p=>({v:p,l:p}))}/>
-            </FL>
-            <FL label="No. Póliza">
-              <Inp value={polForm.numero}
-                onChange={v=>setPolForm(p=>({...p,numero:v}))}
-                placeholder="Ej. 12345678"/>
-            </FL>
-            <FL label="Inicio vigencia">
-              <Inp type="date" value={polForm.fechaInicio}
-                onChange={v=>setPolForm(p=>({...p,fechaInicio:v}))}/>
-            </FL>
-            <FL label="Renovación">
-              <Inp type="date" value={polForm.fechaRenovacion}
-                onChange={v=>setPolForm(p=>({...p,fechaRenovacion:v}))}/>
-            </FL>
-            <FL label="Prima aprox. (MXN)">
-              <Inp type="number" value={polForm.primaAprox}
-                onChange={v=>setPolForm(p=>({...p,primaAprox:v}))}
-                placeholder="0"/>
-            </FL>
-            <FL label="Notas">
-              <Inp value={polForm.notas}
-                onChange={v=>setPolForm(p=>({...p,notas:v}))}
-                placeholder="Coberturas, etc."/>
-            </FL>
-          </div>
-          <button onClick={agregarPoliza} style={{
-            width:"100%", padding:"10px 14px", borderRadius:8, border:"none",
-            background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
-            color:"#fff", fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:13,
-            cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
-          }}
-            onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
-            onMouseLeave={e=>{e.currentTarget.style.boxShadow="none"; e.currentTarget.style.transform="translateY(0)";}}>
-            <IconPlus size={13} color="#fff"/> Agregar póliza
-          </button>
-        </div>
-
-        {/* Lista de pólizas */}
-        {(f.polizas||[]).length === 0 ? (
-          <div style={{
-            textAlign:"center", padding:"36px 16px",
-            color:"rgba(10,31,68,0.45)",
-            fontFamily:"'Cormorant Garamond', serif", fontSize:18,
-            fontStyle:"italic",
-          }}>Aún sin pólizas registradas para este cliente.</div>
-        ) : (
-          <div style={{display:"flex", flexDirection:"column", gap:10}}>
-            {(f.polizas||[]).map(p => {
-              const dias = diasParaFecha(p.fechaRenovacion);
-              const renovUrg = dias !== null && dias >= 0 && dias <= 30;
-              const renovVencida = dias !== null && dias < 0;
-              const renovColor = renovVencida ? "#dc2626" : renovUrg ? B.gold : "rgba(10,31,68,0.35)";
-              return (
-                <div key={p.id} style={{
-                  background:B.white,
-                  border:"1px solid rgba(10,31,68,0.06)",
-                  borderRadius:12,
-                  padding:"14px 16px",
-                  boxShadow:"var(--mf-shadow-xs)",
-                }}>
-                  {/* Header */}
-                  <div style={{display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10, marginBottom:8}}>
-                    <div>
-                      <div style={{fontSize:13.5, fontWeight:600, color:B.navy, letterSpacing:"-0.005em"}}>
-                        {p.producto}{p.numero ? ` · ${p.numero}` : ""}
-                      </div>
-                      <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:2}}>
-                        {p.primaAprox > 0 ? `Prima ≈ $${Number(p.primaAprox).toLocaleString("es-MX")} MXN` : "Prima no registrada"}
-                      </div>
-                    </div>
-                    <button onClick={()=>eliminarPoliza(p.id)} style={{
-                      all:"unset", cursor:"pointer", color:"rgba(10,31,68,0.35)",
-                      width:24, height:24, display:"flex", alignItems:"center", justifyContent:"center",
-                      borderRadius:6, transition:"all var(--mf-t-fast) var(--mf-ease-out)",
-                    }}
-                      onMouseEnter={e=>{e.currentTarget.style.color="#dc2626"; e.currentTarget.style.background="rgba(220,38,38,0.06)";}}
-                      onMouseLeave={e=>{e.currentTarget.style.color="rgba(10,31,68,0.35)"; e.currentTarget.style.background="transparent";}}>
-                      <IconX size={13} color="currentColor"/>
-                    </button>
-                  </div>
-
-                  {/* Fechas */}
-                  <div style={{display:"flex", gap:18, fontSize:11.5, color:"rgba(10,31,68,0.55)", flexWrap:"wrap", marginBottom:10}}>
-                    {p.fechaInicio && <div>Vigencia desde <strong style={{color:B.navy, fontWeight:500}}>{fmtF(p.fechaInicio)}</strong></div>}
-                    {p.fechaRenovacion && (
-                      <div>Renueva <strong style={{color:renovColor, fontWeight:600}}>{fmtF(p.fechaRenovacion)}</strong>
-                        {dias !== null && (
-                          <span style={{color:renovColor, marginLeft:6, fontSize:10.5, fontWeight:500}}>
-                            ({renovVencida ? `vencida hace ${Math.abs(dias)}d` : dias === 0 ? "hoy" : `en ${dias}d`})
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {p.notas && (
-                    <div style={{fontSize:11.5, color:"rgba(10,31,68,0.65)", marginBottom:10, fontStyle:"italic"}}>
-                      {p.notas}
-                    </div>
-                  )}
-
-                  {/* Toggle seguimiento iniciado */}
-                  <button onClick={()=>toggleSeguimientoPoliza(p.id)} style={{
-                    all:"unset", cursor:"pointer",
-                    display:"flex", alignItems:"center", gap:8,
-                    padding:"6px 10px", borderRadius:6,
-                    background: p.seguimientoIniciado ? "rgba(5,150,105,0.08)" : "rgba(10,31,68,0.03)",
-                    border: `1px solid ${p.seguimientoIniciado ? "rgba(5,150,105,0.20)" : "rgba(10,31,68,0.08)"}`,
-                  }}>
-                    <div style={{
-                      width:14, height:14, borderRadius:4,
-                      background: p.seguimientoIniciado ? "#059669" : "transparent",
-                      border: `1.5px solid ${p.seguimientoIniciado ? "#059669" : "rgba(10,31,68,0.30)"}`,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                    }}>
-                      {p.seguimientoIniciado && <IconCheck size={9} color="#fff"/>}
-                    </div>
-                    <span style={{fontSize:11.5, fontWeight:500, color: p.seguimientoIniciado ? "#059669" : "rgba(10,31,68,0.65)"}}>
-                      {p.seguimientoIniciado ? "Seguimiento de renovación iniciado" : "Marcar seguimiento iniciado"}
-                    </span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    )}
-    {/* ═══ CADENCIA DE CONTACTO (compacta) ═══ */}
-    {!f.sinSeguimiento && (
-      <div style={{marginBottom:20}}>
-        <div style={{
-          fontSize:10, fontWeight:500,
-          color:"rgba(10,31,68,0.40)",
-          textTransform:"uppercase", letterSpacing:"0.18em",
-          marginBottom:10,
-        }}>Cadencia de contacto</div>
-        <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
-          {cadencia.map(c => (
-            <button key={c.v} onClick={()=>toggleCadencia(c.v)} style={{
-              all:"unset", cursor:"pointer",
-              display:"inline-flex", alignItems:"center", gap:6,
-              padding:"7px 11px", borderRadius:999,
-              background: c.done ? "rgba(5,150,105,0.06)" : "#fff",
-              border: `1px solid ${c.done ? "rgba(5,150,105,0.25)" : "rgba(10,31,68,0.08)"}`,
-              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
-            }}>
-              <span style={{
-                width:14, height:14, borderRadius:"50%",
-                background: c.done ? "#059669" : "transparent",
-                border: `1.5px solid ${c.done ? "#059669" : "rgba(10,31,68,0.22)"}`,
-                display:"flex", alignItems:"center", justifyContent:"center",
-                flexShrink:0,
-              }}>{c.done && <IconCheck size={8} color="#fff"/>}</span>
-              <span style={{
-                fontSize:11.5, fontWeight: c.done ? 600 : 500,
-                color: c.done ? "#059669" : "rgba(10,31,68,0.65)",
-                letterSpacing:"0.01em",
-              }}>{c.l}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    )}
     {/* ═══ HISTORIAL (últimas 3 + ver completo) ═══ */}
     <div style={{marginBottom:20}}>
       <div style={{
@@ -5652,19 +5465,22 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         </div>
       </div>
 
-      {/* Estrategia comercial */}
+      {/* Comentarios — campo único para captura rápida (reemplaza Estrategia) */}
       <div style={{marginTop:24}}>
         <div style={{
           fontSize:10, fontWeight:500,
           color:"rgba(10,31,68,0.40)",
           textTransform:"uppercase", letterSpacing:"0.18em",
           marginBottom:10,
-        }}>Estrategia comercial</div>
-        <div style={{display:"grid",gap:12}}>
-          <FL label="Objeciones del cliente"><Inp value={f.objeciones||""} onChange={v=>set("objeciones",v)} rows={2} placeholder="¿Qué lo detiene de comprar?"/></FL>
-          <FL label="Intereses y necesidades"><Inp value={f.intereses||""} onChange={v=>set("intereses",v)} rows={2} placeholder="¿Qué busca proteger o lograr?"/></FL>
-          <FL label="Motivador de compra"><Inp value={f.motivador||""} onChange={v=>set("motivador",v)} rows={2} placeholder="¿Qué lo haría decidir hoy?"/></FL>
-        </div>
+        }}>Comentarios</div>
+        <FL label="Observaciones, necesidades, contexto u objeciones del prospecto">
+          <Inp
+            value={f.notas || ""}
+            onChange={v => set("notas", v)}
+            rows={5}
+            placeholder="Escribe aquí cualquier comentario relevante del prospecto…"
+          />
+        </FL>
       </div>
     </div>}
 
