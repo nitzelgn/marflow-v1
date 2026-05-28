@@ -8425,6 +8425,15 @@ function Cobranza() {
     if (!Array.isArray(stored) || stored.length === 0) return [];
     return stored.map(d => {
       const nuevo = { ...d };
+      // Re-parse diasAtraso desde _raw con el parser actualizado.
+      // Esto garantiza que mejoras al parser apliquen al Excel ya cargado
+      // sin que la usuaria tenga que volver a subirlo.
+      if (d._raw) {
+        const rIdx = _buildRowIndex(d._raw);
+        const diasRaw = pickField(rIdx, "Días de atraso", "Dias de atraso", "Días atraso", "Dias atraso", "DiasAtraso", "DIAS_ATRASO", "dias_atraso", "atraso", "Días", "Dias");
+        const diasParsed = Number(String(diasRaw || "0").replace(/[^\d.-]/g, "")) || 0;
+        if (diasParsed > 0) nuevo.diasAtraso = diasParsed;
+      }
       nuevo.esPeriodoComp = esPeriodoComprometidoRow(d._raw, d.producto);
       nuevo.renovacion = emisorAplicaRenovacion(d.producto)
         ? calcularRenovacion(d.vigenciaInicio)
@@ -8478,7 +8487,7 @@ function Cobranza() {
         const fechaRecibo   = normFecha(pickField(r, "Fecha de recibo pendiente de cobro", "Fecha recibo pendiente", "Fecha recibo", "Fecha cobro"));
         const respuestaBanco= String(pickField(r, "Respuesta banco", "Respuesta del banco", "Respuesta")).trim();
         const montoProximo  = Number(String(pickField(r, "Monto próximo de pago", "Monto proximo de pago", "Monto proximo", "Próximo monto")).replace(/[^\d.-]/g, "")) || 0;
-        const diasAtraso    = Number(pickField(r, "Días de atraso", "Dias de atraso", "Días atraso", "Dias atraso", "DiasAtraso")) || 0;
+        const diasAtraso    = Number(String(pickField(r, "Días de atraso", "Dias de atraso", "Días atraso", "Dias atraso", "DiasAtraso", "DIAS_ATRASO", "dias_atraso", "atraso", "Días", "Dias") || "0").replace(/[^\d.-]/g, "")) || 0;
         const estatus       = String(pickField(r, "Estatus", "Status") || "Al corriente").trim();
         const telefono      = String(pickField(r, "Teléfono", "Telefono", "TEL", "Celular")).trim();
 
