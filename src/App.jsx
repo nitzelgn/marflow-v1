@@ -127,6 +127,84 @@ const getPrimerDia = (y,m) => { const d=new Date(y,m,1).getDay(); return d===0?6
 // adminId del usuario actual (admin → su propio id, asistente → admin asignado)
 const getAdminId = u => u?.rol === "asistente" ? u?.adminId : u?.id;
 
+/* ═══════════════════════════════════════════
+   WOW PACK · Hook + componentes visuales premium
+   - useCountUp: anima un número desde 0 al valor final (600ms ease-out)
+   - GoldDivider: línea con gradiente gold → transparente (banca privada)
+   - Shimmer: placeholder con brillo en movimiento (skeleton loaders)
+═══════════════════════════════════════════ */
+
+// Hook: anima un número desde 0 hasta `value` en `duration` ms.
+// Usa requestAnimationFrame con easing ease-out para sentirse natural.
+// Si `value` cambia, vuelve a animar desde el último valor mostrado.
+function useCountUp(value, duration = 600) {
+  const [display, setDisplay] = useState(0);
+  const fromRef = useRef(0);
+  const rafRef = useRef(null);
+  const startRef = useRef(null);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    const target = Number(value) || 0;
+    if (from === target) { setDisplay(target); return; }
+    startRef.current = null;
+    cancelAnimationFrame(rafRef.current);
+
+    const step = (ts) => {
+      if (startRef.current == null) startRef.current = ts;
+      const elapsed = ts - startRef.current;
+      const t = Math.min(1, elapsed / duration);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3);
+      const current = Math.round(from + (target - from) * eased);
+      setDisplay(current);
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        fromRef.current = target;
+        setDisplay(target);
+      }
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [value, duration]);
+
+  return display;
+}
+
+// Divider con gradiente gold → transparente, sutil pero distintivo.
+// Reemplaza un border-bottom plano con presencia editorial.
+function GoldDivider({ marginY = 24, opacity = 0.40 }) {
+  return (
+    <div style={{
+      height: 1,
+      margin: `${marginY}px 0`,
+      background: `linear-gradient(90deg, transparent 0%, rgba(198,169,107,${opacity}) 50%, transparent 100%)`,
+    }}/>
+  );
+}
+
+// Número con count-up animado. Wrapper para usar useCountUp dentro de un .map().
+// Pásale el valor y opcional formato (ej. para currency).
+function KpiNumber({ value, format, style = {} }) {
+  const v = useCountUp(value || 0);
+  return <span style={style}>{format ? format(v) : v}</span>;
+}
+
+// CSS-only para shimmer (sin keyframes nuevos, usa background-position).
+// Se aplica como inline-style sobre un div con dimensiones definidas.
+function Shimmer({ width = "100%", height = 14, radius = 6, style = {} }) {
+  return (
+    <div style={{
+      width, height, borderRadius: radius,
+      background: "linear-gradient(90deg, rgba(10,31,68,0.04) 0%, rgba(198,169,107,0.10) 50%, rgba(10,31,68,0.04) 100%)",
+      backgroundSize: "200% 100%",
+      animation: "mfShimmer 1.6s ease-in-out infinite",
+      ...style,
+    }}/>
+  );
+}
+
 // ── Registro de actividad (timeline en Configuración) ─────────────
 // Se llama desde save/del/togglePend/etc. para guardar un evento de
 // auditoría en Supabase. Fire-and-forget: nunca bloquea la UI.
@@ -2937,6 +3015,8 @@ function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeI
         </p>
       </div>
 
+      <GoldDivider marginY={8}/>
+
       {/* ═══════════════════════════════════════════
           ACORDEÓN · 5 GRUPOS
       ═══════════════════════════════════════════ */}
@@ -3524,7 +3604,7 @@ function Metricas({leads}) {
               color:B.navy,
               fontVariantNumeric:"tabular-nums",
               marginBottom:8,
-            }}>{s.v}</div>
+            }}><KpiNumber value={s.v}/></div>
             <div style={{
               fontSize:11.5, color:"rgba(10,31,68,0.45)",
               letterSpacing:"0.005em",
@@ -3901,6 +3981,8 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
       )}
     </div>
 
+    <GoldDivider marginY={16}/>
+
     {/* ═══ PRIORIDADES DE HOY (sector asegurador/patrimonial) ═══ */}
     <div style={{marginBottom:32}}>
       <div style={{
@@ -3969,7 +4051,7 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
                 letterSpacing:"-0.025em",
                 color: p.v > 0 ? B.navy : "rgba(10,31,68,0.25)",
                 fontVariantNumeric:"tabular-nums",
-              }}>{p.v}</div>
+              }}><KpiNumber value={p.v}/></div>
             </div>
 
             {/* Título + descripción */}
@@ -8644,6 +8726,8 @@ function Cobranza() {
         }}>Renovaciones próximas, pólizas vigentes y atrasos por atender.</p>
       </div>
 
+      <GoldDivider marginY={12}/>
+
       {/* ═══ Toolbar premium ═══ */}
       <div style={{display:"flex", gap:10, marginBottom:18, flexWrap:"wrap", alignItems:"center"}}>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={cargarExcel}/>
@@ -8842,7 +8926,7 @@ function Cobranza() {
                     fontWeight:500, lineHeight:1,
                     letterSpacing:"-0.02em",
                     color:B.navy, fontVariantNumeric:"tabular-nums",
-                  }}>{s.v}</div>
+                  }}><KpiNumber value={s.v}/></div>
                 </button>
               );
             })}

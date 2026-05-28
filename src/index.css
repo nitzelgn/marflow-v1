@@ -113,6 +113,11 @@ h1, h2, h3, h4, h5, h6, p {
   from { opacity: 0; transform: translateX(20px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+/* Shimmer para skeleton loaders premium (gradient gold travels left→right) */
+@keyframes mfShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 /* Utilidades reusables */
 .mf-fade-in      { animation: mfFadeIn .35s var(--mf-ease-spring) both; }
