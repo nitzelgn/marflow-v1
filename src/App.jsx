@@ -8314,6 +8314,16 @@ const ESTADOS_COBRANZA = {
 // Agregar aquí si aparecen nuevos (ej. PLU4, PLU5, OPED variantes, etc.).
 const _PRODUCTOS_PERIODO_COMPROMETIDO = ["PLU3", "OPED"];
 
+// Emisores/productos para los que SÍ aplican renovaciones reales (aniversarios).
+// El resto NO se marca como renovación, aunque tenga "Inicio de vigencia".
+// Convención Allianz: AUIN (Auto), GMMI (Gastos Médicos), HOFP (Hogar), VIPP (Vida).
+const _EMISORES_CON_RENOVACION = ["AUIN", "GMMI", "HOFP", "VIPP"];
+
+function emisorAplicaRenovacion(producto) {
+  const p = String(producto || "").toUpperCase();
+  return _EMISORES_CON_RENOVACION.some(e => p.includes(e));
+}
+
 function esPeriodoComprometidoRow(rawRow, producto) {
   // Caso explícito por producto (match contra catálogo conocido)
   const prodUpper = String(producto || "").toUpperCase();
@@ -8443,10 +8453,13 @@ function Cobranza() {
           // raw para inspección
           _raw: rawRow,
         };
-        // Detección: Periodo comprometido / PLU3 → NO prioritario operativo
+        // Detección: Periodo comprometido / PLU3 / OPED → NO prioritario operativo
         reg.esPeriodoComp = esPeriodoComprometidoRow(rawRow, producto);
-        // Renovación: aniversario calculado desde inicio de vigencia
-        reg.renovacion = calcularRenovacion(vigenciaInicio);
+        // Renovación: SÓLO si el emisor aplica (AUIN/GMMI/HOFP/VIPP).
+        // El resto no se marca como renovación aunque tenga inicio de vigencia.
+        reg.renovacion = emisorAplicaRenovacion(producto)
+          ? calcularRenovacion(vigenciaInicio)
+          : null;
         // Clasificación automática (estado de cobranza)
         reg.estadoAuto = clasificarCobranza(reg);
         return reg;
