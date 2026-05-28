@@ -2886,7 +2886,8 @@ function ProximamenteItem({ titulo, sub }) {
   );
 }
 
-function Configuracion({ usuario, idleTimeoutMin, onChangeIdleTimeout, accesibilidad, onChangeAccesibilidad }) {
+function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeIdleTimeout, accesibilidad, onChangeAccesibilidad }) {
+  const esAdminConfig = ["admin","superadmin"].includes(usuario?.rol);
   const [bioActivada, setBioActivada] = useState(() => biometriaActiva(usuario?.id));
   const [bioPlataforma, setBioPlataforma] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -3120,11 +3121,22 @@ function Configuracion({ usuario, idleTimeoutMin, onChangeIdleTimeout, accesibil
         </div>
 
         {/* Roadmap items */}
-        <ProximamenteItem titulo="Usuarios" sub="Gestiona admins y asistentes del equipo desde aquí."/>
         <ProximamenteItem titulo="Roles y permisos" sub="Control granular de qué puede ver/editar cada miembro."/>
         <ProximamenteItem titulo="Sesiones activas" sub="Revisa y cierra sesiones en otros dispositivos."/>
         <ProximamenteItem titulo="Cambio de contraseña" sub="Actualiza tu contraseña sin salir de la app."/>
       </AccordionGroup>
+
+      {/* ▸ USUARIOS (admin only) ───────────────── */}
+      {esAdminConfig && (
+        <AccordionGroup
+          eyebrow="Equipo"
+          titulo="Usuarios y asistentes"
+          sub="Crea, edita y elimina cuentas del equipo. Cada asistente hereda los leads del admin al que pertenece."
+          icon={<IconUsers size={16} color="#C6A96B"/>}
+        >
+          <Usuarios usuario={usuario} cuentas={cuentas} setCuentas={setCuentas}/>
+        </AccordionGroup>
+      )}
 
       {/* ▸ NOTIFICACIONES ──────────────────────── */}
       <AccordionGroup
@@ -9303,7 +9315,6 @@ export default function App() {
     ...(esAdmin?[{id:"metricas",icon:<IconBarChart size={14}/>,l:"Métricas"}]:[]),
     ...(esAdmin?[{id:"importar_correo",icon:<IconDownload size={14}/>,l:"Importar"}]:[]),
     ...(esAdmin?[{id:"cobranza",icon:<IconDollar size={14}/>,l:"Cobranza"}]:[]),
-    ...(esAdmin?[{id:"usuarios",icon:<IconUser size={14}/>,l:"Usuarios"}]:[]),
     {id:"configuracion",icon:<IconShield size={14}/>,l:"Configuración"},
   ];
 
@@ -9560,9 +9571,10 @@ export default function App() {
         {seccion==="metricas"&&esAdmin&&<Metricas leads={leads}/>}
         {seccion==="importar_correo"&&esAdmin&&<ImportarCorreo leads={leads} setLeads={setLeads} usuario={usuario} setSeccion={setSeccion} setFiltroNav={setFiltroNav}/>}
         {seccion==="cobranza"&&esAdmin&&<Cobranza/>}
-        {seccion==="usuarios"&&esAdmin&&<Usuarios usuario={usuario} cuentas={cuentas} setCuentas={cs=>{setCuentas(cs);LS.set("mf_cuentas",cs);}}/>}
         {seccion==="configuracion"&&<Configuracion
           usuario={usuario}
+          cuentas={cuentas}
+          setCuentas={cs=>{setCuentas(cs);LS.set("mf_cuentas",cs);}}
           idleTimeoutMin={idleTimeoutMin}
           onChangeIdleTimeout={(min)=>{setIdleTimeoutMin(min); setIdleTimeoutMinLS(min);}}
           accesibilidad={accesibilidad}
