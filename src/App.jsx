@@ -8159,6 +8159,56 @@ const ESTADOS_COBRANZA = {
   rechazado:    { label: "Cobro rechazado", color: "#991b1b", bg: "rgba(153,27,27,0.08)" },
 };
 
+/* ───────────────────────────────────────────
+   Detección de "Periodo comprometido"
+   - Si CUALQUIER valor del row contiene "periodo" + "comprometido"
+   - O el producto es PLU3 (caso explícito Allianz)
+   Estos registros se tratan como NO prioritarios — se ocultan por default.
+─────────────────────────────────────────── */
+function esPeriodoComprometidoRow(rawRow, producto) {
+  // Caso explícito por producto
+  if (String(producto || "").toUpperCase().includes("PLU3")) return true;
+  // Recorre todos los valores del row buscando "periodo" + "comprometido"
+  if (!rawRow) return false;
+  for (const v of Object.values(rawRow)) {
+    const s = String(v || "").toLowerCase();
+    if (!s) continue;
+    if (s.includes("periodo") && s.includes("comprometido")) return true;
+  }
+  return false;
+}
+
+/* ───────────────────────────────────────────
+   Cálculo de aniversario / renovación desde "Inicio de vigencia"
+   - Devuelve fecha del próximo aniversario, días hasta ese aniversario,
+     y cuántos años cumplirá la póliza en esa fecha (1, 2, 3...)
+   - Retorna null si no hay fecha válida
+─────────────────────────────────────────── */
+function calcularRenovacion(vigenciaInicio) {
+  if (!vigenciaInicio) return null;
+  try {
+    const inicio = new Date(vigenciaInicio + "T00:00:00");
+    const hoyDate = new Date(hoy() + "T00:00:00");
+    if (isNaN(inicio.getTime())) return null;
+    // Siguiente aniversario >= hoy
+    const aniversario = new Date(inicio);
+    while (aniversario < hoyDate) {
+      aniversario.setFullYear(aniversario.getFullYear() + 1);
+    }
+    const diasHasta = Math.round((aniversario - hoyDate) / 86400000);
+    const aniosCumplidos = aniversario.getFullYear() - inicio.getFullYear();
+    return {
+      fecha: aniversario.toISOString().split("T")[0],
+      diasHasta,
+      aniosCumplidos,
+      esProxima30d: diasHasta >= 0 && diasHasta <= 30,
+      esEsteMes: aniversario.getMonth() === hoyDate.getMonth() && aniversario.getFullYear() === hoyDate.getFullYear(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function Cobranza() {
   const [datos,setDatos] = useState([]);
   const [cargando,setCargando] = useState(false);
@@ -8168,6 +8218,10 @@ function Cobranza() {
   const [filtPeriodicidad,setFiltPeriodicidad] = useState("");
   const [tab,setTab] = useState("dashboard");
   const [expandedRow,setExpandedRow] = useState(null);
+  // Filtros nuevos: ocultar periodo comprometido (default ON), sólo renovaciones, orden por atraso
+  const [ocultarPeriodoComp,setOcultarPeriodoComp] = useState(true);
+  const [filtSoloRenov,setFiltSoloRenov] = useState(false);
+  const [ordenAtraso,setOrdenAtraso] = useState("desc"); // "desc" | "asc" | "none"
   const fileRef = useRef();
   const ahora = new Date();
   const mesBd = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,"0")}`;
@@ -8239,6 +8293,10 @@ function Cobranza() {
           // raw para inspección
           _raw: rawRow,
         };
+        // Detección: Periodo comprometido / PLU3 → NO prioritario operativo
+        reg.esPeriodoComp = esPeriodoComprometidoRow(rawRow, producto);
+        // Renovación: aniversario calculado desde inicio de vigencia
+        reg.renovacion = calcularRenovacion(vigenciaInicio);
         // Clasificación automática (estado de cobranza)
         reg.estadoAuto = clasificarCobranza(reg);
         return reg;
@@ -8283,6 +8341,11 @@ function Cobranza() {
   // Búsqueda global cruza: cliente, póliza, producto, respuesta banco
   const busqLower = busqueda.trim().toLowerCase();
   const datosFilt = datos.filter(d => {
+    // Filtro #1: Ocultar Periodo comprometido (activo por default)
+    if (ocultarPeriodoComp && d.esPeriodoComp) return false;
+    // Filtro #2: Sólo renovaciones próximas 30d (cuando está activo)
+    if (filtSoloRenov && !d.renovacion?.esProxima30d) return false;
+    // Filtros del Excel
     if (filtProd && !d.producto.toLowerCase().includes(filtProd.toLowerCase())) return false;
     if (filtEstado && d.estadoAuto !== filtEstado) return false;
     if (filtPeriodicidad && d.periodicidad !== filtPeriodicidad) return false;
@@ -8293,16 +8356,34 @@ function Cobranza() {
     return true;
   });
 
-  // === MÉTRICAS DEL NUEVO ESQUEMA (7 KPIs) ===
-  const totalReg     = datos.length;
-  const corrientes   = datosFilt.filter(d => d.estadoAuto === "al_corriente");
-  const atrasoLeve   = datosFilt.filter(d => d.estadoAuto === "leve");
-  const atrasoMedio  = datosFilt.filter(d => d.estadoAuto === "medio");
-  const atrasoCrit   = datosFilt.filter(d => d.estadoAuto === "critico");
-  const rechazados   = datosFilt.filter(d => d.estadoAuto === "rechazado");
-  const proximos15   = datosFilt.filter(d => d.estadoAuto === "proximo");
+  // Ordenamiento por días de atraso (default: mayor primero)
+  // Mutamos copia con slice() para no afectar el original
+  const datosFiltOrden = (() => {
+    if (ordenAtraso === "none") return datosFilt;
+    const arr = datosFilt.slice();
+    arr.sort((a, b) => {
+      const da = Number(a.diasAtraso) || 0;
+      const db = Number(b.diasAtraso) || 0;
+      return ordenAtraso === "desc" ? db - da : da - db;
+    });
+    return arr;
+  })();
 
-  // Backward-compat para vistas viejas de renovaciones (los tabs siguen funcionando)
+  // === MÉTRICAS DEL NUEVO ESQUEMA ===
+  // OJO: las métricas críticas se computan EXCLUYENDO periodo comprometido,
+  // tal como pidió Mariana ("excluirlo de métricas críticas").
+  const datosOperativos = datos.filter(d => !d.esPeriodoComp);
+  const totalReg     = datosOperativos.length;
+  const corrientes   = datosOperativos.filter(d => d.estadoAuto === "al_corriente");
+  const atrasoLeve   = datosOperativos.filter(d => d.estadoAuto === "leve");
+  const atrasoMedio  = datosOperativos.filter(d => d.estadoAuto === "medio");
+  const atrasoCrit   = datosOperativos.filter(d => d.estadoAuto === "critico");
+  const rechazados   = datosOperativos.filter(d => d.estadoAuto === "rechazado");
+  const proximos15   = datosOperativos.filter(d => d.estadoAuto === "proximo");
+  const renovaciones30d = datosOperativos.filter(d => d.renovacion?.esProxima30d);
+  const periodoComp     = datos.filter(d => d.esPeriodoComp); // métrica informativa
+
+  // Backward-compat para vistas viejas (tabs renovaciones por vencimiento)
   const renovMes  = datosFilt.filter(d => d.vencimiento && d.vencimiento.startsWith(mesBd));
   const renovSig  = datosFilt.filter(d => d.vencimiento && d.vencimiento.startsWith(mesSigBd));
   const atraso35  = atrasoCrit;
@@ -8516,16 +8597,18 @@ function Cobranza() {
     );
   }
 
-  // KPIs hero estilo banca privada — 7 métricas del nuevo esquema.
+  // KPIs hero estilo banca privada — 8 métricas (incluye Renovaciones).
+  // Periodo comprometido se excluye de todas (ver datosOperativos).
   // Cada KPI clickea al filtro correspondiente (o limpia si se hace click otra vez).
   const kpis = [
-    { l:"Total registros",       v:totalReg,            dot:B.navy,       filtro:""             },
-    { l:"Al corriente",          v:corrientes.length,   dot:B.green,      filtro:"al_corriente" },
-    { l:"Atraso leve",           v:atrasoLeve.length,   dot:"#92400e",    filtro:"leve"         },
-    { l:"Atraso medio",          v:atrasoMedio.length,  dot:"#b45309",    filtro:"medio"        },
-    { l:"Atraso crítico +35d",   v:atrasoCrit.length,   dot:B.redBright,  filtro:"critico"      },
-    { l:"Cobros rechazados",     v:rechazados.length,   dot:"#991b1b",    filtro:"rechazado"    },
-    { l:"Próximos cobros 15d",   v:proximos15.length,   dot:B.blue,       filtro:"proximo"      },
+    { l:"Total operativo",       v:totalReg,                dot:B.navy,      filtro:""             },
+    { l:"Al corriente",          v:corrientes.length,       dot:B.green,     filtro:"al_corriente" },
+    { l:"Atraso leve",           v:atrasoLeve.length,       dot:"#92400e",   filtro:"leve"         },
+    { l:"Atraso medio",          v:atrasoMedio.length,      dot:"#b45309",   filtro:"medio"        },
+    { l:"Atraso crítico +35d",   v:atrasoCrit.length,       dot:B.redBright, filtro:"critico"      },
+    { l:"Cobros rechazados",     v:rechazados.length,       dot:"#991b1b",   filtro:"rechazado"    },
+    { l:"Próximos cobros 15d",   v:proximos15.length,       dot:B.blue,      filtro:"proximo"      },
+    { l:"Renovaciones 30d",      v:renovaciones30d.length,  dot:B.gold,      filtro:"__renov__"    },
   ];
 
   const tabs = [
@@ -8632,8 +8715,46 @@ function Cobranza() {
           </select>
         )}
 
+        <select value={ordenAtraso} onChange={e=>setOrdenAtraso(e.target.value)}
+          style={{
+            minHeight:38, padding:"0 28px 0 12px", borderRadius:10,
+            border:"1px solid rgba(10,31,68,0.08)", background:B.white,
+            fontFamily:"'Poppins',sans-serif", fontSize:12.5, color:B.navy,
+            cursor:"pointer", boxShadow:"var(--mf-shadow-xs)",
+          }}>
+          <option value="desc">Mayor atraso primero</option>
+          <option value="asc">Menor atraso primero</option>
+          <option value="none">Orden del Excel</option>
+        </select>
+
+        {/* Toggle "Ocultar periodo comprometido" */}
+        <label style={{
+          display:"inline-flex", alignItems:"center", gap:8,
+          padding:"8px 12px", borderRadius:10,
+          border:`1px solid ${ocultarPeriodoComp ? "rgba(198,169,107,0.45)" : "rgba(10,31,68,0.08)"}`,
+          background: ocultarPeriodoComp ? "rgba(198,169,107,0.06)" : B.white,
+          cursor:"pointer", boxShadow:"var(--mf-shadow-xs)",
+          fontSize:12, color: ocultarPeriodoComp ? B.navy : "rgba(10,31,68,0.65)",
+          fontWeight: ocultarPeriodoComp ? 600 : 500,
+          fontFamily:"'Poppins',sans-serif",
+          userSelect:"none", whiteSpace:"nowrap",
+        }}>
+          <input type="checkbox"
+            checked={ocultarPeriodoComp}
+            onChange={e=>setOcultarPeriodoComp(e.target.checked)}
+            style={{cursor:"pointer", accentColor:B.gold}}/>
+          Ocultar periodo comprometido
+          {periodoComp.length > 0 && (
+            <span style={{
+              fontSize:9.5, fontWeight:600, color:"rgba(10,31,68,0.50)",
+              background:"rgba(10,31,68,0.06)", padding:"1px 6px", borderRadius:5,
+              fontVariantNumeric:"tabular-nums",
+            }}>{periodoComp.length}</span>
+          )}
+        </label>
+
         <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap"}}>
-          {datosFilt.length} registros
+          {datosFiltOrden.length} registros
         </div>
       </div>
 
@@ -8683,10 +8804,17 @@ function Cobranza() {
             gap:12, marginBottom:24,
           }}>
             {kpis.map((s, i) => {
-              const isActive = filtEstado === s.filtro && s.filtro !== "";
+              const esRenovKpi = s.filtro === "__renov__";
+              const isActive = esRenovKpi ? filtSoloRenov : (filtEstado === s.filtro && s.filtro !== "");
               return (
                 <button key={i}
-                  onClick={()=>setFiltEstado(filtEstado === s.filtro ? "" : s.filtro)}
+                  onClick={()=>{
+                    if (esRenovKpi) {
+                      setFiltSoloRenov(v => !v);
+                    } else {
+                      setFiltEstado(filtEstado === s.filtro ? "" : s.filtro);
+                    }
+                  }}
                   className={`mf-fade-up mf-stagger-${(i%4)+1}`}
                   style={{
                     background: isActive ? `${s.dot}08` : B.white,
@@ -8735,13 +8863,13 @@ function Cobranza() {
                   fontFamily:"'Cormorant Garamond', serif",
                   fontSize:22, fontWeight:500,
                   color:B.navy, letterSpacing:"-0.01em",
-                }}>{filtEstado ? ESTADOS_COBRANZA[filtEstado]?.label : "Cartera completa"}</div>
+                }}>{filtSoloRenov ? "Renovaciones próximas 30d" : filtEstado ? ESTADOS_COBRANZA[filtEstado]?.label : "Cartera completa"}</div>
                 <div style={{
                   fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:2,
                   fontVariantNumeric:"tabular-nums",
-                }}>{datosFilt.length} registro{datosFilt.length!==1?"s":""}{filtEstado || busqueda || filtPeriodicidad ? " (filtrado)" : ""}</div>
+                }}>{datosFiltOrden.length} registro{datosFiltOrden.length!==1?"s":""}{filtEstado || busqueda || filtPeriodicidad || filtSoloRenov || !ocultarPeriodoComp ? " (filtrado)" : ""}{ordenAtraso !== "none" ? ` · orden ${ordenAtraso==="desc"?"mayor atraso":"menor atraso"}` : ""}</div>
               </div>
-              <button onClick={()=>exportarFiltrado(datosFilt, filtEstado || "todos")}
+              <button onClick={()=>exportarFiltrado(datosFiltOrden, filtEstado || (filtSoloRenov ? "renovaciones" : "todos"))}
                 style={{
                   display:"inline-flex", alignItems:"center", gap:6,
                   padding:"8px 12px", borderRadius:8,
@@ -8757,7 +8885,7 @@ function Cobranza() {
               </button>
             </div>
 
-            {datosFilt.length === 0 ? (
+            {datosFiltOrden.length === 0 ? (
               <div style={{textAlign:"center", padding:"48px 20px", color:"rgba(10,31,68,0.45)", fontSize:13, fontStyle:"italic"}}>
                 Sin registros con los filtros activos.
               </div>
@@ -8779,20 +8907,50 @@ function Cobranza() {
                     </tr>
                   </thead>
                   <tbody>
-                    {datosFilt.map((r, i) => {
+                    {datosFiltOrden.map((r, i) => {
                       const s = statusOf(r);
                       const isExp = expandedRow === i;
+                      const muted = r.esPeriodoComp; // periodo comprometido = visual menor prioridad
                       return (
                         <Fragment key={i}>
                           <tr style={{
                             borderBottom: isExp ? "none" : "1px solid rgba(10,31,68,0.04)",
                             cursor:"pointer",
-                            transition: "background-color var(--mf-t-fast) var(--mf-ease-out)",
+                            opacity: muted ? 0.72 : 1,
+                            transition: "background-color var(--mf-t-fast) var(--mf-ease-out), opacity var(--mf-t-fast) var(--mf-ease-out)",
                           }}
                             onClick={()=>setExpandedRow(isExp ? null : i)}
                             onMouseEnter={e=>{ if(!isExp) e.currentTarget.style.background = "rgba(248,246,242,0.4)"; }}
                             onMouseLeave={e=>{ if(!isExp) e.currentTarget.style.background = "transparent"; }}>
-                            <td style={{padding:"11px 14px", fontSize:13, color:B.navy, fontWeight:500}}>{r.nombre || "—"}</td>
+                            <td style={{padding:"11px 14px", fontSize:13, color: muted ? "rgba(10,31,68,0.65)" : B.navy, fontWeight:500}}>
+                              {r.nombre || "—"}
+                              {(r.esPeriodoComp || r.renovacion?.esProxima30d) && (
+                                <div style={{display:"flex", gap:6, marginTop:5, flexWrap:"wrap"}}>
+                                  {r.esPeriodoComp && (
+                                    <span style={{
+                                      display:"inline-flex", alignItems:"center", gap:5,
+                                      fontSize:9.5, fontWeight:600,
+                                      color:"rgba(10,31,68,0.55)",
+                                      background:"rgba(10,31,68,0.05)",
+                                      border:"1px solid rgba(10,31,68,0.10)",
+                                      padding:"2px 8px", borderRadius:6,
+                                      letterSpacing:"0.03em", textTransform:"uppercase", whiteSpace:"nowrap",
+                                    }}>Periodo comprometido</span>
+                                  )}
+                                  {r.renovacion?.esProxima30d && (
+                                    <span style={{
+                                      display:"inline-flex", alignItems:"center", gap:5,
+                                      fontSize:9.5, fontWeight:600,
+                                      color:B.gold,
+                                      background:"rgba(198,169,107,0.08)",
+                                      border:"1px solid rgba(198,169,107,0.28)",
+                                      padding:"2px 8px", borderRadius:6,
+                                      letterSpacing:"0.03em", textTransform:"uppercase", whiteSpace:"nowrap",
+                                    }}>Renovación · {r.renovacion.aniosCumplidos}° año</span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
                             <td style={{padding:"11px 14px"}}>
                               {r.producto ? (
                                 <span style={{fontSize:10.5, fontWeight:500, color:B.navy, background:"rgba(10,31,68,0.05)", padding:"3px 9px", borderRadius:6}}>{r.producto}</span>
