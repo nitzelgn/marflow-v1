@@ -2765,6 +2765,127 @@ function AccToggle({ on, onChange, disabled }) {
   );
 }
 
+/* ═══════════════════════════════════════════
+   AccordionGroup — bloque colapsable premium para Configuración
+   Editorial banca privada: chevron derecho, eyebrow uppercase,
+   título Cormorant, subtítulo Poppins gris.
+═══════════════════════════════════════════ */
+function AccordionGroup({ eyebrow, titulo, sub, defaultOpen = false, children, icon }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{
+      borderTop: "1px solid rgba(10,31,68,0.06)",
+      padding: "22px 0",
+    }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        style={{
+          width: "100%",
+          background: "transparent",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 14,
+          textAlign: "left",
+          fontFamily: "'Poppins', sans-serif",
+        }}
+      >
+        {icon && (
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: "rgba(198,169,107,0.08)",
+            border: "1px solid rgba(198,169,107,0.18)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+            marginTop: 2,
+          }}>{icon}</div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {eyebrow && (
+            <div style={{
+              fontSize: 9.5, fontWeight: 600,
+              color: "rgba(10,31,68,0.40)",
+              textTransform: "uppercase", letterSpacing: "0.18em",
+              marginBottom: 5,
+            }}>{eyebrow}</div>
+          )}
+          <div style={{
+            fontFamily: "'Cormorant Garamond', serif",
+            fontSize: 22, fontWeight: 500,
+            color: "#0A1F44", letterSpacing: "-0.01em",
+            lineHeight: 1.15,
+          }}>{titulo}</div>
+          {sub && (
+            <div style={{
+              fontSize: 12.5, color: "rgba(10,31,68,0.55)",
+              marginTop: 4, lineHeight: 1.5,
+            }}>{sub}</div>
+          )}
+        </div>
+        <div style={{
+          width: 28, height: 28, borderRadius: 8,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: "rgba(10,31,68,0.45)",
+          transition: "transform var(--mf-t-normal) var(--mf-ease-out)",
+          transform: open ? "rotate(90deg)" : "rotate(0deg)",
+          flexShrink: 0,
+          marginTop: 4,
+        }}>
+          <IconChevronRight size={14} color="currentColor"/>
+        </div>
+      </button>
+      {open && (
+        <div className="mf-fade-up" style={{ paddingTop: 18 }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Item placeholder "Próximamente" — usado para mostrar roadmap
+   visible dentro de Configuración sin construir cada feature. */
+function ProximamenteItem({ titulo, sub }) {
+  return (
+    <div style={{
+      padding: "13px 16px",
+      borderRadius: 10,
+      background: "rgba(10,31,68,0.02)",
+      border: "1px dashed rgba(10,31,68,0.10)",
+      marginBottom: 8,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{
+          fontSize: 13, color: "rgba(10,31,68,0.60)",
+          fontWeight: 500, lineHeight: 1.3,
+        }}>{titulo}</div>
+        {sub && (
+          <div style={{
+            fontSize: 11, color: "rgba(10,31,68,0.42)",
+            marginTop: 2, lineHeight: 1.4,
+          }}>{sub}</div>
+        )}
+      </div>
+      <span style={{
+        fontSize: 9, fontWeight: 600,
+        color: "#C6A96B",
+        background: "rgba(198,169,107,0.06)",
+        border: "1px solid rgba(198,169,107,0.20)",
+        padding: "3px 9px", borderRadius: 6,
+        textTransform: "uppercase", letterSpacing: "0.12em",
+        whiteSpace: "nowrap",
+      }}>Próximamente</span>
+    </div>
+  );
+}
+
 function Configuracion({ usuario, idleTimeoutMin, onChangeIdleTimeout, accesibilidad, onChangeAccesibilidad }) {
   const [bioActivada, setBioActivada] = useState(() => biometriaActiva(usuario?.id));
   const [bioPlataforma, setBioPlataforma] = useState(true);
@@ -2795,8 +2916,9 @@ function Configuracion({ usuario, idleTimeoutMin, onChangeIdleTimeout, accesibil
   const soportada = biometriaSoportada();
 
   return (
-    <div className="mf-fade-in" style={{maxWidth:720, margin:"0 auto", width:"100%"}}>
-      <div style={{marginBottom:32}}>
+    <div className="mf-fade-in" style={{maxWidth:760, margin:"0 auto", width:"100%"}}>
+      {/* ═══ Header editorial ═══ */}
+      <div style={{marginBottom:24}}>
         <div style={{
           fontSize:10.5, fontWeight:500,
           color:"rgba(10,31,68,0.45)",
@@ -2805,197 +2927,275 @@ function Configuracion({ usuario, idleTimeoutMin, onChangeIdleTimeout, accesibil
         }}>Preferencias</div>
         <h1 style={{
           fontFamily:"'Cormorant Garamond', serif",
-          fontSize:"clamp(26px, 6vw, 32px)", fontWeight:500,
+          fontSize:"clamp(26px, 6vw, 34px)", fontWeight:500,
           color:"#0A1F44", letterSpacing:"-0.02em",
           margin:"0 0 8px", lineHeight:1.1,
         }}>Configuración</h1>
         <p style={{fontSize:13.5, color:"rgba(10,31,68,0.55)", margin:0, lineHeight:1.5}}>
-          Controla cómo accedes a MarFlow, revisa la actividad reciente y ajusta la experiencia visual.
+          Toca cada categoría para desplegar sus opciones.
         </p>
       </div>
 
-      {/* ═══ Sección · Actividad reciente ═══ */}
-      <SeccionActividadReciente usuario={usuario}/>
+      {/* ═══════════════════════════════════════════
+          ACORDEÓN · 5 GRUPOS
+      ═══════════════════════════════════════════ */}
 
-      {/* ═══ Sección · Biométrico y acceso ═══ */}
-      <SeccionTitulo eyebrow="Acceso" titulo="Biométrico y sesión"
-        sub="Cómo te identifica MarFlow en este dispositivo."/>
-
-      {/* Tarjeta biometría */}
-      <div style={{
-        background:"#fff",
-        border:"1px solid rgba(10,31,68,0.06)",
-        borderRadius:16,
-        padding:"22px 24px",
-        boxShadow:"var(--mf-shadow-xs)",
-        marginBottom:14,
-      }}>
-        <div style={{display:"flex", alignItems:"flex-start", gap:14, marginBottom:16}}>
-          <div style={{
-            width:42, height:42, borderRadius:10,
-            background:"rgba(198,169,107,0.10)",
-            border:"1px solid rgba(198,169,107,0.20)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            flexShrink:0,
-          }}>
-            <IconFingerprint size={20} color="#C6A96B"/>
-          </div>
-          <div style={{flex:1, minWidth:0}}>
-            <div style={{
-              fontFamily:"'Cormorant Garamond', serif",
-              fontSize:20, fontWeight:500,
-              color:"#0A1F44", letterSpacing:"-0.01em",
-              marginBottom:4,
-            }}>Acceso biométrico</div>
-            <div style={{fontSize:13, color:"rgba(10,31,68,0.60)", lineHeight:1.55}}>
-              {soportada && bioPlataforma
-                ? "Usa Face ID o Touch ID para desbloquear tu sesión cuando regreses a la app."
-                : "Tu dispositivo no soporta biometría o el navegador no la expone."}
-            </div>
-          </div>
-          <span style={{
-            fontSize:10, fontWeight:600,
-            color: bioActivada ? "#166534" : "rgba(10,31,68,0.45)",
-            background: bioActivada ? "rgba(22,101,52,0.08)" : "rgba(10,31,68,0.05)",
-            padding:"4px 10px", borderRadius:8,
-            textTransform:"uppercase", letterSpacing:"0.10em",
-            whiteSpace:"nowrap",
-          }}>{bioActivada ? "Activa" : "Inactiva"}</span>
-        </div>
-
-        {msg && (
-          <div style={{
-            padding:"10px 13px", borderRadius:10,
-            background: msg.startsWith("✓") ? "rgba(22,101,52,0.05)"
-                      : msg.startsWith("✗") ? "rgba(220,38,38,0.05)"
-                      : "rgba(10,31,68,0.04)",
-            border: `1px solid ${msg.startsWith("✓") ? "rgba(22,101,52,0.18)"
-                      : msg.startsWith("✗") ? "rgba(220,38,38,0.18)"
-                      : "rgba(10,31,68,0.08)"}`,
-            color: msg.startsWith("✓") ? "#166534"
-                 : msg.startsWith("✗") ? "#991b1b"
-                 : "rgba(10,31,68,0.70)",
-            fontSize:12.5, lineHeight:1.5,
-            marginBottom:12,
-          }}>{msg.replace(/^[✓✗]\s*/, "")}</div>
-        )}
-
-        {!soportada || !bioPlataforma ? (
-          <div style={{
-            padding:"10px 13px", borderRadius:10,
-            background:"rgba(10,31,68,0.03)",
-            border:"1px solid rgba(10,31,68,0.06)",
-            fontSize:12, color:"rgba(10,31,68,0.55)",
-            lineHeight:1.55, fontStyle:"italic",
-          }}>
-            Tu dispositivo no expone autenticación biométrica al navegador. Funciona en iOS 16+ (Safari) y la mayoría de dispositivos Android/Windows modernos.
-          </div>
-        ) : !bioActivada ? (
-          <button onClick={activar} disabled={loading}
-            style={{
-              display:"inline-flex", alignItems:"center", gap:7,
-              padding:"10px 16px", borderRadius:10, border:"none",
-              background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
-              color:"#fff",
-              fontFamily:"'Poppins',sans-serif",
-              fontWeight:600, fontSize:12.5,
-              cursor:"pointer",
-              boxShadow:"0 1px 2px rgba(10,31,68,0.10)",
-              opacity: loading ? 0.7 : 1,
-              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
-            }}>
-            {loading ? <><IconLoader size={13} color="#fff"/> Activando…</> : <><IconFingerprint size={13} color="#fff"/> Activar biometría</>}
-          </button>
-        ) : (
-          <button onClick={desactivar}
-            style={{
-              display:"inline-flex", alignItems:"center", gap:7,
-              padding:"10px 16px", borderRadius:10,
-              border:"1px solid rgba(220,38,38,0.20)",
-              background:"transparent",
-              color:"#991b1b",
-              fontFamily:"'Poppins',sans-serif",
-              fontWeight:500, fontSize:12.5,
-              cursor:"pointer",
-              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
-            }}
-            onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.04)";}}
-            onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-            <IconLock size={13} color="#991b1b"/> Desactivar biometría
-          </button>
-        )}
-      </div>
-
-      {/* Tarjeta auto-logout (interactiva con selector de tiempo) */}
-      <div style={{
-        background:"#fff",
-        border:"1px solid rgba(10,31,68,0.06)",
-        borderRadius:16,
-        padding:"22px 24px",
-        boxShadow:"var(--mf-shadow-xs)",
-      }}>
-        <div style={{display:"flex", alignItems:"flex-start", gap:14, marginBottom:18}}>
-          <div style={{
-            width:42, height:42, borderRadius:10,
-            background:"rgba(10,31,68,0.05)",
-            border:"1px solid rgba(10,31,68,0.08)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            flexShrink:0,
-          }}>
-            <IconShield size={20} color={B.navy}/>
-          </div>
-          <div style={{flex:1}}>
-            <div style={{
-              fontFamily:"'Cormorant Garamond', serif",
-              fontSize:20, fontWeight:500,
-              color:B.navy, letterSpacing:"-0.01em",
-              marginBottom:4,
-            }}>Cierre automático por inactividad</div>
-            <div style={{fontSize:13, color:"rgba(10,31,68,0.60)", lineHeight:1.55}}>
-              Tu sesión se cerrará después del tiempo seleccionado sin actividad. Verás un aviso 1 minuto antes para extender.
-            </div>
-          </div>
-        </div>
-
-        {/* Selector de tiempo: 3 pills */}
+      {/* ▸ ACCESO ───────────────────────────────── */}
+      <AccordionGroup
+        eyebrow="Acceso"
+        titulo="Identidad y sesión"
+        sub="Cómo te identifica MarFlow en este dispositivo."
+        defaultOpen={true}
+        icon={<IconLock size={16} color="#C6A96B"/>}
+      >
+        {/* Tarjeta biometría */}
         <div style={{
-          display:"flex", gap:8, flexWrap:"wrap",
-          padding:"12px 0 4px",
+          background:"#fff",
+          border:"1px solid rgba(10,31,68,0.06)",
+          borderRadius:16,
+          padding:"22px 24px",
+          boxShadow:"var(--mf-shadow-xs)",
+          marginBottom:14,
         }}>
-          {IDLE_TIMEOUT_OPTIONS.map(min => {
-            const active = idleTimeoutMin === min;
-            return (
-              <button key={min}
-                onClick={()=>onChangeIdleTimeout(min)}
-                style={{
-                  display:"inline-flex", alignItems:"center", gap:7,
-                  padding:"10px 16px", borderRadius:10,
-                  border: `1px solid ${active ? "rgba(198,169,107,0.50)" : "rgba(10,31,68,0.08)"}`,
-                  background: active ? "rgba(198,169,107,0.08)" : B.white,
-                  color: active ? B.navy : "rgba(10,31,68,0.65)",
-                  fontFamily:"'Poppins',sans-serif",
-                  fontWeight: active ? 600 : 500,
-                  fontSize:12.5,
-                  letterSpacing:"0.005em",
-                  cursor:"pointer",
-                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
-                  fontVariantNumeric:"tabular-nums",
-                }}
-                onMouseEnter={e=>{if(!active){e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}}
-                onMouseLeave={e=>{if(!active){e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}}>
-                {active && <IconCheck size={12} color={B.gold}/>}
-                {min} minutos
-              </button>
-            );
-          })}
+          <div style={{display:"flex", alignItems:"flex-start", gap:14, marginBottom:16}}>
+            <div style={{
+              width:42, height:42, borderRadius:10,
+              background:"rgba(198,169,107,0.10)",
+              border:"1px solid rgba(198,169,107,0.20)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              flexShrink:0,
+            }}>
+              <IconFingerprint size={20} color="#C6A96B"/>
+            </div>
+            <div style={{flex:1, minWidth:0}}>
+              <div style={{
+                fontFamily:"'Cormorant Garamond', serif",
+                fontSize:20, fontWeight:500,
+                color:"#0A1F44", letterSpacing:"-0.01em",
+                marginBottom:4,
+              }}>Acceso biométrico</div>
+              <div style={{fontSize:13, color:"rgba(10,31,68,0.60)", lineHeight:1.55}}>
+                {soportada && bioPlataforma
+                  ? "Usa Face ID o Touch ID para desbloquear tu sesión cuando regreses a la app."
+                  : "Tu dispositivo no soporta biometría o el navegador no la expone."}
+              </div>
+            </div>
+            <span style={{
+              fontSize:10, fontWeight:600,
+              color: bioActivada ? "#166534" : "rgba(10,31,68,0.45)",
+              background: bioActivada ? "rgba(22,101,52,0.08)" : "rgba(10,31,68,0.05)",
+              padding:"4px 10px", borderRadius:8,
+              textTransform:"uppercase", letterSpacing:"0.10em",
+              whiteSpace:"nowrap",
+            }}>{bioActivada ? "Activa" : "Inactiva"}</span>
+          </div>
+
+          {msg && (
+            <div style={{
+              padding:"10px 13px", borderRadius:10,
+              background: msg.startsWith("✓") ? "rgba(22,101,52,0.05)"
+                        : msg.startsWith("✗") ? "rgba(220,38,38,0.05)"
+                        : "rgba(10,31,68,0.04)",
+              border: `1px solid ${msg.startsWith("✓") ? "rgba(22,101,52,0.18)"
+                        : msg.startsWith("✗") ? "rgba(220,38,38,0.18)"
+                        : "rgba(10,31,68,0.08)"}`,
+              color: msg.startsWith("✓") ? "#166534"
+                   : msg.startsWith("✗") ? "#991b1b"
+                   : "rgba(10,31,68,0.70)",
+              fontSize:12.5, lineHeight:1.5,
+              marginBottom:12,
+            }}>{msg.replace(/^[✓✗]\s*/, "")}</div>
+          )}
+
+          {!soportada || !bioPlataforma ? (
+            <div style={{
+              padding:"10px 13px", borderRadius:10,
+              background:"rgba(10,31,68,0.03)",
+              border:"1px solid rgba(10,31,68,0.06)",
+              fontSize:12, color:"rgba(10,31,68,0.55)",
+              lineHeight:1.55, fontStyle:"italic",
+            }}>
+              Tu dispositivo no expone autenticación biométrica al navegador. Funciona en iOS 16+ (Safari) y la mayoría de dispositivos Android/Windows modernos.
+            </div>
+          ) : !bioActivada ? (
+            <button onClick={activar} disabled={loading}
+              style={{
+                display:"inline-flex", alignItems:"center", gap:7,
+                padding:"10px 16px", borderRadius:10, border:"none",
+                background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+                color:"#fff",
+                fontFamily:"'Poppins',sans-serif",
+                fontWeight:600, fontSize:12.5,
+                cursor:"pointer",
+                boxShadow:"0 1px 2px rgba(10,31,68,0.10)",
+                opacity: loading ? 0.7 : 1,
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}>
+              {loading ? <><IconLoader size={13} color="#fff"/> Activando…</> : <><IconFingerprint size={13} color="#fff"/> Activar biometría</>}
+            </button>
+          ) : (
+            <button onClick={desactivar}
+              style={{
+                display:"inline-flex", alignItems:"center", gap:7,
+                padding:"10px 16px", borderRadius:10,
+                border:"1px solid rgba(220,38,38,0.20)",
+                background:"transparent",
+                color:"#991b1b",
+                fontFamily:"'Poppins',sans-serif",
+                fontWeight:500, fontSize:12.5,
+                cursor:"pointer",
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}
+              onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.04)";}}
+              onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+              <IconLock size={13} color="#991b1b"/> Desactivar biometría
+            </button>
+          )}
         </div>
-      </div>
 
-      {/* ═══ Sección · Accesibilidad ═══ */}
-      {/* ═══ Sección · Notificaciones push ═══ */}
-      <SeccionNotificacionesPush usuario={usuario}/>
+        {/* Tarjeta auto-logout (interactiva con selector de tiempo) */}
+        <div style={{
+          background:"#fff",
+          border:"1px solid rgba(10,31,68,0.06)",
+          borderRadius:16,
+          padding:"22px 24px",
+          boxShadow:"var(--mf-shadow-xs)",
+          marginBottom:14,
+        }}>
+          <div style={{display:"flex", alignItems:"flex-start", gap:14, marginBottom:18}}>
+            <div style={{
+              width:42, height:42, borderRadius:10,
+              background:"rgba(10,31,68,0.05)",
+              border:"1px solid rgba(10,31,68,0.08)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              flexShrink:0,
+            }}>
+              <IconShield size={20} color={B.navy}/>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{
+                fontFamily:"'Cormorant Garamond', serif",
+                fontSize:20, fontWeight:500,
+                color:B.navy, letterSpacing:"-0.01em",
+                marginBottom:4,
+              }}>Cierre automático por inactividad</div>
+              <div style={{fontSize:13, color:"rgba(10,31,68,0.60)", lineHeight:1.55}}>
+                Tu sesión se cerrará después del tiempo seleccionado sin actividad. Verás un aviso 1 minuto antes para extender.
+              </div>
+            </div>
+          </div>
 
-      <SeccionAccesibilidad accesibilidad={accesibilidad} onChange={onChangeAccesibilidad}/>
+          {/* Selector de tiempo: 3 pills */}
+          <div style={{
+            display:"flex", gap:8, flexWrap:"wrap",
+            padding:"12px 0 4px",
+          }}>
+            {IDLE_TIMEOUT_OPTIONS.map(min => {
+              const active = idleTimeoutMin === min;
+              return (
+                <button key={min}
+                  onClick={()=>onChangeIdleTimeout(min)}
+                  style={{
+                    display:"inline-flex", alignItems:"center", gap:7,
+                    padding:"10px 16px", borderRadius:10,
+                    border: `1px solid ${active ? "rgba(198,169,107,0.50)" : "rgba(10,31,68,0.08)"}`,
+                    background: active ? "rgba(198,169,107,0.08)" : B.white,
+                    color: active ? B.navy : "rgba(10,31,68,0.65)",
+                    fontFamily:"'Poppins',sans-serif",
+                    fontWeight: active ? 600 : 500,
+                    fontSize:12.5,
+                    letterSpacing:"0.005em",
+                    cursor:"pointer",
+                    transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                    fontVariantNumeric:"tabular-nums",
+                  }}
+                  onMouseEnter={e=>{if(!active){e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}}
+                  onMouseLeave={e=>{if(!active){e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}}>
+                  {active && <IconCheck size={12} color={B.gold}/>}
+                  {min} minutos
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Roadmap items */}
+        <ProximamenteItem titulo="Usuarios" sub="Gestiona admins y asistentes del equipo desde aquí."/>
+        <ProximamenteItem titulo="Roles y permisos" sub="Control granular de qué puede ver/editar cada miembro."/>
+        <ProximamenteItem titulo="Sesiones activas" sub="Revisa y cierra sesiones en otros dispositivos."/>
+        <ProximamenteItem titulo="Cambio de contraseña" sub="Actualiza tu contraseña sin salir de la app."/>
+      </AccordionGroup>
+
+      {/* ▸ NOTIFICACIONES ──────────────────────── */}
+      <AccordionGroup
+        eyebrow="Notificaciones"
+        titulo="Alertas y recordatorios"
+        sub="Cómo te avisa MarFlow lo importante de tu día."
+        icon={<IconBell size={16} color="#C6A96B"/>}
+      >
+        <SeccionNotificacionesPush usuario={usuario}/>
+
+        <div style={{marginTop:14}}>
+          <ProximamenteItem titulo="WhatsApp alerts" sub="Recibe avisos críticos vía WhatsApp además del push."/>
+          <ProximamenteItem titulo="Correos" sub="Resumen diario o semanal por correo electrónico."/>
+          <ProximamenteItem titulo="Recordatorios automáticos" sub="Para citas, renovaciones y leads sin contacto."/>
+          <ProximamenteItem titulo="Sonidos y vibración" sub="Personaliza el tono y vibración por tipo de alerta."/>
+        </div>
+      </AccordionGroup>
+
+      {/* ▸ EXPERIENCIA ─────────────────────────── */}
+      <AccordionGroup
+        eyebrow="Experiencia"
+        titulo="Preferencias visuales"
+        sub="Ajusta cómo se ve y se siente MarFlow."
+        icon={<IconEye size={16} color="#C6A96B"/>}
+      >
+        <SeccionAccesibilidad accesibilidad={accesibilidad} onChange={onChangeAccesibilidad}/>
+
+        <div style={{marginTop:14}}>
+          <ProximamenteItem titulo="Tema claro / oscuro" sub="Cambia entre fondo crema y modo nocturno."/>
+          <ProximamenteItem titulo="Vista compacta" sub="Reduce padding y agranda densidad de información."/>
+          <ProximamenteItem titulo="Idioma" sub="Español (México) por default. Inglés y otros próximamente."/>
+          <ProximamenteItem titulo="Dashboard inicial" sub="Personaliza qué cards ves al abrir la app."/>
+        </div>
+      </AccordionGroup>
+
+      {/* ▸ HISTORIAL ───────────────────────────── */}
+      <AccordionGroup
+        eyebrow="Historial"
+        titulo="Actividad y bitácora"
+        sub="Todo lo que ha pasado en tu cuenta y la de tu equipo."
+        icon={<IconClock size={16} color="#C6A96B"/>}
+      >
+        <SeccionActividadReciente usuario={usuario}/>
+
+        <div style={{marginTop:14}}>
+          <ProximamenteItem titulo="Cambios realizados" sub="Quién modificó qué lead, cuándo, y qué cambió."/>
+          <ProximamenteItem titulo="Logs del sistema" sub="Eventos técnicos para auditoría y soporte."/>
+          <ProximamenteItem titulo="Leads modificados" sub="Filtra por lead y ve todo su historial de ediciones."/>
+          <ProximamenteItem titulo="Acciones del equipo" sub="Resumen agrupado por asistente o admin."/>
+        </div>
+      </AccordionGroup>
+
+      {/* ▸ MENSAJES ────────────────────────────── */}
+      <AccordionGroup
+        eyebrow="Mensajes"
+        titulo="Plantillas y comunicación"
+        sub="Plantillas WhatsApp, correos prediseñados y firma del asesor."
+        icon={<IconMail size={16} color="#C6A96B"/>}
+      >
+        <Mensajes/>
+
+        <div style={{marginTop:14}}>
+          <ProximamenteItem titulo="Correos prediseñados" sub="Plantillas de email tipo HTML con variables dinámicas."/>
+          <ProximamenteItem titulo="Mensajes rápidos" sub="Respuestas cortas pre-armadas para chat en vivo."/>
+          <ProximamenteItem titulo="Automatizaciones" sub="Envía mensajes automáticos según etapa o evento del lead."/>
+          <ProximamenteItem titulo="Firma del asesor" sub="Personaliza tu firma para correos y mensajes."/>
+        </div>
+      </AccordionGroup>
+
+      {/* Cierre visual del acordeón */}
+      <div style={{borderTop:"1px solid rgba(10,31,68,0.06)", marginTop:0}}/>
     </div>
   );
 }
@@ -9101,7 +9301,6 @@ export default function App() {
     {id:"lista",icon:<IconUsers size={14}/>,l:"Leads"},
     {id:"agenda",icon:<IconCalendar size={14}/>,l:"Agenda"},
     ...(esAdmin?[{id:"metricas",icon:<IconBarChart size={14}/>,l:"Métricas"}]:[]),
-    ...(esAdmin?[{id:"mensajes",icon:<IconMail size={14}/>,l:"Mensajes"}]:[]),
     ...(esAdmin?[{id:"importar_correo",icon:<IconDownload size={14}/>,l:"Importar"}]:[]),
     ...(esAdmin?[{id:"cobranza",icon:<IconDollar size={14}/>,l:"Cobranza"}]:[]),
     ...(esAdmin?[{id:"usuarios",icon:<IconUser size={14}/>,l:"Usuarios"}]:[]),
@@ -9359,7 +9558,6 @@ export default function App() {
         {seccion==="lista"&&<ListaLeads leads={leads} setLeads={setLeads} setEventos={setEventos} cuentas={cuentas} usuario={usuario} esAsistente={esAsistente}/>}
         {seccion==="agenda"&&<Agenda eventos={eventos} setEventos={setEventos} leads={leads} esAsistente={esAsistente} usuario={usuario}/>}
         {seccion==="metricas"&&esAdmin&&<Metricas leads={leads}/>}
-        {seccion==="mensajes"&&esAdmin&&<Mensajes/>}
         {seccion==="importar_correo"&&esAdmin&&<ImportarCorreo leads={leads} setLeads={setLeads} usuario={usuario} setSeccion={setSeccion} setFiltroNav={setFiltroNav}/>}
         {seccion==="cobranza"&&esAdmin&&<Cobranza/>}
         {seccion==="usuarios"&&esAdmin&&<Usuarios usuario={usuario} cuentas={cuentas} setCuentas={cs=>{setCuentas(cs);LS.set("mf_cuentas",cs);}}/>}
