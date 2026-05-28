@@ -8287,11 +8287,13 @@ function esRechazoBanco(respuesta) {
 }
 
 // Clasifica un registro en un estado de cobranza único.
-// Prioridad: rechazo > crítico > medio > leve > próximo cobro > al corriente
+// Prioridad: crítico (>35d) > rechazo > medio > leve > próximo cobro > al corriente.
+// Crítico gana sobre rechazo porque >35d siempre es la urgencia más alta,
+// aunque también haya un problema de banco asociado.
 function clasificarCobranza(reg) {
-  if (esRechazoBanco(reg.respuestaBanco)) return "rechazado";
   const d = Number(reg.diasAtraso) || 0;
   if (d > 35) return "critico";
+  if (esRechazoBanco(reg.respuestaBanco)) return "rechazado";
   if (d > 15) return "medio";
   if (d >= 1) return "leve";
   // Si no hay atraso, evalúa próximo cobro
@@ -8622,7 +8624,8 @@ function Cobranza() {
   const renovSig = datosOperativos.filter(d =>
     d.renovacion?.fechaEsteAnio && d.renovacion.fechaEsteAnio.startsWith(mesSigBd)
   );
-  const atraso35  = atrasoCrit;
+  // Atraso +35d: días directo (incluye rechazados que también tengan +35d)
+  const atraso35 = datosOperativos.filter(d => Number(d.diasAtraso) > 35);
   const alCorriente = corrientes;
 
   // Periodicidades únicas (para el filtro dropdown)
@@ -8728,8 +8731,16 @@ function Cobranza() {
                     borderBottom: "1px solid rgba(10,31,68,0.04)",
                     transition: "background-color var(--mf-t-fast) var(--mf-ease-out)",
                   }}>
-                    <td style={{padding:"11px 14px", fontSize:12.5, fontWeight:500, color:B.navy, fontVariantNumeric:"tabular-nums"}}>{r.poliza || "—"}</td>
-                    <td style={{padding:"11px 14px", fontSize:13, color:"rgba(10,31,68,0.85)", fontWeight:500}}>{r.nombre}</td>
+                    {/* Cliente */}
+                    <td style={{padding:"11px 14px", fontSize:13, color:"rgba(10,31,68,0.85)", fontWeight:500}}>
+                      {r.nombre || "—"}
+                      {r.esPeriodoComp && (
+                        <div style={{marginTop:3, fontSize:9, fontWeight:600, color:"rgba(10,31,68,0.40)", letterSpacing:"0.06em", textTransform:"uppercase"}}>
+                          · Periodo comprometido
+                        </div>
+                      )}
+                    </td>
+                    {/* Producto (badge) */}
                     <td style={{padding:"11px 14px"}}>
                       {r.producto ? (
                         <span style={{
@@ -8740,7 +8751,9 @@ function Cobranza() {
                         }}>{r.producto}</span>
                       ) : "—"}
                     </td>
-                    <td style={{padding:"11px 14px", fontSize:12, color:"rgba(10,31,68,0.65)", fontVariantNumeric:"tabular-nums"}}>{fmtF(r.vencimiento)}</td>
+                    {/* Póliza */}
+                    <td style={{padding:"11px 14px", fontSize:12.5, fontWeight:500, color:B.navy, fontVariantNumeric:"tabular-nums"}}>{r.poliza || "—"}</td>
+                    {/* Días atraso */}
                     {cols.includes("Días atraso") && (
                       <td style={{padding:"11px 14px"}}>
                         {r.diasAtraso > 0 ? (
@@ -8754,6 +8767,25 @@ function Cobranza() {
                         )}
                       </td>
                     )}
+                    {/* Fecha recibo */}
+                    {cols.includes("Fecha recibo") && (
+                      <td style={{padding:"11px 14px", fontSize:12, color:"rgba(10,31,68,0.65)", fontVariantNumeric:"tabular-nums"}}>
+                        {fmtF(r.fechaRecibo) || "—"}
+                      </td>
+                    )}
+                    {/* Respuesta banco (truncado con tooltip) */}
+                    {cols.includes("Respuesta banco") && (
+                      <td style={{padding:"11px 14px", fontSize:11, color:"rgba(10,31,68,0.65)", maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={r.respuestaBanco}>
+                        {r.respuestaBanco || "—"}
+                      </td>
+                    )}
+                    {/* Vencimiento (legacy, sólo si la col está) */}
+                    {cols.includes("Vencimiento") && (
+                      <td style={{padding:"11px 14px", fontSize:12, color:"rgba(10,31,68,0.65)", fontVariantNumeric:"tabular-nums"}}>
+                        {fmtF(r.vencimiento) || "—"}
+                      </td>
+                    )}
+                    {/* Estatus (badge) */}
                     {cols.includes("Estatus") && (
                       <td style={{padding:"11px 14px"}}>
                         <span style={{
@@ -8770,6 +8802,7 @@ function Cobranza() {
                         </span>
                       </td>
                     )}
+                    {/* Contacto */}
                     {cols.includes("Contacto") && (
                       <td style={{padding:"11px 14px"}}>
                         <WAButton tel={r.telefono} small/>
@@ -9446,16 +9479,16 @@ function Cobranza() {
       )}
       {tab === "atraso" && (
         <div style={{background:B.white, border:"1px solid rgba(10,31,68,0.06)", borderRadius:14, padding:"22px 24px", boxShadow:"var(--mf-shadow-xs)"}}>
-          <Tabla lista={atraso35} cols={["Póliza","Cliente","Producto","Vencimiento","Días atraso","Estatus","Contacto"]}
+          <Tabla lista={atraso35} cols={["Cliente","Producto","Póliza","Días atraso","Fecha recibo","Respuesta banco","Estatus","Contacto"]}
             titulo="Cobranza con más de 35 días" color={B.redBright}
             onExport={()=>exportarFiltrado(atraso35,"cobranza_critica")}/>
         </div>
       )}
       {tab === "todos" && (
         <div style={{background:B.white, border:"1px solid rgba(10,31,68,0.06)", borderRadius:14, padding:"22px 24px", boxShadow:"var(--mf-shadow-xs)"}}>
-          <Tabla lista={datosFilt} cols={["Póliza","Cliente","Producto","Vencimiento","Días atraso","Estatus","Contacto"]}
-            titulo="Cartera completa" color={B.navy}
-            onExport={()=>exportarFiltrado(datosFilt,"todos")}/>
+          <Tabla lista={datos} cols={["Cliente","Producto","Póliza","Días atraso","Fecha recibo","Respuesta banco","Estatus","Contacto"]}
+            titulo="Cartera completa (sin filtros)" color={B.navy}
+            onExport={()=>exportarFiltrado(datos,"todos")}/>
         </div>
       )}
     </div>
@@ -9875,7 +9908,137 @@ function detectarRecovery() {
   return hash.includes("type=recovery") || search.includes("type=recovery");
 }
 
+/* ═══════════════════════════════════════════
+   AUTO-UPDATE DETECTOR · sin cache stale, sin Service Worker hell.
+   Vigila si Vercel publicó un bundle nuevo y muestra banner premium.
+   - Polling cada 30s del HTML de raíz (con cache-busting)
+   - Re-check cuando el usuario regresa a la pestaña (visibilitychange)
+   - Compara el script principal del HTML actual con el de la sesión
+   - Si cambió → banner navy/gold con botón "Actualizar"
+   - Click → window.location.reload() (Vercel garantiza HTML fresh)
+═══════════════════════════════════════════ */
+function useAutoUpdate() {
+  const [updateReady, setUpdateReady] = useState(false);
+  const currentBundleRef = useRef(null);
+
+  useEffect(() => {
+    // Captura el bundle activo de esta sesión
+    try {
+      const scripts = Array.from(document.querySelectorAll('script[src*="/assets/index-"]'));
+      if (scripts.length > 0) {
+        const url = new URL(scripts[0].src, window.location.origin);
+        currentBundleRef.current = url.pathname;
+      }
+    } catch {}
+
+    let cancelled = false;
+
+    async function checkForUpdate() {
+      if (cancelled || updateReady || !currentBundleRef.current) return;
+      try {
+        const res = await fetch("/?_cb=" + Date.now(), {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache, no-store, max-age=0" },
+        });
+        if (!res.ok) return;
+        const html = await res.text();
+        const match = html.match(/src="(\/assets\/index-[A-Za-z0-9_-]+\.js)"/);
+        if (!match) return;
+        const latest = match[1];
+        if (latest && latest !== currentBundleRef.current) {
+          setUpdateReady(true);
+        }
+      } catch {
+        // sin internet o error: silencioso. Re-intenta en el siguiente tick.
+      }
+    }
+
+    // Check inmediato + cada 30 segundos
+    checkForUpdate();
+    const interval = setInterval(checkForUpdate, 30000);
+
+    // Re-check cuando la pestaña vuelve a foco (cubre el caso "estuviste fuera")
+    const onVisible = () => { if (document.visibilityState === "visible") checkForUpdate(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", checkForUpdate);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", checkForUpdate);
+    };
+  }, [updateReady]);
+
+  return updateReady;
+}
+
+function UpdateBanner({ onUpdate }) {
+  return (
+    <div className="mf-fade-up" style={{
+      position: "fixed",
+      bottom: "calc(20px + env(safe-area-inset-bottom))",
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: 9999,
+      background: "linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+      color: "#fff",
+      border: "1px solid rgba(198,169,107,0.45)",
+      borderRadius: 14,
+      padding: "13px 18px",
+      display: "flex",
+      alignItems: "center",
+      gap: 14,
+      fontFamily: "'Poppins', sans-serif",
+      fontSize: 13,
+      maxWidth: "calc(100vw - 24px)",
+      boxShadow: "0 12px 40px rgba(10,31,68,0.45)",
+    }}>
+      <div style={{display:"flex", alignItems:"center", gap:10, minWidth:0, flex:1}}>
+        <span style={{
+          width: 8, height: 8, borderRadius: "50%",
+          background: "#C6A96B",
+          boxShadow: "0 0 0 4px rgba(198,169,107,0.18)",
+          flexShrink: 0,
+          animation: "mfPulseDot 1.6s ease-in-out infinite",
+        }}/>
+        <div style={{display:"flex", flexDirection:"column", minWidth:0}}>
+          <div style={{
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize: 17, fontWeight: 500, color: "#C6A96B",
+            letterSpacing: "-0.01em", lineHeight: 1.1,
+          }}>Nueva versión disponible</div>
+          <div style={{fontSize:11, opacity:0.75, marginTop:2, lineHeight:1.4}}>
+            Actualiza para usar lo último sin perder datos.
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={onUpdate}
+        style={{
+          padding: "9px 16px",
+          borderRadius: 10,
+          background: "#C6A96B",
+          border: "none",
+          color: "#0A1F44",
+          fontFamily: "'Poppins', sans-serif",
+          fontWeight: 600,
+          fontSize: 12.5,
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+          letterSpacing: "0.02em",
+          transition: "all var(--mf-t-fast) var(--mf-ease-out)",
+          flexShrink: 0,
+        }}
+        onMouseEnter={e=>{e.currentTarget.style.background="#D4B879"; e.currentTarget.style.transform="translateY(-1px)";}}
+        onMouseLeave={e=>{e.currentTarget.style.background="#C6A96B"; e.currentTarget.style.transform="translateY(0)";}}
+      >Actualizar ↻</button>
+    </div>
+  );
+}
+
 export default function App() {
+  const updateReady = useAutoUpdate();
   const [usuario,setUsuario]=useState(null);
   const [cuentas,setCuentas]=useState([]);
   const [seccion,setSeccion]=useState("dashboard");
@@ -10282,18 +10445,26 @@ export default function App() {
     }
   }, [usuario, recoveryMode]);
 
-  if(!authReady) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#060e1c",color:"#C6A96B",fontFamily:"'Poppins',sans-serif",fontSize:14}}>Cargando...</div>;
+  // Helper: envuelve cualquier early-return con el banner si hay update.
+  const wrap = (el) => updateReady ? (
+    <Fragment>
+      <UpdateBanner onUpdate={() => window.location.reload()}/>
+      {el}
+    </Fragment>
+  ) : el;
+
+  if(!authReady) return wrap(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#060e1c",color:"#C6A96B",fontFamily:"'Poppins',sans-serif",fontSize:14}}>Cargando...</div>);
 
   // Mientras se cargan datos desde Supabase tras el login
-  if(usuario && datosCargando) return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#F8F6F2",color:"#0A1F44",fontFamily:"'Poppins',sans-serif",gap:14}}>
+  if(usuario && datosCargando) return wrap(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#F8F6F2",color:"#0A1F44",fontFamily:"'Poppins',sans-serif",gap:14}}>
     <div style={{width:32,height:32,border:"3px solid #C6A96B33",borderTopColor:"#C6A96B",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>
     <div style={{fontSize:13,fontWeight:500,color:"#64748b"}}>Cargando tus leads y eventos...</div>
     <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-  </div>;
+  </div>);
 
   // Modo recuperación de contraseña (después del link del correo)
   if (recoveryMode) {
-    return <RecoveryPassword
+    return wrap(<RecoveryPassword
       onSuccess={() => {
         setRecoveryMode(false);
         setUsuario(null);
@@ -10305,10 +10476,10 @@ export default function App() {
         setRecoveryMode(false);
         setUsuario(null);
       }}
-    />;
+    />);
   }
 
-  if(!usuario) return <Auth onLogin={onLogin} mensajeInicial={loginMsg}/>;
+  if(!usuario) return wrap(<Auth onLogin={onLogin} mensajeInicial={loginMsg}/>);
 
   // Pantalla de bloqueo biométrico (lock screen)
   if (bioLocked) {
@@ -10377,6 +10548,9 @@ export default function App() {
     <div className="mf-app" style={{fontFamily:"'Poppins',sans-serif",background:"#F8F6F2",color:"#1A1A1A"}} onClick={()=>notifOpen&&setNotifOpen(false)}>
       <style>{CSS}</style>
       <style>{APP_CSS}</style>
+
+      {/* Banner de auto-update: visible siempre que haya nueva versión */}
+      {updateReady && <UpdateBanner onUpdate={() => window.location.reload()}/>}
 
       <header className="mf-header">
         <div className="mf-header-row1" style={{background:"#0A1F44"}}>
