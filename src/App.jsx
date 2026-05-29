@@ -6555,6 +6555,16 @@ function LeadsSubtabNav({ tabs, active, onChange }) {
 }
 
 function Leads({ leads, setLeads, setEventos, filtroNav, setFiltroNav, esAdmin, esAsistente, cuentas, usuario, setSeccion, subtab, setSubtab }) {
+  // Drawer de filtros (reemplaza el chip row saturado)
+  const [filtrosOpen, setFiltrosOpen] = useState(false);
+  // Label legible del filtro activo, para el badge del botón
+  const _filtroOpts = [
+    { v: "todos",    l: "Todos" },
+    { v: "activos",  l: "Activos" },
+    ...ETAPAS.map(et => ({ v: et.id, l: et.label.replace(/[¡⭐!]/g, "").trim(), c: et.color })),
+  ];
+  const _filtroLabel = _filtroOpts.find(o => o.v === filtroNav)?.l || "Todos";
+  const _filtroActivo = filtroNav && filtroNav !== "todos";
   // Si por algún motivo un asistente quedó con subtab pipeline/importar (que no
   // ve), lo redirigimos a "lista" silenciosamente.
   useEffect(() => {
@@ -6571,40 +6581,124 @@ function Leads({ leads, setLeads, setEventos, filtroNav, setFiltroNav, esAdmin, 
 
   return (
     <div className="mf-fade-in" style={{width:"100%"}}>
-      {/* Header editorial de la sección */}
-      <div style={{marginBottom:18}}>
-        <div style={{
-          fontSize:10.5, fontWeight:500,
-          color:"rgba(10,31,68,0.45)",
-          textTransform:"uppercase", letterSpacing:"0.22em",
-          marginBottom:6,
-        }}>Cartera</div>
-        <h1 style={{
-          fontFamily:"'Cormorant Garamond', serif",
-          fontSize:"clamp(24px, 5vw, 30px)", fontWeight:500,
-          color:"#0A1F44", letterSpacing:"-0.02em",
-          margin:0, lineHeight:1.1,
-        }}>Leads</h1>
-      </div>
 
       {/* Subtabs premium */}
       <LeadsSubtabNav tabs={subtabs} active={subtab} onChange={setSubtab}/>
 
-      {/* Filtros del Pipeline (solo cuando esa subtab está activa) */}
+      {/* Botón Filtros (solo en subtab Seguimiento) */}
       {subtab === "pipeline" && esAdmin && (
-        <div className="mf-pipeline-filters" style={{margin:"0 -12px 14px", borderRadius:0}}>
-          {[{v:"todos",l:"Todos"},{v:"activos",l:"Activos"},...ETAPAS.map(et=>({v:et.id,l:`${et.icon} ${et.label}`,c:et.color}))].map(o=>(
-            <button key={o.v} onClick={()=>setFiltroNav(o.v)}
+        <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:14, flexWrap:"wrap"}}>
+          <button
+            onClick={() => setFiltrosOpen(true)}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:8,
+              padding:"8px 14px", minHeight:36, borderRadius:10,
+              border: `1px solid ${_filtroActivo ? B.goldBorder || "rgba(198,169,107,0.45)" : "rgba(10,31,68,0.08)"}`,
+              background: _filtroActivo ? "rgba(198,169,107,0.06)" : B.white,
+              color: B.navy,
+              fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12.5,
+              cursor:"pointer",
+              boxShadow:"var(--mf-shadow-xs)",
+              letterSpacing:"0.005em",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{ e.currentTarget.style.borderColor = B.gold; e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.06)"; }}
+            onMouseLeave={e=>{ e.currentTarget.style.borderColor = _filtroActivo ? (B.goldBorder || "rgba(198,169,107,0.45)") : "rgba(10,31,68,0.08)"; e.currentTarget.style.boxShadow = "var(--mf-shadow-xs)"; }}
+          >
+            <span style={{fontSize:14, lineHeight:1}}>⚙️</span>
+            Filtros
+            {_filtroActivo && (
+              <span style={{
+                marginLeft:4, padding:"2px 8px", borderRadius:999,
+                background:B.gold, color:"#0A1F44",
+                fontSize:10, fontWeight:700, letterSpacing:"0.04em",
+              }}>{_filtroLabel}</span>
+            )}
+          </button>
+          {_filtroActivo && (
+            <button
+              onClick={() => setFiltroNav("todos")}
               style={{
-                padding:"5px 12px", borderRadius:20,
-                border:`1.5px solid ${filtroNav===o.v?(o.c||B.navy):B.gray}`,
-                background:filtroNav===o.v?(o.c||B.navy)+"12":B.cream,
-                color:filtroNav===o.v?(o.c||B.navy):"#6b7280",
-                fontFamily:"Poppins", fontWeight:600, fontSize:11,
-                cursor:"pointer", whiteSpace:"nowrap", flexShrink:0,
-              }}>{o.l}</button>
-          ))}
+                padding:"6px 10px", borderRadius:8,
+                background:"transparent",
+                border:"1px solid transparent",
+                color:"rgba(10,31,68,0.55)",
+                fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:11.5,
+                cursor:"pointer",
+                letterSpacing:"0.01em",
+              }}
+              onMouseEnter={e=>e.currentTarget.style.color=B.navy}
+              onMouseLeave={e=>e.currentTarget.style.color="rgba(10,31,68,0.55)"}
+            >Limpiar filtros</button>
+          )}
         </div>
+      )}
+
+      {/* Modal de Filtros */}
+      {filtrosOpen && (
+        <MFModal onClose={() => setFiltrosOpen(false)} width={480}>
+          <div style={{marginBottom:18}}>
+            <div style={{
+              fontSize:10, fontWeight:500,
+              color:"rgba(10,31,68,0.45)",
+              textTransform:"uppercase", letterSpacing:"0.18em",
+              marginBottom:6,
+            }}>Vista de Seguimiento</div>
+            <div style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:26, fontWeight:500,
+              color:B.navy, letterSpacing:"-0.015em", lineHeight:1.1,
+            }}>Filtros</div>
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <div style={{
+              fontSize:10, fontWeight:600,
+              color:"rgba(10,31,68,0.50)",
+              textTransform:"uppercase", letterSpacing:"0.14em",
+              marginBottom:10,
+            }}>Etapa del pipeline</div>
+            <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
+              {_filtroOpts.map(o => {
+                const active = filtroNav === o.v;
+                const color = o.c || B.navy;
+                return (
+                  <button key={o.v} onClick={() => { setFiltroNav(o.v); setFiltrosOpen(false); }}
+                    style={{
+                      padding:"8px 14px", borderRadius:999,
+                      border:`1.5px solid ${active ? color : "rgba(10,31,68,0.10)"}`,
+                      background: active ? `${color}12` : B.white,
+                      color: active ? color : "rgba(10,31,68,0.65)",
+                      fontFamily:"'Poppins',sans-serif", fontWeight: active ? 700 : 500,
+                      fontSize:12, cursor:"pointer",
+                      letterSpacing:"0.005em",
+                      transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                    }}>{o.l}</button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:18, paddingTop:16, borderTop:"1px solid rgba(10,31,68,0.06)"}}>
+            <button onClick={() => { setFiltroNav("todos"); setFiltrosOpen(false); }}
+              style={{
+                padding:"8px 14px", borderRadius:8,
+                background:"transparent",
+                border:"1px solid rgba(10,31,68,0.10)",
+                color:"rgba(10,31,68,0.65)",
+                fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+                cursor:"pointer",
+              }}>Limpiar</button>
+            <button onClick={() => setFiltrosOpen(false)}
+              style={{
+                padding:"8px 18px", borderRadius:8,
+                background:B.navy, border:"none",
+                color:"#fff",
+                fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12,
+                cursor:"pointer",
+              }}>Aplicar</button>
+          </div>
+        </MFModal>
       )}
 
       {/* Render del subtab activo */}
@@ -6837,16 +6931,7 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
       <Sel value={filtProd} onChange={setFiltProd}
         options={[{v:"",l:"Todos los productos"},...PRODUCTOS_LEAD.map(p=>({v:p,l:p}))]}/>
 
-      {/* Select Estado de oportunidad */}
-      <Sel value={filtTemp} onChange={setFiltTemp}
-        options={[
-          {v:"",l:"Estado de oportunidad"},
-          ...ESTADOS_OPORTUNIDAD.map(e => ({ v:e.v, l:e.l })),
-        ]}/>
-
-      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={importar}/>
-      <ToolbarBtn onClick={()=>fileRef.current?.click()} icon={<IconUpload size={14}/>} label="Importar"/>
-      <ToolbarBtn onClick={exportar} icon={<IconDownload size={14}/>} label="Exportar"/>
+      {/* Botón Nuevo Lead (Importar/Exportar viven en la subtab "Importar / Exportar") */}
       {esAdmin && <ToolbarBtn onClick={()=>setNuevoM(true)} icon={<IconPlus size={14} color="#fff"/>} label="Nuevo lead" variant="primary"/>}
     </div>
 
