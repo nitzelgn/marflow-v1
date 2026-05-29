@@ -572,8 +572,47 @@ function ConfirmModal({titulo,mensaje,icono="⚠️",onConfirm,onCancel,textoCon
   );
 }
 
-function Av({name,size=34,color=B.gold}) {
-  return <div style={{width:size,height:size,borderRadius:"50%",background:color+"18",border:`1.5px solid ${color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.34,fontWeight:700,color,flexShrink:0}}>{initials(name)}</div>;
+// Catálogo de avatares pre-definidos (emoji-style, sin assets externos).
+// El usuario los elige desde Configuración → Perfil.
+const AVATARES = [
+  { v:"hombre_ejecutivo", l:"Hombre ejecutivo", emoji:"👨‍💼" },
+  { v:"hombre_casual",    l:"Hombre casual",    emoji:"👨"    },
+  { v:"mujer_ejecutiva",  l:"Mujer ejecutiva",  emoji:"👩‍💼" },
+  { v:"mujer_casual",     l:"Mujer casual",     emoji:"👩"    },
+  { v:"emoji_sonriente",  l:"Emoji sonriente",  emoji:"😊"    },
+];
+
+function getAvatarEmoji(v) {
+  return AVATARES.find(a => a.v === v)?.emoji || null;
+}
+
+function Av({name, size=34, color=B.gold, avatar=null}) {
+  const emoji = avatar ? getAvatarEmoji(avatar) : null;
+  // Si tiene avatar custom → render emoji centrado dentro del círculo
+  // Sin avatar → fallback a inicial (comportamiento original)
+  return (
+    <div style={{
+      width:size, height:size, borderRadius:"50%",
+      background: emoji ? "#fff" : color+"18",
+      border:`1.5px solid ${color}44`,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      flexShrink:0,
+      overflow:"hidden",
+    }}>
+      {emoji ? (
+        <span style={{
+          fontSize: size * 0.56, lineHeight:1,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          width:"100%", height:"100%",
+        }}>{emoji}</span>
+      ) : (
+        <span style={{
+          fontSize: size*.34, fontWeight:700, color,
+          letterSpacing:"-0.005em",
+        }}>{initials(name)}</span>
+      )}
+    </div>
+  );
 }
 
 function Btn({onClick,children,color,bg,full,small,outline,disabled,style:sx={}}) {
@@ -3067,7 +3106,7 @@ function ProximamenteItem({ titulo, sub }) {
   );
 }
 
-function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeIdleTimeout, accesibilidad, onChangeAccesibilidad }) {
+function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeIdleTimeout, accesibilidad, onChangeAccesibilidad, onChangeAvatar }) {
   const esAdminConfig = ["admin","superadmin"].includes(usuario?.rol);
   const [bioActivada, setBioActivada] = useState(() => biometriaActiva(usuario?.id));
   const [bioPlataforma, setBioPlataforma] = useState(true);
@@ -3124,12 +3163,97 @@ function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeI
           ACORDEÓN · 5 GRUPOS
       ═══════════════════════════════════════════ */}
 
+      {/* ▸ PERFIL ───────────────────────────────── */}
+      <AccordionGroup
+        eyebrow="Perfil"
+        titulo="Tu identidad visual"
+        sub="Elige un avatar o usa tu inicial."
+        defaultOpen={true}
+        icon={<IconUser size={16} color="#C6A96B"/>}
+      >
+        <div style={{
+          background:"#fff",
+          border:"1px solid rgba(10,31,68,0.06)",
+          borderRadius:16,
+          padding:"22px 24px",
+          boxShadow:"var(--mf-shadow-xs)",
+        }}>
+          {/* Preview actual */}
+          <div style={{display:"flex", alignItems:"center", gap:14, marginBottom:18, paddingBottom:18, borderBottom:"1px solid rgba(10,31,68,0.06)"}}>
+            <Av name={usuario?.nombre || ""} size={56} color={usuario?.color || B.gold} avatar={usuario?.avatar}/>
+            <div style={{flex:1, minWidth:0}}>
+              <div style={{fontSize:10, fontWeight:600, color:"rgba(10,31,68,0.50)", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:3}}>Vista actual</div>
+              <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:18, fontWeight:500, color:B.navy, letterSpacing:"-0.01em", lineHeight:1.15}}>{usuario?.nombre || "—"}</div>
+              <div style={{fontSize:11.5, color:"rgba(10,31,68,0.55)", marginTop:3}}>
+                {usuario?.avatar ? "Avatar personalizado activo" : "Usando inicial del nombre"}
+              </div>
+            </div>
+          </div>
+
+          {/* Selección de avatar */}
+          <div style={{fontSize:10, fontWeight:600, color:"rgba(10,31,68,0.50)", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:12}}>
+            Elige tu avatar
+          </div>
+          <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(110px, 1fr))", gap:10, marginBottom:14}}>
+            {AVATARES.map(av => {
+              const active = usuario?.avatar === av.v;
+              return (
+                <button key={av.v} onClick={()=>onChangeAvatar?.(av.v)}
+                  style={{
+                    display:"flex", flexDirection:"column", alignItems:"center", gap:8,
+                    padding:"14px 10px",
+                    borderRadius:12,
+                    border:`1.5px solid ${active ? B.gold : "rgba(10,31,68,0.10)"}`,
+                    background: active ? "rgba(198,169,107,0.06)" : "#fff",
+                    cursor:"pointer",
+                    fontFamily:"'Poppins',sans-serif",
+                    transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                  }}
+                  onMouseEnter={e=>{ if(!active){ e.currentTarget.style.borderColor=B.gold+"66"; e.currentTarget.style.background="rgba(198,169,107,0.03)"; } }}
+                  onMouseLeave={e=>{ if(!active){ e.currentTarget.style.borderColor="rgba(10,31,68,0.10)"; e.currentTarget.style.background="#fff"; } }}>
+                  <div style={{
+                    width:54, height:54, borderRadius:"50%",
+                    background:"#fff",
+                    border:`1.5px solid ${active ? B.gold+"66" : "rgba(10,31,68,0.10)"}`,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:30, lineHeight:1,
+                  }}>{av.emoji}</div>
+                  <div style={{
+                    fontSize:10.5, fontWeight: active ? 600 : 500,
+                    color: active ? B.navy : "rgba(10,31,68,0.65)",
+                    textAlign:"center", letterSpacing:"0.005em", lineHeight:1.3,
+                  }}>{av.l}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Botón Usar inicial */}
+          {usuario?.avatar && (
+            <button onClick={()=>onChangeAvatar?.(null)}
+              style={{
+                display:"inline-flex", alignItems:"center", gap:6,
+                padding:"8px 14px", borderRadius:10,
+                border:"1px solid rgba(10,31,68,0.10)",
+                background:"transparent", color:"rgba(10,31,68,0.65)",
+                fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+                cursor:"pointer", letterSpacing:"0.005em",
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}
+              onMouseEnter={e=>{ e.currentTarget.style.borderColor="rgba(10,31,68,0.25)"; e.currentTarget.style.color=B.navy; }}
+              onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(10,31,68,0.10)"; e.currentTarget.style.color="rgba(10,31,68,0.65)"; }}>
+              Volver a usar mi inicial
+            </button>
+          )}
+        </div>
+      </AccordionGroup>
+
       {/* ▸ ACCESO ───────────────────────────────── */}
       <AccordionGroup
         eyebrow="Acceso"
         titulo="Identidad y sesión"
         sub="Cómo te identifica MarFlow en este dispositivo."
-        defaultOpen={true}
+        defaultOpen={false}
         icon={<IconLock size={16} color="#C6A96B"/>}
       >
         {/* Tarjeta biometría */}
@@ -8735,32 +8859,75 @@ function calcularRenovacion(vigenciaInicio) {
 // Key de localStorage para persistir el Excel de Cobranza entre sesiones.
 const _LS_COBRANZA = "mf_cobranza_datos";
 
-function Cobranza() {
-  // Recupera el Excel cargado anteriormente y RE-CALCULA renovacion + estadoAuto
-  // contra la fecha de hoy (porque los flags dependen de "hoy" y se desactualizan
-  // entre sesiones).
+// Recalcula flags volátiles (esPeriodoComp, renovacion, estadoAuto, diasAtraso)
+// contra la fecha de HOY. Necesario al cargar desde LS o Supabase porque los
+// flags dependen del tiempo y se desactualizan entre sesiones.
+function _rehidratarCobranzaRow(d) {
+  const nuevo = { ...d };
+  if (d._raw) {
+    const rIdx = _buildRowIndex(d._raw);
+    const diasRaw = pickField(rIdx, "Días de atraso", "Dias de atraso", "Días atraso", "Dias atraso", "DiasAtraso", "DIAS_ATRASO", "dias_atraso", "atraso", "Días", "Dias");
+    const diasParsed = Number(String(diasRaw || "0").replace(/[^\d.-]/g, "")) || 0;
+    if (diasParsed > 0) nuevo.diasAtraso = diasParsed;
+  }
+  nuevo.esPeriodoComp = esPeriodoComprometidoRow(d._raw, d.producto);
+  nuevo.renovacion = emisorAplicaRenovacion(d.producto)
+    ? calcularRenovacion(d.vigenciaInicio)
+    : null;
+  nuevo.estadoAuto = clasificarCobranza(nuevo);
+  return nuevo;
+}
+
+function Cobranza({ usuario }) {
+  // adminId: para asistente usa su admin; para admin/superadmin usa su propio id
+  const adminId = usuario?.rol === "asistente" ? usuario?.adminId : usuario?.id;
+
+  // ── ESTRATEGIA DE PERSISTENCIA ──
+  // 1. AL ARRANCAR: lee localStorage inmediatamente (UI rápida).
+  // 2. EN PARALELO: trae la versión "fuente de verdad" desde Supabase.
+  // 3. Si Supabase tiene algo más reciente o distinto, lo carga + actualiza LS.
+  // 4. AL SUBIR EXCEL: guarda en LS Y en Supabase.
+  // Esto hace que el Excel sobreviva: cierres de sesión, cambios de dispositivo,
+  // limpiezas de PWA, etc.
   const [datos,setDatos] = useState(() => {
     const stored = LS.get(_LS_COBRANZA, []);
     if (!Array.isArray(stored) || stored.length === 0) return [];
-    return stored.map(d => {
-      const nuevo = { ...d };
-      // Re-parse diasAtraso desde _raw con el parser actualizado.
-      // Esto garantiza que mejoras al parser apliquen al Excel ya cargado
-      // sin que la usuaria tenga que volver a subirlo.
-      if (d._raw) {
-        const rIdx = _buildRowIndex(d._raw);
-        const diasRaw = pickField(rIdx, "Días de atraso", "Dias de atraso", "Días atraso", "Dias atraso", "DiasAtraso", "DIAS_ATRASO", "dias_atraso", "atraso", "Días", "Dias");
-        const diasParsed = Number(String(diasRaw || "0").replace(/[^\d.-]/g, "")) || 0;
-        if (diasParsed > 0) nuevo.diasAtraso = diasParsed;
-      }
-      nuevo.esPeriodoComp = esPeriodoComprometidoRow(d._raw, d.producto);
-      nuevo.renovacion = emisorAplicaRenovacion(d.producto)
-        ? calcularRenovacion(d.vigenciaInicio)
-        : null;
-      nuevo.estadoAuto = clasificarCobranza(nuevo);
-      return nuevo;
-    });
+    return stored.map(_rehidratarCobranzaRow);
   });
+
+  // Trae desde Supabase al montar y actualiza si hay algo distinto / más nuevo.
+  useEffect(() => {
+    if (!adminId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("cobranza_excel")
+          .select("datos, updated_at")
+          .eq("admin_id", adminId)
+          .maybeSingle();
+        if (cancelled || error) return;
+        if (data && Array.isArray(data.datos) && data.datos.length > 0) {
+          const rehidratado = data.datos.map(_rehidratarCobranzaRow);
+          setDatos(rehidratado);
+          LS.set(_LS_COBRANZA, data.datos);  // mantiene LS sincronizado
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [adminId]);
+
+  // Helper: guarda en Supabase (upsert) sin bloquear UI.
+  async function _guardarEnSupabase(datosArr) {
+    if (!adminId) return;
+    try {
+      await supabase
+        .from("cobranza_excel")
+        .upsert({ admin_id: adminId, datos: datosArr }, { onConflict: "admin_id" });
+    } catch (err) {
+      console.warn("Cobranza: no se pudo guardar en Supabase", err);
+    }
+  }
   const [cargando,setCargando] = useState(false);
   const [filtProd,setFiltProd] = useState("");      // legacy: filtro por producto (input principal)
   const [busqueda,setBusqueda] = useState("");      // búsqueda global (cliente/póliza/producto/respuesta banco)
@@ -8857,10 +9024,11 @@ function Cobranza() {
       }).filter(r => r.nombre || r.poliza);
 
       setDatos(mapped);
-      LS.set(_LS_COBRANZA, mapped);                // ← persistencia entre sesiones
+      LS.set(_LS_COBRANZA, mapped);                // cache local rápido
+      _guardarEnSupabase(mapped);                  // ← persistencia CROSS-DEVICE (asíncrono)
       setTab("dashboard");
       setExpandedRow(null);
-      window.__mfToast?.(`${mapped.length} registros importados y guardados.`, "success");
+      window.__mfToast?.(`${mapped.length} registros guardados en tu cuenta.`, "success");
     } catch (err) {
       window.__mfToast?.("No pudimos leer el archivo Excel. Verifica el formato.", "error");
     }
@@ -9329,10 +9497,14 @@ function Cobranza() {
         {/* Botón "Limpiar datos" — útil si Excel cambia de formato */}
         {datos.length > 0 && (
           <button
-            onClick={()=>{
+            onClick={async ()=>{
               if (window.confirm("¿Borrar el Excel cargado? Tendrás que subirlo de nuevo.")) {
                 setDatos([]);
                 LS.set(_LS_COBRANZA, []);
+                // Borra también de Supabase para que NO vuelva al recargar
+                if (adminId) {
+                  try { await supabase.from("cobranza_excel").delete().eq("admin_id", adminId); } catch {}
+                }
                 window.__mfToast?.("Datos de Cobranza borrados.", "success");
               }
             }}
@@ -10593,10 +10765,21 @@ export default function App() {
       if (insErr) { console.error("auto-create perfil falló:", insErr); return null; }
       data = nuevo;
     }
+    // Augmenta el perfil con el avatar guardado localmente (por user id).
+    // Si nunca eligió uno → null y se usa la inicial.
+    const avatarGuardado = LS.get("mf_avatar_" + data.id, null);
     return {
       id: data.id, nombre: data.nombre, usuario: data.usuario,
       rol: data.rol, color: data.color, adminId: data.admin_id,
+      avatar: avatarGuardado,
     };
+  }
+
+  // Helper para actualizar el avatar del usuario (persiste en LS y refresca header).
+  function setUsuarioAvatar(avatarValor) {
+    if (!usuario) return;
+    LS.set("mf_avatar_" + usuario.id, avatarValor);
+    setUsuario(prev => prev ? { ...prev, avatar: avatarValor } : prev);
   }
 
   async function cargarEquipo() {
@@ -11512,7 +11695,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            <Av name={usuario.nombre} size={32} color={usuario.color||B.gold}/>
+            <Av name={usuario.nombre} size={32} color={usuario.color||B.gold} avatar={usuario.avatar}/>
             <div className="mf-user-nasme"><div style={{fontSize:12,fontWeight:700,color:"#fff",lineHeight:1.2}}>{usuario.nombre}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",textTransform:"capitalize",letterSpacing:".3px"}}>{usuario.rol}</div></div>
             <button
               onClick={()=>setConfirmingLogout(true)}
@@ -11544,7 +11727,7 @@ export default function App() {
         {seccion==="leads"&&<Leads leads={leads} setLeads={setLeads} setEventos={setEventos} filtroNav={filtroNav} setFiltroNav={setFiltroNav} esAdmin={esAdmin} esAsistente={esAsistente} cuentas={cuentas} usuario={usuario} setSeccion={setSeccion} subtab={leadsSubtab} setSubtab={setLeadsSubtab}/>}
         {seccion==="agenda"&&<Agenda eventos={eventos} setEventos={setEventos} leads={leads} esAsistente={esAsistente} usuario={usuario}/>}
         {seccion==="metricas"&&esAdmin&&<Metricas leads={leads}/>}
-        {seccion==="cobranza"&&esAdmin&&<Cobranza/>}
+        {seccion==="cobranza"&&esAdmin&&<Cobranza usuario={usuario}/>}
         {seccion==="configuracion"&&<Configuracion
           usuario={usuario}
           cuentas={cuentas}
@@ -11553,6 +11736,7 @@ export default function App() {
           onChangeIdleTimeout={(min)=>{setIdleTimeoutMin(min); setIdleTimeoutMinLS(min);}}
           accesibilidad={accesibilidad}
           onChangeAccesibilidad={cambiarAccesibilidad}
+          onChangeAvatar={setUsuarioAvatar}
         />}
       </main>
 
