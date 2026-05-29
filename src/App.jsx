@@ -7610,6 +7610,16 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
   </div>;
 }
 
+// Helper: suma minutos a una hora "HH:MM" y devuelve "HH:MM"
+function sumarMinutosHora(horaStr, mins) {
+  if (!horaStr || !/^\d{1,2}:\d{2}/.test(horaStr)) return "";
+  const [h, m] = horaStr.split(":").map(Number);
+  const total = h * 60 + m + mins;
+  const nh = Math.floor(total / 60) % 24;
+  const nm = total % 60;
+  return `${String(nh).padStart(2,"0")}:${String(nm).padStart(2,"0")}`;
+}
+
 function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
   const now=new Date();
   const [mes,setMes]=useState(now.getMonth());
@@ -7620,9 +7630,23 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
   const [editId,setEditId]=useState(null);
   const [confirmEvDel,setConfirmEvDel]=useState(null);
   const [popupCot,setPopupCot]=useState(null);
+  // Vista: "mes" | "semana" | "dia". Default "semana" (más útil comercial).
+  const [vista, setVista] = useState("semana");
+  // Filtro por tipo de evento (chips). Vacío = todos.
+  const [filtroTipos, setFiltroTipos] = useState([]);
+  // Día actual ancla para vistas semana/día
+  const [fechaAncla, setFechaAncla] = useState(hoy());
   const emptyEv={id:uid(),titulo:"",fechaInicio:hoy(),fechaFin:"",horaInicio:"",horaFin:"",tipo:"trabajo",subtipo:"info1",repeticion:"none",nota:"",leadId:"",agendadoPor:usuario?.nombre||"",recordatorioCot:false};
   const [form,setForm]=useState(emptyEv);
-  const sf=(k,v)=>setForm(f=>({...f,[k]:v}));
+  // Setter con auto-sugerencia de duración 30min cuando se asigna horaInicio
+  const sf = (k, v) => setForm(f => {
+    const nuevo = { ...f, [k]: v };
+    // Si está poniendo la hora de inicio y NO hay hora fin → sugiere +30 min
+    if (k === "horaInicio" && v && !f.horaFin) {
+      nuevo.horaFin = sumarMinutosHora(v, 30);
+    }
+    return nuevo;
+  });
   const strD=d=>`${anio}-${String(mes+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
   function mapEvDia(d){
     const all=eventos.filter(ev=>{const start=ev.fechaInicio||ev.fecha||"";const end=ev.fechaFin||start;return d>=start&&d<=end;});
@@ -7761,105 +7785,206 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
     transition: "all var(--mf-t-fast) var(--mf-ease-out)",
   };
 
+  // Helpers para vista Semana / Día
+  const fechaAnclaDate = (() => { try { return new Date(fechaAncla + "T00:00:00"); } catch { return new Date(); } })();
+  function getInicioSemana(d) {
+    const r = new Date(d);
+    const dow = r.getDay(); // 0=dom,1=lun...
+    const diff = dow === 0 ? -6 : 1 - dow; // Lunes como primer día
+    r.setDate(r.getDate() + diff);
+    return r;
+  }
+  const inicioSemana = getInicioSemana(fechaAnclaDate);
+  const diasSemana = Array.from({length:7}, (_,i) => {
+    const d = new Date(inicioSemana);
+    d.setDate(d.getDate() + i);
+    return {
+      iso: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`,
+      nombre: ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][i],
+      num: d.getDate(),
+      esHoy: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` === hoy(),
+    };
+  });
+
+  // Filtro por tipos seleccionados (vacío = todos)
+  function pasaFiltro(ev) {
+    if (filtroTipos.length === 0) return true;
+    return filtroTipos.includes(ev.tipo);
+  }
+  const toggleTipo = (tid) => {
+    setFiltroTipos(prev => prev.includes(tid) ? prev.filter(t => t !== tid) : [...prev, tid]);
+  };
+
+  // Navega entre periodos según vista activa
+  function navAnt() {
+    if (vista === "mes") {
+      if (mes === 0) { setMes(11); setAnio(a => a-1); } else setMes(m => m-1);
+    } else if (vista === "semana") {
+      const d = new Date(fechaAnclaDate); d.setDate(d.getDate() - 7);
+      setFechaAncla(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);
+    } else {
+      const d = new Date(fechaAnclaDate); d.setDate(d.getDate() - 1);
+      setFechaAncla(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);
+    }
+  }
+  function navSig() {
+    if (vista === "mes") {
+      if (mes === 11) { setMes(0); setAnio(a => a+1); } else setMes(m => m+1);
+    } else if (vista === "semana") {
+      const d = new Date(fechaAnclaDate); d.setDate(d.getDate() + 7);
+      setFechaAncla(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);
+    } else {
+      const d = new Date(fechaAnclaDate); d.setDate(d.getDate() + 1);
+      setFechaAncla(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);
+    }
+  }
+  function irAHoy() {
+    setMes(now.getMonth()); setAnio(now.getFullYear()); setFechaAncla(hoy());
+  }
+
+  // Label del periodo según vista
+  const periodoLabel = vista === "mes"
+    ? MESES[mes]
+    : vista === "semana"
+      ? `${inicioSemana.getDate()} ${MESES[inicioSemana.getMonth()].slice(0,3)} — ${diasSemana[6].num} ${MESES[new Date(inicioSemana.getFullYear(), inicioSemana.getMonth(), inicioSemana.getDate()+6).getMonth()].slice(0,3)}`
+      : `${fechaAnclaDate.getDate()} ${MESES[fechaAnclaDate.getMonth()]}`;
+  const periodoSubLabel = vista === "mes" ? anio : vista === "semana" ? inicioSemana.getFullYear() : ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"][fechaAnclaDate.getDay()];
+
   return (
     <div className="mf-cal-wrap mf-fade-in">
       <style>{AGENDA_CSS}</style>
 
-      {/* ═══ Header refinado ═══ */}
+      {/* ═══ Toolbar compacto: navegación + selector vista + Nuevo ═══ */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        marginBottom: 16, flexWrap: "nowrap", justifyContent: "space-between", width: "100%",
+        display:"flex", alignItems:"center", gap:8,
+        marginBottom:12, flexWrap:"wrap", width:"100%",
       }}>
-        {/* Navegación mes */}
-        <div style={{display: "flex", alignItems: "center", gap: 8, flexShrink: 0, minWidth: 0}}>
-          <button
-            onClick={()=>{if(mes===0){setMes(11);setAnio(a=>a-1);}else setMes(m=>m-1);}}
-            aria-label="Mes anterior"
-            style={navBtnStyle}
+        {/* Navegación período */}
+        <div style={{display:"flex", alignItems:"center", gap:6, flexShrink:0}}>
+          <button onClick={navAnt} aria-label="Anterior" style={navBtnStyle}
             onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
-            <IconChevronLeft size={15} color={B.navy}/>
+            <IconChevronLeft size={14} color={B.navy}/>
           </button>
-
-          <div style={{textAlign: "center", minWidth: 0, padding: "0 6px"}}>
+          <div style={{textAlign:"center", minWidth:0, padding:"0 4px"}}>
             <div style={{
-              fontFamily: "'Cormorant Garamond', serif",
-              fontWeight: 500, color: B.navy,
-              letterSpacing: "-0.02em",
-              fontSize: 22, lineHeight: 1,
-            }}>{MESES[mes]}</div>
-            <div style={{
-              fontSize: 10, color: "rgba(10,31,68,0.45)",
-              marginTop: 3, fontWeight: 500,
-              letterSpacing: "0.18em", textTransform: "uppercase",
-            }}>{anio}</div>
+              fontFamily:"'Cormorant Garamond', serif",
+              fontWeight:500, color:B.navy, letterSpacing:"-0.02em",
+              fontSize:19, lineHeight:1,
+            }}>{periodoLabel}</div>
+            <div style={{fontSize:9.5, color:"rgba(10,31,68,0.45)", marginTop:2, fontWeight:500, letterSpacing:"0.18em", textTransform:"uppercase"}}>{periodoSubLabel}</div>
           </div>
-
-          <button
-            onClick={()=>{if(mes===11){setMes(0);setAnio(a=>a+1);}else setMes(m=>m+1);}}
-            aria-label="Mes siguiente"
-            style={navBtnStyle}
+          <button onClick={navSig} aria-label="Siguiente" style={navBtnStyle}
             onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
-            <IconChevronRight size={15} color={B.navy}/>
+            <IconChevronRight size={14} color={B.navy}/>
           </button>
         </div>
 
-        {/* Leyenda discreta (sólo desktop) */}
-        <div className="mf-legend" style={{display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", flex: 1, justifyContent: "center"}}>
-          {TIPO_EVENTO.filter(t=>!esAsistente||!t.privado).map(t=>(
-            <div key={t.id} style={{
-              display: "flex", alignItems: "center", gap: 5,
-              fontSize: 10.5, color: "rgba(10,31,68,0.55)", fontWeight: 500,
-              whiteSpace: "nowrap",
-            }}>
-              <span style={{width: 6, height: 6, borderRadius: "50%", background: t.color, flexShrink: 0}}/>
-              {t.label.replace(" 🔒","").replace(" ✈️","")}
-            </div>
-          ))}
+        {/* Selector vista: Mes / Semana / Día */}
+        <div style={{
+          display:"inline-flex",
+          background:"rgba(10,31,68,0.04)",
+          border:"1px solid rgba(10,31,68,0.08)",
+          borderRadius:8, padding:2,
+        }}>
+          {[
+            { v:"mes",    l:"Mes"    },
+            { v:"semana", l:"Semana" },
+            { v:"dia",    l:"Día"    },
+          ].map(opt => {
+            const active = vista === opt.v;
+            return (
+              <button key={opt.v} onClick={()=>setVista(opt.v)} style={{
+                padding:"6px 12px", borderRadius:6,
+                background: active ? B.white : "transparent",
+                border:"none",
+                color: active ? B.navy : "rgba(10,31,68,0.55)",
+                fontFamily:"'Poppins', sans-serif", fontWeight: active ? 600 : 500, fontSize:11.5,
+                letterSpacing:"0.02em",
+                cursor:"pointer",
+                boxShadow: active ? "0 1px 2px rgba(10,31,68,0.08)" : "none",
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}>{opt.l}</button>
+            );
+          })}
         </div>
 
-        {/* Acciones */}
-        <div style={{display: "flex", gap: 8, flexShrink: 0}}>
-          <button
-            onClick={()=>{setMes(now.getMonth()); setAnio(now.getFullYear());}}
-            style={{
-              padding: "0 14px", height: 36, borderRadius: 8,
-              border: "1px solid rgba(10,31,68,0.08)",
-              background: B.white,
-              color: "rgba(10,31,68,0.85)",
-              fontFamily: "'Poppins', sans-serif",
-              fontWeight: 500, fontSize: 12.5,
-              cursor: "pointer", whiteSpace: "nowrap",
-              boxShadow: "var(--mf-shadow-xs)",
-              transition: "all var(--mf-t-fast) var(--mf-ease-out)",
-            }}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)"; e.currentTarget.style.background="rgba(198,169,107,0.03)";}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)"; e.currentTarget.style.background=B.white;}}>
-            Hoy
-          </button>
-          <button
-            onClick={()=>abrirNuevo(hoy())}
-            style={{
-              padding: "0 14px", height: 36, borderRadius: 8,
-              border: "none",
-              background: "linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
-              color: "#fff",
-              fontFamily: "'Poppins', sans-serif",
-              fontWeight: 600, fontSize: 12.5,
-              cursor: "pointer", whiteSpace: "nowrap",
-              display: "inline-flex", alignItems: "center", gap: 6,
-              boxShadow: "0 1px 2px rgba(10,31,68,0.10)",
-              transition: "all var(--mf-t-fast) var(--mf-ease-out)",
-            }}
-            onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
-            onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
-            <IconPlus size={13} color="#fff"/>Nuevo evento
-          </button>
-        </div>
+        <div style={{flex:1}}/>
+
+        {/* Botón Hoy + Nuevo compacto */}
+        <button onClick={irAHoy}
+          style={{
+            padding:"0 12px", height:34, borderRadius:8,
+            border:"1px solid rgba(10,31,68,0.08)", background:B.white,
+            color:"rgba(10,31,68,0.85)",
+            fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+            cursor:"pointer", whiteSpace:"nowrap", boxShadow:"var(--mf-shadow-xs)",
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(198,169,107,0.30)";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.08)";}}>Hoy</button>
+        <button onClick={()=>abrirNuevo(hoy())}
+          style={{
+            padding:"0 14px", height:34, borderRadius:8,
+            border:"none",
+            background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+            color:"#fff",
+            fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12,
+            cursor:"pointer", whiteSpace:"nowrap",
+            display:"inline-flex", alignItems:"center", gap:5,
+            boxShadow:"0 1px 2px rgba(10,31,68,0.10)",
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
+          onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
+          <IconPlus size={12} color="#fff"/>Nuevo
+        </button>
       </div>
 
-      {/* ═══ Calendario premium ═══ */}
+      {/* ═══ Chips de categoría (filtro horizontal) ═══ */}
+      <div style={{
+        display:"flex", gap:6, marginBottom:14, flexWrap:"wrap",
+        alignItems:"center",
+      }}>
+        {TIPO_EVENTO.filter(t => !esAsistente || !t.privado).map(t => {
+          const active = filtroTipos.includes(t.id);
+          const labelLimpio = t.label.replace(" 🔒","").replace(" ✈️","").replace("📋","").trim();
+          return (
+            <button key={t.id} onClick={()=>toggleTipo(t.id)}
+              style={{
+                display:"inline-flex", alignItems:"center", gap:6,
+                padding:"5px 11px", borderRadius:999,
+                border: `1.5px solid ${active ? t.color : "rgba(10,31,68,0.10)"}`,
+                background: active ? t.color + "10" : B.white,
+                color: active ? t.color : "rgba(10,31,68,0.65)",
+                fontFamily:"'Poppins',sans-serif", fontWeight: active ? 600 : 500, fontSize:11,
+                cursor:"pointer", whiteSpace:"nowrap",
+                letterSpacing:"0.01em",
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}>
+              <span style={{width:6, height:6, borderRadius:"50%", background:t.color}}/>
+              {labelLimpio}
+            </button>
+          );
+        })}
+        {filtroTipos.length > 0 && (
+          <button onClick={()=>setFiltroTipos([])}
+            style={{
+              padding:"5px 10px", borderRadius:999,
+              border:"1px solid transparent",
+              background:"transparent",
+              color:"rgba(10,31,68,0.50)",
+              fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:11,
+              cursor:"pointer", letterSpacing:"0.005em",
+            }}
+            onMouseEnter={e=>e.currentTarget.style.color=B.navy}
+            onMouseLeave={e=>e.currentTarget.style.color="rgba(10,31,68,0.50)"}>Limpiar</button>
+        )}
+      </div>
+
+      {/* ═══ Vista MES (calendario premium) ═══ */}
+      {vista === "mes" && (
       <div style={{
         background: B.white,
         borderRadius: 14,
@@ -7880,7 +8005,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
         <div className="mf-cal-grid">
           {celdas.map((celda,i)=>{
             const{dia,tipo,fecha:fs}=celda;
-            const esGhost=tipo!=="actual";const evs=esGhost?[]:mapEvDia(fs);const esH=fs===hoy();const sel=!esGhost&&diaClick===dia;const colIdx=i%7;const esFin=colIdx>=5;
+            const esGhost=tipo!=="actual";const evs=esGhost?[]:mapEvDia(fs).filter(pasaFiltro);const esH=fs===hoy();const sel=!esGhost&&diaClick===dia;const colIdx=i%7;const esFin=colIdx>=5;
             const cellClass=["mf-cell",esGhost?"ghost":"",esH?"today":"",sel?"selected":"",esFin&&!esGhost?"weekend":""].filter(Boolean).join(" ");
             return(<div key={`${tipo}-${dia}-${i}`} className={cellClass} style={esGhost?{opacity:.35,cursor:"default",background:esFin?"#faf8f4":"#f9f9f9"}:{}} onClick={()=>{if(esGhost)return;setDiaClick(dia===diaClick?null:dia);setModalDia(true);}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
@@ -7895,6 +8020,166 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
           })}
         </div>
       </div>
+      )}
+
+      {/* ═══ Vista SEMANA (lista por día) ═══ */}
+      {vista === "semana" && (
+        <div style={{
+          background:B.white, borderRadius:14,
+          border:"1px solid rgba(10,31,68,0.06)",
+          boxShadow:"var(--mf-shadow-xs)",
+          overflow:"hidden",
+        }}>
+          {diasSemana.map((d, i) => {
+            const evs = mapEvDia(d.iso).filter(pasaFiltro).sort((a,b) => (a.horaInicio||"99").localeCompare(b.horaInicio||"99"));
+            return (
+              <div key={d.iso} style={{
+                display:"flex",
+                borderBottom: i < 6 ? "1px solid rgba(10,31,68,0.05)" : "none",
+                background: d.esHoy ? "rgba(198,169,107,0.04)" : "transparent",
+              }}>
+                {/* Columna día */}
+                <div style={{
+                  width:80, padding:"14px 12px", flexShrink:0,
+                  borderRight:"1px solid rgba(10,31,68,0.05)",
+                  display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"flex-start",
+                  gap:4,
+                }}>
+                  <div style={{
+                    fontSize:9.5, fontWeight:600,
+                    color: d.esHoy ? B.gold : (i>=5 ? B.gold : "rgba(10,31,68,0.50)"),
+                    letterSpacing:"0.18em", textTransform:"uppercase",
+                  }}>{d.nombre}</div>
+                  <div style={{
+                    fontFamily:"'Cormorant Garamond', serif",
+                    fontSize:26, fontWeight:500,
+                    color: d.esHoy ? B.navy : "rgba(10,31,68,0.85)",
+                    letterSpacing:"-0.02em", lineHeight:1,
+                    fontVariantNumeric:"tabular-nums",
+                    background: d.esHoy ? B.navy : "transparent",
+                    color2: d.esHoy ? "#fff" : undefined,
+                    ...(d.esHoy ? {
+                      background:B.navy, color:"#fff",
+                      width:30, height:30, borderRadius:"50%",
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      fontSize:14, fontWeight:600,
+                    } : {})
+                  }}>{d.num}</div>
+                </div>
+                {/* Columna eventos */}
+                <div style={{flex:1, padding:"10px 14px", minHeight:60}}>
+                  {evs.length === 0 ? (
+                    <button onClick={()=>abrirNuevo(d.iso)} style={{
+                      width:"100%", padding:"8px 10px", borderRadius:8,
+                      border:"1px dashed rgba(10,31,68,0.10)",
+                      background:"transparent", color:"rgba(10,31,68,0.35)",
+                      fontFamily:"'Poppins',sans-serif", fontSize:11.5, fontWeight:500,
+                      cursor:"pointer", textAlign:"left",
+                      letterSpacing:"0.005em",
+                      transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                    }}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=B.goldBorder||"rgba(198,169,107,0.35)"; e.currentTarget.style.color=B.gold;}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.10)"; e.currentTarget.style.color="rgba(10,31,68,0.35)";}}>+ Agregar compromiso</button>
+                  ) : (
+                    <div style={{display:"flex", flexDirection:"column", gap:6}}>
+                      {evs.map(ev => (
+                        <button key={ev.id} onClick={()=>!ev._privado && abrirEditar(ev)}
+                          style={{
+                            display:"flex", alignItems:"center", gap:10,
+                            padding:"8px 10px", borderRadius:8,
+                            background: ev._privado ? "rgba(10,31,68,0.04)" : tipoC(ev.tipo)+"10",
+                            border:`1px solid ${ev._privado ? "rgba(10,31,68,0.08)" : tipoC(ev.tipo)+"30"}`,
+                            borderLeft:`3px solid ${tipoC(ev.tipo)}`,
+                            color: ev._privado ? "rgba(10,31,68,0.55)" : B.navy,
+                            fontFamily:"'Poppins',sans-serif", fontSize:12, fontWeight:500,
+                            cursor: ev._privado ? "default" : "pointer", textAlign:"left",
+                            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                          }}>
+                          {ev.horaInicio && (
+                            <span style={{
+                              fontFamily:"'Cormorant Garamond', serif", fontSize:14, fontWeight:500,
+                              color: tipoC(ev.tipo), minWidth:42, fontVariantNumeric:"tabular-nums",
+                            }}>{ev.horaInicio}{ev.horaFin?`–${ev.horaFin}`:""}</span>
+                          )}
+                          <span style={{flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{ev.titulo}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ═══ Vista DÍA (compromisos del día seleccionado) ═══ */}
+      {vista === "dia" && (() => {
+        const evsDia = mapEvDia(fechaAncla).filter(pasaFiltro).sort((a,b) => (a.horaInicio||"99").localeCompare(b.horaInicio||"99"));
+        return (
+          <div style={{
+            background:B.white, borderRadius:14,
+            border:"1px solid rgba(10,31,68,0.06)",
+            boxShadow:"var(--mf-shadow-xs)",
+            padding:"20px 22px 24px",
+          }}>
+            <div style={{display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:18, paddingBottom:14, borderBottom:"1px solid rgba(10,31,68,0.06)"}}>
+              <div>
+                <div style={{fontSize:10, fontWeight:600, color:"rgba(10,31,68,0.45)", letterSpacing:"0.18em", textTransform:"uppercase", marginBottom:4}}>{periodoSubLabel}</div>
+                <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:24, fontWeight:500, color:B.navy, letterSpacing:"-0.015em", lineHeight:1.1}}>{periodoLabel}</div>
+              </div>
+              <div style={{fontSize:11.5, color:"rgba(10,31,68,0.50)", fontVariantNumeric:"tabular-nums"}}>{evsDia.length} compromiso{evsDia.length===1?"":"s"}</div>
+            </div>
+
+            {evsDia.length === 0 ? (
+              <button onClick={()=>abrirNuevo(fechaAncla)} style={{
+                width:"100%", padding:"28px 16px", borderRadius:10,
+                border:"1px dashed rgba(10,31,68,0.12)",
+                background:"transparent", color:"rgba(10,31,68,0.50)",
+                fontFamily:"'Poppins',sans-serif", fontSize:13, fontWeight:500,
+                cursor:"pointer", letterSpacing:"0.005em",
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=B.goldBorder||"rgba(198,169,107,0.35)"; e.currentTarget.style.color=B.gold;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.12)"; e.currentTarget.style.color="rgba(10,31,68,0.50)";}}>
+                Sin compromisos este día · + Agregar
+              </button>
+            ) : (
+              <div style={{display:"flex", flexDirection:"column", gap:10}}>
+                {evsDia.map(ev => (
+                  <button key={ev.id} onClick={()=>!ev._privado && abrirEditar(ev)}
+                    style={{
+                      display:"flex", alignItems:"center", gap:14,
+                      padding:"14px 16px", borderRadius:12,
+                      background: ev._privado ? "rgba(10,31,68,0.04)" : tipoC(ev.tipo)+"08",
+                      border:`1px solid ${ev._privado ? "rgba(10,31,68,0.08)" : tipoC(ev.tipo)+"28"}`,
+                      borderLeft:`3.5px solid ${tipoC(ev.tipo)}`,
+                      color:B.navy,
+                      fontFamily:"'Poppins',sans-serif", fontSize:13, fontWeight:500,
+                      cursor: ev._privado ? "default" : "pointer", textAlign:"left",
+                      transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                    }}
+                    onMouseEnter={e=>{ if(!ev._privado) e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.06)"; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.boxShadow="none"; }}>
+                    {ev.horaInicio ? (
+                      <div style={{minWidth:72}}>
+                        <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:20, fontWeight:500, color:tipoC(ev.tipo), letterSpacing:"-0.01em", lineHeight:1, fontVariantNumeric:"tabular-nums"}}>{ev.horaInicio}</div>
+                        {ev.horaFin && <div style={{fontSize:10, color:"rgba(10,31,68,0.50)", marginTop:3, letterSpacing:"0.02em"}}>hasta {ev.horaFin}</div>}
+                      </div>
+                    ) : (
+                      <div style={{minWidth:72, fontSize:10, color:"rgba(10,31,68,0.45)", letterSpacing:"0.12em", textTransform:"uppercase"}}>Todo el día</div>
+                    )}
+                    <div style={{flex:1, minWidth:0}}>
+                      <div style={{fontSize:14, fontWeight:600, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{ev.titulo || "Sin título"}</div>
+                      <div style={{fontSize:10.5, color:"rgba(10,31,68,0.50)", marginTop:3, letterSpacing:"0.05em", textTransform:"uppercase"}}>{tipoL(ev.tipo)}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {modalDia&&diaClick&&(
         <MFModal onClose={()=>{setModalDia(false);setDiaClick(null);}} width={460}>
           {/* Header editorial — día grande en serif */}
