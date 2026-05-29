@@ -9916,64 +9916,82 @@ function useAutoUpdate() {
 
 function UpdateBanner({ onUpdate }) {
   return (
-    <div className="mf-fade-up" style={{
+    <div style={{
       position: "fixed",
-      bottom: "calc(20px + env(safe-area-inset-bottom))",
+      top: "calc(14px + env(safe-area-inset-top, 0px))",
       left: "50%",
-      transform: "translateX(-50%)",
+      // El translate(-50%) lo aplica la animación mfFadeDown
       zIndex: 9999,
-      background: "linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
-      color: "#fff",
-      border: "1px solid rgba(198,169,107,0.45)",
-      borderRadius: 14,
-      padding: "13px 18px",
       display: "flex",
       alignItems: "center",
-      gap: 14,
+      gap: 10,
+      padding: "8px 8px 8px 14px",
+      borderRadius: 999,
+      // Glassmorphism premium: fondo crema translúcido con blur
+      background: "rgba(248, 246, 242, 0.88)",
+      backdropFilter: "blur(20px) saturate(180%)",
+      WebkitBackdropFilter: "blur(20px) saturate(180%)",
+      border: "1px solid rgba(198,169,107,0.45)",
+      boxShadow:
+        "0 8px 28px rgba(10,31,68,0.14), " +
+        "0 1px 0 rgba(255,255,255,0.7) inset, " +
+        "0 0 0 1px rgba(198,169,107,0.06)",
       fontFamily: "'Poppins', sans-serif",
-      fontSize: 13,
       maxWidth: "calc(100vw - 24px)",
-      boxShadow: "0 12px 40px rgba(10,31,68,0.45)",
+      animation: "mfFadeDown .38s var(--mf-ease-spring) both",
     }}>
-      <div style={{display:"flex", alignItems:"center", gap:10, minWidth:0, flex:1}}>
-        <span style={{
-          width: 8, height: 8, borderRadius: "50%",
-          background: "#C6A96B",
-          boxShadow: "0 0 0 4px rgba(198,169,107,0.18)",
-          flexShrink: 0,
-          animation: "mfPulseDot 1.6s ease-in-out infinite",
-        }}/>
-        <div style={{display:"flex", flexDirection:"column", minWidth:0}}>
-          <div style={{
-            fontFamily:"'Cormorant Garamond', serif",
-            fontSize: 17, fontWeight: 500, color: "#C6A96B",
-            letterSpacing: "-0.01em", lineHeight: 1.1,
-          }}>Nueva versión disponible</div>
-          <div style={{fontSize:11, opacity:0.75, marginTop:2, lineHeight:1.4}}>
-            Actualiza para usar lo último sin perder datos.
-          </div>
-        </div>
-      </div>
+      {/* Dot dorado discreto */}
+      <span style={{
+        width: 7, height: 7, borderRadius: "50%",
+        background: "#C6A96B",
+        boxShadow: "0 0 0 3px rgba(198,169,107,0.20)",
+        flexShrink: 0,
+      }}/>
+
+      {/* Texto compacto */}
+      <span style={{
+        fontSize: 12.5,
+        color: "#0A1F44",
+        fontWeight: 500,
+        letterSpacing: "0.005em",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+      }}>Nueva versión disponible</span>
+
+      {/* Botón pill outline gold */}
       <button
         onClick={onUpdate}
         style={{
-          padding: "9px 16px",
-          borderRadius: 10,
-          background: "#C6A96B",
-          border: "none",
-          color: "#0A1F44",
+          padding: "5px 12px",
+          borderRadius: 999,
+          background: "#0A1F44",
+          border: "1px solid #0A1F44",
+          color: "#C6A96B",
           fontFamily: "'Poppins', sans-serif",
           fontWeight: 600,
-          fontSize: 12.5,
+          fontSize: 11.5,
           cursor: "pointer",
           whiteSpace: "nowrap",
-          letterSpacing: "0.02em",
-          transition: "all var(--mf-t-fast) var(--mf-ease-out)",
+          letterSpacing: "0.04em",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 5,
           flexShrink: 0,
+          transition: "all var(--mf-t-fast) var(--mf-ease-out)",
         }}
-        onMouseEnter={e=>{e.currentTarget.style.background="#D4B879"; e.currentTarget.style.transform="translateY(-1px)";}}
-        onMouseLeave={e=>{e.currentTarget.style.background="#C6A96B"; e.currentTarget.style.transform="translateY(0)";}}
-      >Actualizar ↻</button>
+        onMouseEnter={e=>{
+          e.currentTarget.style.background = "#122550";
+          e.currentTarget.style.transform = "translateY(-1px)";
+        }}
+        onMouseLeave={e=>{
+          e.currentTarget.style.background = "#0A1F44";
+          e.currentTarget.style.transform = "translateY(0)";
+        }}
+      >
+        Actualizar
+        <span style={{fontSize:12.5, lineHeight:1, marginLeft:1}}>↻</span>
+      </button>
     </div>
   );
 }
