@@ -10172,6 +10172,8 @@ export default function App() {
   const [allLeads,setAllLeads]=useState({});
   const [allEventos,setAllEventos]=useState({});
   const [notifOpen,setNotifOpen]=useState(false);
+  // Inteligencia comercial: expandir/contraer detalles de mejor horario + mejor día
+  const [icExpanded,setIcExpanded]=useState(false);
   const [sessionStart]=useState(()=>Date.now());
   const [authReady,setAuthReady]=useState(false);
   const [datosCargando,setDatosCargando]=useState(false);
@@ -10931,9 +10933,45 @@ export default function App() {
                     );
                   })()}
 
-                  {/* ═══ INTELIGENCIA COMERCIAL — insights accionables ═══ */}
+                  {/* ═══ INTELIGENCIA COMERCIAL · Recomendación del día (clickeable) ═══ */}
                   {(() => {
-                    // Mejor horario de respuesta: hora más frecuente en eventos con hora
+                    // ── Datos del día (recalculo aquí para tener la fuente) ──
+                    const citasHoy = (eventos || []).filter(e =>
+                      (e.tipo === "cita cliente" || e.tipo === "cita") && e.fecha === hoy()
+                    ).length;
+                    const pendAbiertos = totalPendientesAbiertos(leads);
+                    const leadsNuevosSinContacto = leads.filter(l =>
+                      l.etapa === "nuevo" &&
+                      !l.checklist?.wa1 && !l.checklist?.call1 && !l.checklist?.email
+                    ).length;
+                    const renovManualesProx = leads.flatMap(l => (l.polizas || [])).filter(p => {
+                      if (!p.fechaRenovacion) return false;
+                      const d = diasParaFecha(p.fechaRenovacion);
+                      return d !== null && d >= 0 && d <= 15;
+                    }).length;
+                    let renovCobranzaProx = 0;
+                    let cobranzaCritica40d = 0;
+                    try {
+                      const raw = JSON.parse(localStorage.getItem("mf_cobranza_datos") || "[]");
+                      raw.forEach(d => {
+                        if (d.esPeriodoComp) return;
+                        if (emisorAplicaRenovacion && emisorAplicaRenovacion(d.producto)) {
+                          const r = calcularRenovacion(d.vigenciaInicio);
+                          if (r && r.diasHasta >= 0 && r.diasHasta <= 15) renovCobranzaProx++;
+                        }
+                      });
+                      cobranzaCritica40d = raw.filter(d => {
+                        const prod = String(d.producto || "").toUpperCase();
+                        const esPLU3OP3D = prod.includes("PLU3") || prod.includes("OP3D");
+                        const dias = Number(d.diasAtraso) || 0;
+                        if (!esPLU3OP3D || dias <= 40) return false;
+                        const textoRaw = Object.values(d._raw || {}).map(v => String(v).toLowerCase()).join(" | ");
+                        return textoRaw.includes("periodo inicial") || textoRaw.includes("saldo inicial");
+                      }).length;
+                    } catch {}
+                    const renov15d = renovManualesProx + renovCobranzaProx;
+
+                    // ── Mejor horario de contacto ──
                     const eventosConHora = (eventos || []).filter(e => e.hora && /^\d{1,2}:\d{2}/.test(e.hora));
                     const conteoHora = {};
                     eventosConHora.forEach(e => {
@@ -10941,11 +10979,12 @@ export default function App() {
                       if (!isNaN(h)) conteoHora[h] = (conteoHora[h] || 0) + 1;
                     });
                     const horaPeak = Object.entries(conteoHora).sort((a,b) => b[1] - a[1])[0]?.[0];
-                    const mejorHorarioResp = horaPeak != null
-                      ? `${String(horaPeak).padStart(2,"0")}:00 - ${String(Math.min(23, +horaPeak + 2)).padStart(2,"0")}:00`
+                    const horaPeakNum = horaPeak != null ? +horaPeak : null;
+                    const mejorHorario = horaPeakNum != null
+                      ? `${String(horaPeakNum).padStart(2,"0")}:00 - ${String(Math.min(23, horaPeakNum + 2)).padStart(2,"0")}:00`
                       : null;
 
-                    // Mejor conversión: día de la semana donde más cierres + hora más activa
+                    // ── Mejor día comercial ──
                     const cierres = leads.filter(l => l.etapa === "cierre" && l.ultimoContacto);
                     const conteoDia = {};
                     cierres.forEach(l => {
@@ -10957,9 +10996,55 @@ export default function App() {
                     });
                     const diaPeak = Object.entries(conteoDia).sort((a,b) => b[1] - a[1])[0]?.[0];
                     const diasNombre = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
-                    const mejorDiaNombre = diaPeak != null ? diasNombre[+diaPeak] : null;
+                    const mejorDia = diaPeak != null ? diasNombre[+diaPeak] : null;
 
-                    const tieneDatos = mejorHorarioResp || mejorDiaNombre;
+                    // ── Algoritmo de Recomendación del día (priorizada) ──
+                    const generarRec = () => {
+                      if (cobranzaCritica40d > 0) {
+                        return { icon:"🚨", tono:"critico", text:`Hay ${cobranzaCritica40d} póliza${cobranzaCritica40d===1?"":"s"} crítica${cobranzaCritica40d===1?"":"s"} en periodo inicial con más de 40 días de atraso. Revísalas hoy.` };
+                      }
+                      if (leadsNuevosSinContacto >= 5) {
+                        return { icon:"👤", tono:"prospeccion", text:`Tienes ${leadsNuevosSinContacto} leads nuevos sin contactar. Prioriza el contacto inicial antes de generar nuevas cotizaciones.` };
+                      }
+                      if (horaPeakNum != null) {
+                        const ahora = new Date();
+                        const minActuales = ahora.getHours() * 60 + ahora.getMinutes();
+                        const minObjetivo = horaPeakNum * 60;
+                        const diff = minObjetivo - minActuales;
+                        if (diff > 0 && diff <= 120) {
+                          return { icon:"🕒", tono:"horario", text:`Tu mejor horario de contacto inicia en ${diff} minutos. Prepara tus llamadas y mensajes.` };
+                        }
+                      }
+                      if (renov15d >= 3) {
+                        return { icon:"⚠️", tono:"renovacion", text:`Existen ${renov15d} renovaciones próximas en los siguientes 15 días. Asegura el contacto antes de que venzan.` };
+                      }
+                      if (citasHoy > 0) {
+                        return { icon:"📅", tono:"agenda", text:`Tienes ${citasHoy} cita${citasHoy===1?"":"s"} programada${citasHoy===1?"":"s"} hoy. Repasa el expediente antes de cada una.` };
+                      }
+                      if (pendAbiertos >= 5) {
+                        return { icon:"📋", tono:"operativo", text:`Tienes ${pendAbiertos} pendientes abiertos. Cerrar tareas hoy mantiene fluido tu pipeline.` };
+                      }
+                      if (renov15d > 0) {
+                        return { icon:"⚠️", tono:"renovacion", text:`Existen ${renov15d} renovaciones próximas en los siguientes 15 días.` };
+                      }
+                      if (leadsNuevosSinContacto > 0) {
+                        return { icon:"👤", tono:"prospeccion", text:`Tienes ${leadsNuevosSinContacto} lead${leadsNuevosSinContacto===1?"":"s"} nuevo${leadsNuevosSinContacto===1?"":"s"} sin contactar. Un mensaje inicial puede generar la siguiente cita.` };
+                      }
+                      return { icon:"✨", tono:"positivo", text:"Cartera al día. Buen momento para cultivar referidos y cotizaciones nuevas." };
+                    };
+
+                    const rec = generarRec();
+                    const tonoStyles = {
+                      critico:    { border:"rgba(220,38,38,0.30)",  bg:"rgba(220,38,38,0.04)",  labelColor:B.redBright },
+                      prospeccion:{ border:"rgba(198,169,107,0.35)",bg:"rgba(198,169,107,0.04)",labelColor:B.gold },
+                      horario:    { border:"rgba(198,169,107,0.35)",bg:"rgba(198,169,107,0.04)",labelColor:B.gold },
+                      renovacion: { border:"rgba(217,119,6,0.30)",  bg:"rgba(217,119,6,0.04)",  labelColor:"#b45309" },
+                      agenda:     { border:"rgba(10,31,68,0.12)",   bg:"rgba(10,31,68,0.02)",   labelColor:B.navy },
+                      operativo:  { border:"rgba(10,31,68,0.10)",   bg:"rgba(10,31,68,0.02)",   labelColor:"rgba(10,31,68,0.65)" },
+                      positivo:   { border:"rgba(5,150,105,0.28)",  bg:"rgba(5,150,105,0.04)",  labelColor:"#0a7c4a" },
+                    };
+                    const ts = tonoStyles[rec.tono] || tonoStyles.positivo;
+                    const tieneDetalles = mejorHorario || mejorDia;
 
                     return (
                       <div style={{padding:"14px 18px", borderTop:"1px solid rgba(10,31,68,0.06)"}}>
@@ -10970,68 +11055,101 @@ export default function App() {
                           marginBottom:10,
                         }}>Inteligencia comercial</div>
 
-                        {!tieneDatos && (
-                          <div style={{
-                            fontSize:12, color:"rgba(10,31,68,0.50)",
-                            fontStyle:"italic", padding:"6px 0",
-                          }}>Acumulando datos. Después de algunas semanas de uso verás aquí tus mejores horarios.</div>
-                        )}
+                        {/* Card de Recomendación del día — clickeable si hay detalles */}
+                        <button
+                          onClick={()=>{ if(tieneDetalles) setIcExpanded(v => !v); }}
+                          disabled={!tieneDetalles}
+                          style={{
+                            width:"100%",
+                            background: ts.bg,
+                            border: `1px solid ${ts.border}`,
+                            borderRadius:12,
+                            padding:"14px 14px 14px 16px",
+                            cursor: tieneDetalles ? "pointer" : "default",
+                            textAlign:"left",
+                            fontFamily:"'Poppins', sans-serif",
+                            display:"flex", alignItems:"flex-start", gap:12,
+                            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                          }}
+                          onMouseEnter={e=>{ if(tieneDetalles) e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.08)"; }}
+                          onMouseLeave={e=>{ e.currentTarget.style.boxShadow="none"; }}
+                        >
+                          <span style={{fontSize:22, flexShrink:0, lineHeight:1, marginTop:2}}>{rec.icon}</span>
+                          <div style={{flex:1, minWidth:0}}>
+                            <div style={{
+                              fontSize:9.5, fontWeight:600,
+                              color: ts.labelColor,
+                              letterSpacing:"0.14em", textTransform:"uppercase",
+                              marginBottom:5,
+                            }}>Recomendación del día</div>
+                            <div style={{
+                              fontFamily:"'Cormorant Garamond', serif",
+                              fontSize:16, fontWeight:500,
+                              color:B.navy, letterSpacing:"-0.005em",
+                              lineHeight:1.32,
+                            }}>{rec.text}</div>
+                            {tieneDetalles && (
+                              <div style={{
+                                fontSize:10, color:"rgba(10,31,68,0.45)",
+                                marginTop:6, letterSpacing:"0.04em", textTransform:"uppercase",
+                              }}>{icExpanded ? "Toca para ocultar" : "Toca para ver tu mejor horario y día"}</div>
+                            )}
+                          </div>
+                          {tieneDetalles && (
+                            <span style={{
+                              fontSize:18, color:"rgba(10,31,68,0.40)", flexShrink:0,
+                              transform: icExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                              transition:"transform var(--mf-t-normal) var(--mf-ease-out)",
+                              marginTop:2, lineHeight:1,
+                            }}>›</span>
+                          )}
+                        </button>
 
-                        {mejorHorarioResp && (
-                          <div style={{
-                            background:"rgba(198,169,107,0.05)",
-                            border:"1px solid rgba(198,169,107,0.22)",
-                            borderRadius:10,
-                            padding:"12px 14px",
-                            marginBottom:10,
-                            display:"flex", alignItems:"center", gap:12,
-                          }}>
-                            <span style={{fontSize:18, flexShrink:0}}>🕒</span>
-                            <div style={{flex:1, minWidth:0}}>
+                        {/* Detalles expandibles */}
+                        {icExpanded && tieneDetalles && (
+                          <div className="mf-fade-up" style={{marginTop:12, display:"flex", flexDirection:"column", gap:10}}>
+                            {mejorHorario && (
                               <div style={{
-                                fontSize:9.5, fontWeight:600,
-                                color:B.gold, letterSpacing:"0.14em", textTransform:"uppercase",
-                                marginBottom:2,
-                              }}>Mejor horario de respuesta</div>
+                                background:"rgba(198,169,107,0.05)",
+                                border:"1px solid rgba(198,169,107,0.22)",
+                                borderRadius:10,
+                                padding:"12px 14px",
+                                display:"flex", alignItems:"flex-start", gap:12,
+                              }}>
+                                <span style={{fontSize:18, flexShrink:0, lineHeight:1, marginTop:2}}>🕒</span>
+                                <div style={{flex:1, minWidth:0}}>
+                                  <div style={{fontSize:9.5, fontWeight:600, color:B.gold, letterSpacing:"0.14em", textTransform:"uppercase", marginBottom:3}}>Mejor horario de contacto</div>
+                                  <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:22, fontWeight:500, color:B.navy, letterSpacing:"-0.01em", lineHeight:1.05, marginBottom:4}}>{mejorHorario}</div>
+                                  <div style={{fontSize:11, color:"rgba(10,31,68,0.55)", lineHeight:1.45, fontStyle:"italic"}}>Durante este horario obtienes la mayor cantidad de respuestas.</div>
+                                </div>
+                              </div>
+                            )}
+
+                            {mejorDia && (
                               <div style={{
-                                fontFamily:"'Cormorant Garamond', serif",
-                                fontSize:20, fontWeight:500,
-                                color:B.navy, letterSpacing:"-0.01em", lineHeight:1.05,
-                              }}>{mejorHorarioResp}</div>
-                              <div style={{
-                                fontSize:10, color:"rgba(10,31,68,0.50)",
-                                marginTop:3, lineHeight:1.4,
-                              }}>Basado en respuestas e interacciones</div>
-                            </div>
+                                background:"rgba(10,31,68,0.03)",
+                                border:"1px solid rgba(10,31,68,0.08)",
+                                borderRadius:10,
+                                padding:"12px 14px",
+                                display:"flex", alignItems:"flex-start", gap:12,
+                              }}>
+                                <span style={{fontSize:18, flexShrink:0, lineHeight:1, marginTop:2}}>📈</span>
+                                <div style={{flex:1, minWidth:0}}>
+                                  <div style={{fontSize:9.5, fontWeight:600, color:"rgba(10,31,68,0.55)", letterSpacing:"0.14em", textTransform:"uppercase", marginBottom:3}}>Mejor día comercial</div>
+                                  <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:22, fontWeight:500, color:B.navy, letterSpacing:"-0.01em", lineHeight:1.05, marginBottom:4}}>{mejorDia}</div>
+                                  <div style={{fontSize:11, color:"rgba(10,31,68,0.55)", lineHeight:1.45, fontStyle:"italic"}}>El {mejorDia.toLowerCase()} presenta el mayor porcentaje de avance comercial.</div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 
-                        {mejorDiaNombre && (
+                        {!tieneDetalles && (
                           <div style={{
-                            background:"rgba(10,31,68,0.03)",
-                            border:"1px solid rgba(10,31,68,0.08)",
-                            borderRadius:10,
-                            padding:"12px 14px",
-                            display:"flex", alignItems:"center", gap:12,
-                          }}>
-                            <span style={{fontSize:18, flexShrink:0}}>📈</span>
-                            <div style={{flex:1, minWidth:0}}>
-                              <div style={{
-                                fontSize:9.5, fontWeight:600,
-                                color:"rgba(10,31,68,0.55)", letterSpacing:"0.14em", textTransform:"uppercase",
-                                marginBottom:2,
-                              }}>Mejor conversión</div>
-                              <div style={{
-                                fontFamily:"'Cormorant Garamond', serif",
-                                fontSize:20, fontWeight:500,
-                                color:B.navy, letterSpacing:"-0.01em", lineHeight:1.05,
-                              }}>{mejorDiaNombre}{mejorHorarioResp ? ` · ${mejorHorarioResp}` : ""}</div>
-                              <div style={{
-                                fontSize:10, color:"rgba(10,31,68,0.50)",
-                                marginTop:3, lineHeight:1.4,
-                              }}>Día con más cierres registrados</div>
-                            </div>
-                          </div>
+                            fontSize:11, color:"rgba(10,31,68,0.45)",
+                            fontStyle:"italic", marginTop:10, padding:"6px 4px",
+                            lineHeight:1.5,
+                          }}>Aún no hay suficientes datos para calcular tu mejor horario y día. Con algunas semanas de uso aparecerán aquí.</div>
                         )}
                       </div>
                     );
