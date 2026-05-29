@@ -9707,6 +9707,68 @@ function Usuarios({usuario,cuentas,setCuentas}) {
    - Tras importar: redirect a Pipeline filtrado a etapa=nuevo
 ═══════════════════════════════════════════ */
 function ImportarCorreo({ leads, setLeads, usuario, setSeccion, setFiltroNav, setSubtab }) {
+  // Excel import/export (movido de Pipeline a esta pestaña dedicada)
+  const fileRefExcel = useRef(null);
+  const [excelPreview, setExcelPreview] = useState(null);
+
+  async function importarExcel(e) {
+    const file = e.target.files?.[0]; if (!file) return;
+    try {
+      const { default: XLSX } = await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
+      const ab = await file.arrayBuffer();
+      const wb = XLSX.read(ab);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      const parsed = parsearLeads(rows);
+      const { nuevos, duplicados } = clasificarDuplicados(parsed.leads, leads);
+      if (!nuevos.length && !duplicados.length && !parsed.warnings.omitidasSinNombre) {
+        window.__mfToast?.("El archivo está vacío o no se detectaron filas con datos.", "error");
+      } else {
+        setExcelPreview({ nuevos, duplicados, warnings: parsed.warnings });
+      }
+    } catch (err) {
+      window.__mfToast?.("No pudimos leer el archivo. Verifica que sea un CSV/Excel válido.", "error");
+    }
+    e.target.value = "";
+  }
+
+  function confirmarExcelImport() {
+    if (!excelPreview) return;
+    if (excelPreview.nuevos.length > 0) {
+      setLeads(prev => [...prev, ...excelPreview.nuevos]);
+    }
+    setExcelPreview(null);
+  }
+
+  async function exportarExcel() {
+    try {
+      const { default: XLSX } = await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
+      const data = leads.map(l => ({
+        "Nombre":             l.nombre,
+        "Edad":               l.edad,
+        "Teléfono":           l.telefono,
+        "Mail":               l.correo,
+        "Estado":             l.estado,
+        "Producto solicitado": l.producto,
+        "Ejecutivo":          l.ejecutivo || "",
+        "Etapa":              ETAPAS.find(e => e.id === l.etapa)?.label || "",
+        "WA 1":               l.checklist?.wa1      ? "✓" : "",
+        "WA 2":               l.checklist?.wa2      ? "✓" : "",
+        "Llamada 1":          l.checklist?.call1    ? "✓" : "",
+        "Llamada 2":          l.checklist?.call2    ? "✓" : "",
+        "Correo enviado":     l.checklist?.email    ? "✓" : "",
+        "Desea seguimiento":  l.checklist?.sigues   ? "✓" : "",
+        "Sin interés":        l.checklist?.noInteres ? "✓" : "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Leads MarFlow");
+      XLSX.writeFile(wb, `marflow_leads_${hoy()}.xlsx`);
+      window.__mfToast?.(`${leads.length} leads exportados.`, "success");
+    } catch (err) {
+      window.__mfToast?.("No pudimos exportar el archivo. Intenta de nuevo.", "error");
+    }
+  }
   const [texto, setTexto] = useState("");
   const [parseados, setParseados] = useState([]); // [{lead, dup, incluido}]
   const [sourceDetectado, setSourceDetectado] = useState("");
@@ -9825,13 +9887,71 @@ function ImportarCorreo({ leads, setLeads, usuario, setSeccion, setFiltroNav, se
   return (
     <div style={{maxWidth:980, margin:"0 auto", padding:"8px 0 40px"}}>
       {/* Header editorial */}
-      <div style={{marginBottom:28}}>
-        <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:34, fontWeight:500, color:B.navy, letterSpacing:"-0.01em", lineHeight:1.1}}>
-          Importar desde correo
+      <div style={{marginBottom:24}}>
+        <div style={{fontSize:10.5, fontWeight:500, color:"rgba(10,31,68,0.45)", textTransform:"uppercase", letterSpacing:"0.22em", marginBottom:8}}>Cartera</div>
+        <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:32, fontWeight:500, color:B.navy, letterSpacing:"-0.015em", lineHeight:1.1}}>
+          Importar / Exportar
         </div>
-        <div style={{fontSize:13, color:"#6b7280", marginTop:8, fontWeight:400, letterSpacing:"0.005em", maxWidth:560}}>
-          Pega el texto de un correo de Allianz, Leslie o Ale. MarFlow detecta los leads automáticamente y los agrega al pipeline.
+        <div style={{fontSize:13, color:"#6b7280", marginTop:8, fontWeight:400, letterSpacing:"0.005em", maxWidth:600}}>
+          Sube un Excel con leads, pega el texto de un correo o descarga tu cartera completa.
         </div>
+      </div>
+
+      {/* ═══ EXCEL — Importar + Exportar (movido desde el Pipeline) ═══ */}
+      <div style={{
+        background:B.white, border:`1px solid ${B.gray}`, borderRadius:14,
+        padding:"22px 22px 20px", boxShadow:"0 1px 2px rgba(10,31,68,0.03)",
+        marginBottom:18,
+      }}>
+        <div style={{display:"flex", alignItems:"flex-start", justifyContent:"space-between", flexWrap:"wrap", gap:14, marginBottom:14}}>
+          <div style={{minWidth:0, flex:1}}>
+            <div style={{fontSize:11, fontWeight:600, color:B.navy, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:6}}>
+              Hoja de cálculo
+            </div>
+            <div style={{fontSize:13, color:"rgba(10,31,68,0.65)", lineHeight:1.5, maxWidth:480}}>
+              Importa un Excel con leads (detecta duplicados antes de guardar) o descarga tu cartera completa para reportes externos.
+            </div>
+          </div>
+          <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap"}}>
+            {leads.length} lead{leads.length === 1 ? "" : "s"} actuales
+          </div>
+        </div>
+        <div style={{display:"flex", gap:10, flexWrap:"wrap"}}>
+          <input ref={fileRefExcel} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={importarExcel}/>
+          <button onClick={()=>fileRefExcel.current?.click()}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:7,
+              padding:"10px 16px", borderRadius:10,
+              border:`1px solid ${B.navy}`,
+              background:B.navy, color:"#fff",
+              fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12.5,
+              cursor:"pointer", letterSpacing:"0.02em",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.background="#122550"; e.currentTarget.style.transform="translateY(-1px)";}}
+            onMouseLeave={e=>{e.currentTarget.style.background=B.navy; e.currentTarget.style.transform="translateY(0)";}}>
+            <IconUpload size={13} color="#fff"/> Importar Excel
+          </button>
+          <button onClick={exportarExcel}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:7,
+              padding:"10px 16px", borderRadius:10,
+              border:"1px solid rgba(10,31,68,0.10)",
+              background:B.white, color:"rgba(10,31,68,0.85)",
+              fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12.5,
+              cursor:"pointer", letterSpacing:"0.02em",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=B.gold; e.currentTarget.style.background="rgba(198,169,107,0.04)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.10)"; e.currentTarget.style.background=B.white;}}>
+            <IconDownload size={13}/> Exportar Excel
+          </button>
+        </div>
+      </div>
+
+      {/* Sub-header para el siguiente bloque */}
+      <div style={{fontSize:11, fontWeight:600, color:"rgba(10,31,68,0.45)", letterSpacing:"0.18em", textTransform:"uppercase", marginBottom:10, marginTop:4}}>
+        — o desde correo —
       </div>
 
       {/* Bloque de pegado */}
@@ -10027,6 +10147,15 @@ function ImportarCorreo({ leads, setLeads, usuario, setSeccion, setFiltroNav, se
             >{guardando ? "Importando..." : `Importar ${totalSeleccionados || ""} lead${totalSeleccionados===1?"":"s"}`}</button>
           </div>
         </div>
+      )}
+
+      {/* Preview Excel (mismo modal que usaba el Pipeline antes) */}
+      {excelPreview && (
+        <ImportarLeadsModal
+          datos={excelPreview}
+          onConfirm={confirmarExcelImport}
+          onClose={()=>setExcelPreview(null)}
+        />
       )}
     </div>
   );
