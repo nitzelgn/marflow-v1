@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, Fragment } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "./supabaseClient";
 
 const B = {
@@ -652,20 +653,21 @@ function MFModal({onClose,children,width=520}) {
     if (sheetRef.current) sheetRef.current.scrollTop = 0;
   }, []);
 
-  return (
+  // 🔑 createPortal a document.body — saca el modal de cualquier ancestor
+  // con transform/filter/animation (que crean stacking contexts y atrapan
+  // el position:fixed). Esto garantiza que el modal SIEMPRE se renderiza
+  // al nivel raíz absoluto, encima del header sticky.
+  return createPortal(
     <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{
       position:"fixed", inset:0,
       background:"rgba(10,31,68,.5)",
-      zIndex:1500,                            // bien arriba de TODO (header sticky, banners, etc.)
+      zIndex:1500,
       display:"flex", alignItems:"flex-end", justifyContent:"center",
     }}>
       <style>{`@media(min-width:520px){.mf-modal-sheet{align-self:center!important;border-radius:16px!important;margin:16px;max-height:90vh!important;}.mf-modal-sheet .mf-modal-inner{padding-top:24px!important;}}`}</style>
       <div ref={sheetRef} className="mf-modal-sheet" style={{
         background:B.white,
         borderRadius:"20px 20px 0 0",
-        // Mobile: el sheet ocupa hasta TODO el viewport. El padding-top
-        // incluye safe-area-top → el contenido (drag handle + nombre del lead)
-        // NUNCA queda detrás del notch ni del header sticky.
         padding:0,
         width:"100%", maxWidth:width,
         maxHeight:"100dvh",
@@ -676,7 +678,6 @@ function MFModal({onClose,children,width=520}) {
         border:`1px solid ${B.gray}`, borderBottom:"none",
         alignSelf:"flex-end",
       }}>
-        {/* Inner wrapper: aplica padding con safe areas y aloja el contenido */}
         <div className="mf-modal-inner" style={{
           paddingTop:"max(16px, calc(16px + env(safe-area-inset-top, 0px)))",
           paddingLeft:16,
@@ -687,7 +688,8 @@ function MFModal({onClose,children,width=520}) {
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
