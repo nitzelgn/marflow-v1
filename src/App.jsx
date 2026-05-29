@@ -614,11 +614,59 @@ function BadgeReferido({ size = "sm" }) {
   );
 }
 
+/* Hook reutilizable: lock body scroll + ESC para cerrar overlays.
+   Lo usan MFModal y los drawers de Dashboard. Garantiza que cuando
+   un overlay está abierto, el body no se mueve y Escape lo cierra. */
+function useOverlayLock(active, onClose) {
+  useEffect(() => {
+    if (!active) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => { if (e.key === "Escape") onClose?.(); };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [active, onClose]);
+}
+
 function MFModal({onClose,children,width=520}) {
+  const sheetRef = useRef(null);
+
+  // Body lock + ESC para cerrar (extraído a hook reutilizable)
+  useOverlayLock(true, onClose);
+
+  // Scroll del sheet al inicio para que el nombre del lead se vea
+  // inmediatamente al abrir (especialmente en mobile).
+  useEffect(() => {
+    if (sheetRef.current) sheetRef.current.scrollTop = 0;
+  }, []);
+
   return (
-    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(10,31,68,.5)",zIndex:900,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{
+      position:"fixed", inset:0,
+      background:"rgba(10,31,68,.5)",
+      zIndex:1200,                            // por encima del header sticky (400) y banner update (9999 es global)
+      display:"flex", alignItems:"flex-end", justifyContent:"center",
+      // Respeta safe-area en iPhone para que el modal NO se meta detrás del notch
+      paddingTop:"env(safe-area-inset-top, 0px)",
+    }}>
       <style>{`@media(min-width:520px){.mf-modal-sheet{align-self:center!important;border-radius:16px!important;margin:16px;max-height:90vh!important;}}`}</style>
-      <div className="mf-modal-sheet" style={{background:B.white,borderRadius:"20px 20px 0 0",padding:"24px 16px 32px",paddingBottom:"max(32px, calc(32px + env(safe-area-inset-bottom)))",width:"100%",maxWidth:width,maxHeight:"92vh",overflowY:"auto",WebkitOverflowScrolling:"touch",boxShadow:B.shadowLg,animation:"fadeUp .22s ease",border:`1px solid ${B.gray}`,borderBottom:"none",alignSelf:"flex-end"}}>
+      <div ref={sheetRef} className="mf-modal-sheet" style={{
+        background:B.white,
+        borderRadius:"20px 20px 0 0",
+        padding:"24px 16px 32px",
+        paddingBottom:"max(32px, calc(32px + env(safe-area-inset-bottom)))",
+        width:"100%", maxWidth:width,
+        // maxHeight: no más alto que el viewport visible (cuenta safe-area-top)
+        maxHeight:"calc(100dvh - env(safe-area-inset-top, 0px) - 8px)",
+        overflowY:"auto", WebkitOverflowScrolling:"touch",
+        boxShadow:B.shadowLg,
+        animation:"mfSlideUp .28s var(--mf-ease-spring)",
+        border:`1px solid ${B.gray}`, borderBottom:"none",
+        alignSelf:"flex-end",
+      }}>
         <div style={{width:36,height:4,borderRadius:2,background:"#d1d5db",margin:"0 auto 20px"}}/>
         {children}
       </div>
@@ -3865,6 +3913,11 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
   const [drawerPend, setDrawerPend] = useState(false);
   const [drawerRenov, setDrawerRenov] = useState(false);
   const [leadActDash, setLeadActDash] = useState(null);
+
+  // Body scroll lock + Escape cuando hay overlay abierto en Hoy.
+  // Previene "se quedó atorada" — siempre se puede cerrar con ESC.
+  useOverlayLock(drawerPend, () => setDrawerPend(false));
+  useOverlayLock(drawerRenov, () => setDrawerRenov(false));
 
   useEffect(() => {
     const t = setTimeout(() => setShowSkeleton(false), 320);
@@ -10543,17 +10596,25 @@ export default function App() {
               {notifOpen && (
                 <div onClick={e=>e.stopPropagation()} style={{
                   position:"absolute", top:44, right:0,
-                  width:"min(340px, calc(100vw - 32px))",
+                  // En mobile: ancho ~ casi pantalla (con margen lateral 16+16=32),
+                  // en desktop: 360px fijo. Garantiza que SIEMPRE quepa.
+                  width:"min(360px, calc(100vw - 32px))",
+                  // Altura máxima: 70vh para que NUNCA salga del viewport,
+                  // incluso si hay muchos leads en alertas.
+                  maxHeight:"min(72vh, 580px)",
                   background:"#F8F6F2",
                   borderRadius:16,
                   border:"1px solid rgba(10,31,68,0.08)",
                   boxShadow:"0 20px 50px rgba(10,31,68,0.18), 0 4px 12px rgba(10,31,68,0.06)",
                   zIndex:800,
                   animation:"mfFadeUp .22s var(--mf-ease-spring)",
+                  // Scroll interno habilitado cuando el contenido excede maxHeight
+                  display:"flex", flexDirection:"column",
                   overflow:"hidden",
                 }}>
-                  {/* Header */}
+                  {/* Header (fijo arriba, no scroll) */}
                   <div style={{
+                    flexShrink:0,
                     padding:"16px 18px 14px",
                     borderBottom:"1px solid rgba(10,31,68,0.06)",
                     display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10,
@@ -10579,6 +10640,12 @@ export default function App() {
                       color:"rgba(10,31,68,0.55)",
                     }}><IconX size={12} color="currentColor"/></button>
                   </div>
+
+                  {/* Cuerpo scrollable (todo lo que sigue) */}
+                  <div style={{
+                    flex:1, minHeight:0,
+                    overflowY:"auto", WebkitOverflowScrolling:"touch",
+                  }}>
 
                   {/* Sesión actual */}
                   <div style={{
@@ -10674,6 +10741,7 @@ export default function App() {
                       </div>
                     );
                   })()}
+                  </div>{/* /cuerpo scrollable */}
                 </div>
               )}
             </div>
