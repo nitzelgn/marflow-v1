@@ -22,15 +22,51 @@ const B = {
 const SUPERADMIN_ID = "mariana_root";
 const CUENTAS_INIT = [{id:SUPERADMIN_ID,nombre:"Mariana",usuario:"mariana",pass:"Mariana2024",rol:"superadmin",color:B.gold,adminId:null}];
 
+// Pipeline simplificado (6 etapas) — CRM moderno enfocado en venta consultiva.
+// Flujo natural: Nuevo → Contactado → Interesado → Cotización → Venta · Perdido
 const ETAPAS = [
-  {id:"nuevo",        label:"Nuevo Lead",           color:"#475569", icon:"+",  sinSeg:false},
-  {id:"cita",         label:"Cita agendada",         color:"#7c3aed", icon:"📅", sinSeg:false},
-  {id:"asesorado",    label:"Asesorado",             color:"#b45309", icon:"📋", sinSeg:false},
-  {id:"seguimiento",  label:"En seguimiento",        color:"#1e40af", icon:"⟳",  sinSeg:false},
-  {id:"no_localiz",   label:"No localizable",        color:"#dc2626", icon:"📵", sinSeg:false},
-  {id:"cierre",       label:"¡Cierre! ⭐",           color:"#166534", icon:"⭐", sinSeg:false},
-  {id:"otro",         label:"Sin interés",           color:"#dc2626", icon:"🚫", sinSeg:true},
+  {id:"nuevo",       label:"Nuevo",       color:"#475569", icon:"+", sinSeg:false,
+    description:"Lead recién ingresado. Aún no existe contacto real con la persona."},
+  {id:"contactado",  label:"Contactado",  color:"#1e40af", icon:"💬", sinSeg:false,
+    description:"Ya hubo interacción real (WhatsApp, llamada, correo). Aún no se determina interés."},
+  {id:"interesado",  label:"Interesado",  color:"#7c3aed", icon:"⭐", sinSeg:false,
+    description:"Persona muestra interés genuino, acepta llamada o cita. Oportunidad activa."},
+  {id:"cotizacion",  label:"Cotización",  color:"#b45309", icon:"📋", sinSeg:false,
+    description:"Propuesta o ilustración presentada, en evaluación."},
+  {id:"venta",       label:"Venta",       color:"#166534", icon:"✓", sinSeg:false,
+    description:"Negocio cerrado. Solicitud firmada, póliza emitida o inversión ingresada."},
+  {id:"perdido",     label:"Perdido",     color:"#dc2626", icon:"✕", sinSeg:true,
+    description:"Oportunidad salió del proceso comercial."},
 ];
+
+// Motivos de pérdida (solicitar al mover lead a "perdido")
+const MOTIVOS_PERDIDA = [
+  { v:"no_contesto",      l:"No contestó" },
+  { v:"datos_erroneos",   l:"Datos erróneos" },
+  { v:"otro_distribuidor",l:"Otro distribuidor" },
+  { v:"no_asegurable",    l:"No asegurable" },
+  { v:"excluido",         l:"Excluido" },
+  { v:"no_pidio_info",    l:"No pidió información" },
+  { v:"otro",             l:"Otro" },
+];
+
+// Mapeo de etapas antiguas (DB legacy) → etapas nuevas.
+// Se aplica AL LEER (leadFromDB) para que la app siempre maneje las nuevas IDs.
+const _ETAPA_MIGRACION = {
+  "nuevo":       "nuevo",
+  "cita":        "interesado",
+  "asesorado":   "cotizacion",
+  "seguimiento": "contactado",
+  "no_localiz":  "perdido",
+  "cierre":      "venta",
+  "otro":        "perdido",
+};
+
+// Para etapas antiguas que se migran a "perdido", asigna motivo por default.
+const _MOTIVO_DEFAULT_POR_ETAPA_LEGACY = {
+  "no_localiz": "no_contesto",
+  "otro":       "otro",
+};
 
 const PRODUCTOS_LEAD = ["Vida","GMM","Auto","Hogar","Retiro","Ahorro","Inversión","Patrimonial","Educación","Otro"];
 
@@ -324,7 +360,7 @@ function getTempLead(lead) {
 function enCotizacionRiesgos(leads) {
   return (leads || []).filter(l =>
     !l.sinSeguimiento &&
-    l.etapa === "asesorado" &&
+    l.etapa === "cotizacion" &&
     PRODUCTOS_RIESGOS.includes(l.producto) &&
     diasDesde(l.ultimoContacto) >= 2
   );
@@ -334,7 +370,7 @@ function enCotizacionRiesgos(leads) {
 function asesoradosAhorroPendientes(leads) {
   return (leads || []).filter(l =>
     !l.sinSeguimiento &&
-    l.etapa === "asesorado" &&
+    l.etapa === "cotizacion" &&
     PRODUCTOS_AHORRO.includes(l.producto) &&
     diasDesde(l.ultimoContacto) >= 14
   );
@@ -350,18 +386,18 @@ function leadEnPausaActiva(l) {
 function seguimientoUrgente(leads) {
   return (leads || []).filter(l => {
     if (l.sinSeguimiento) return false;
-    if (["otro","cierre"].includes(l.etapa)) return false;
+    if (["perdido","venta"].includes(l.etapa)) return false;
     if (leadEnPausaActiva(l)) return false;
     const d = diasDesde(l.ultimoContacto);
     // Lead nuevo sin contacto en >2 días
     if (l.etapa === "nuevo" && d >= 2) return true;
     // Cliente en seguimiento sin actividad reciente (riesgo de pérdida)
-    if (l.etapa === "seguimiento" && d >= 5) return true;
+    if (l.etapa === "contactado" && d >= 5) return true;
     // Lead con estado "muy interesado" o "alta oportunidad" sin actividad reciente
     const eo = getEstadoOportunidad(l);
     if ((eo?.v === "muy_interesado" || eo?.v === "alta_oportunidad") && d >= 3) return true;
     // Cita pendiente sin reagendar (>3 días en etapa cita)
-    if (l.etapa === "cita" && d >= 3) return true;
+    if (l.etapa === "interesado" && d >= 3) return true;
     return false;
   });
 }
@@ -404,12 +440,12 @@ function getAlertas(lead) {
   if(leadEnPausaActiva(lead)) return [];
   const dias = diasDesde(lead.ultimoContacto);
   const a = [];
-  if(!["otro","cierre"].includes(lead.etapa)) {
+  if(!["perdido","venta"].includes(lead.etapa)) {
     if(dias>=15) a.push({tipo:"reactivar", msg:`${dias}d · Reactivar`, color:B.purple});
     else if(dias>=2) a.push({tipo:"sin_contacto", msg:`${dias}d sin contacto`, color:B.amber});
   }
-  if(lead.etapa==="seguimiento" && dias>=5) a.push({tipo:"riesgo", msg:"Riesgo de pérdida", color:B.redBright});
-  if(lead.etapa==="cita" && dias>=1) a.push({tipo:"cot", msg:"Confirmar cita", color:B.blue});
+  if(lead.etapa==="contactado" && dias>=5) a.push({tipo:"riesgo", msg:"Riesgo de pérdida", color:B.redBright});
+  if(lead.etapa==="interesado" && dias>=1) a.push({tipo:"cot", msg:"Confirmar próxima acción", color:B.blue});
   return a;
 }
 
@@ -3371,8 +3407,8 @@ function VentaDelDia({leads}) {
   // Desean seguimiento: checklist.sigues=true O etapa asesorado, sin sinSeguimiento, sin otro/cierre/nuevo
   const deseanSeguimiento = leads.filter(l =>
     !l.sinSeguimiento &&
-    !["otro","cierre"].includes(l.etapa) &&
-    (l.checklist?.sigues === true || l.etapa === "asesorado")
+    !["perdido","venta"].includes(l.etapa) &&
+    (l.checklist?.sigues === true || l.etapa === "cotizacion")
   ).filter((l,i,arr) => arr.findIndex(x=>x.id===l.id)===i).slice(0,6);
 
   const Block = ({title, color, items, emptyMsg, icon}) => (
@@ -3585,9 +3621,9 @@ function ActividadReciente({leads}) {
    Foco operativo: calidad de leads, conversión, valor comercial.
 ═══════════════════════════════════════════ */
 // Etapas que cuentan como "lead calificado" (con potencial real de cierre)
-const _ETAPAS_CALIFICADAS = ["cita", "asesorado", "seguimiento", "cierre"];
+const _ETAPAS_CALIFICADAS = ["contactado", "interesado", "cotizacion", "venta"];
 // Etapas que cuentan como "lead no calificado" (descartado u operativamente muerto)
-const _ETAPAS_NO_CALIFICADAS = ["no_localiz", "otro"];
+const _ETAPAS_NO_CALIFICADAS = ["perdido"];
 
 function Metricas({leads}) {
   // ── Helpers de fecha ──
@@ -3603,7 +3639,7 @@ function Metricas({leads}) {
   const noCalificadosArr = leads.filter(l =>
     l.sinSeguimiento || _ETAPAS_NO_CALIFICADAS.includes(l.etapa)
   );
-  const cierresArr = leads.filter(l => l.etapa === "cierre");
+  const cierresArr = leads.filter(l => l.etapa === "venta");
 
   const calificados = calificadosArr.length;
   const noCalificados = noCalificadosArr.length;
@@ -3621,7 +3657,7 @@ function Metricas({leads}) {
 
   // ── Valor comercial del pipeline ──
   const oportActivas = leads.filter(l =>
-    !l.sinSeguimiento && ["cita","asesorado","seguimiento"].includes(l.etapa)
+    !l.sinSeguimiento && ["contactado","interesado","cotizacion"].includes(l.etapa)
   ).length;
   const referidosMes = leads.filter(l =>
     l.esReferido && l.mesCreacion === mesActual
@@ -4155,7 +4191,7 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
 
   // Mini-métricas (sidebar derecha)
   const mesAct = hoy().slice(0,7);
-  const cierresMes = leads.filter(l => l.etapa === "cierre" && (l.mesCreacion === mesAct || (l.ultimoContacto||"").slice(0,7) === mesAct)).length;
+  const cierresMes = leads.filter(l => l.etapa === "venta" && (l.mesCreacion === mesAct || (l.ultimoContacto||"").slice(0,7) === mesAct)).length;
 
   // ── Saludo dinámico según la hora ──
   const ahora = new Date();
@@ -4179,7 +4215,7 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
       sub: "Auto · GMM · Hogar · Vida · sin contacto >2 días",
       color: "#dc2626", // red — temperatura caliente
       icon: <IconFlame size={16} color="#dc2626"/>,
-      action: ()=>{ irALeads("pipeline", "asesorado"); },
+      action: ()=>{ irALeads("pipeline", "cotizacion"); },
     },
     {
       key: "ahorro",
@@ -4188,7 +4224,7 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
       sub: "Retiro · Ahorro · Inversión · sin contacto >2 semanas",
       color: B.gold,
       icon: <IconDollar size={16} color={B.gold}/>,
-      action: ()=>{ irALeads("pipeline", "asesorado"); },
+      action: ()=>{ irALeads("pipeline", "cotizacion"); },
     },
     {
       key: "urgente",
@@ -4925,14 +4961,49 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
     ]}));
     setNota("");
   }
+  // Estado: si vamos a mover a "perdido", primero pedimos motivo
+  const [pidiendoMotivo, setPidiendoMotivo] = useState(null);  // null | "perdido" (etapa destino)
+  const [motivoSeleccionado, setMotivoSeleccionado] = useState("");
+
   function cambiarEtapa(nueva){
     const anterior=f.etapa;if(nueva===anterior)return;
-    const etL=ETAPAS.find(e=>e.id===nueva)?.label||nueva;
-    const etA=ETAPAS.find(e=>e.id===anterior)?.label||anterior;
-    const autoSinSeg=nueva==="otro";
-    setF(p=>({...p,etapa:nueva,sinSeguimiento:autoSinSeg?true:p.sinSeguimiento,
-      checklist:autoSinSeg?{...p.checklist,noInteres:true}:p.checklist,
-      seguimientos:[{id:uid(),fecha:hoy(),texto:`Etapa: ${etA} → ${etL}${autoSinSeg?" (sin seguimiento automático)":""}`,tipo:"nota",autor:usuario?.nombre||"",rol:usuario?.rol||"",_auto:true},...(p.seguimientos||[])]}));
+    // Si la nueva etapa es "perdido", abrir modal de motivo PRIMERO
+    if (nueva === "perdido") {
+      setMotivoSeleccionado(f.motivoPerdida || "");
+      setPidiendoMotivo("perdido");
+      return;
+    }
+    _aplicarCambioEtapa(nueva, null);
+  }
+
+  function _aplicarCambioEtapa(nueva, motivo) {
+    const anterior = f.etapa;
+    const etL = ETAPAS.find(e=>e.id===nueva)?.label || nueva;
+    const etA = ETAPAS.find(e=>e.id===anterior)?.label || anterior;
+    const autoSinSeg = nueva === "perdido";
+    const motivoLabel = motivo ? (MOTIVOS_PERDIDA.find(m=>m.v===motivo)?.l || motivo) : null;
+    const textoCambio = motivoLabel
+      ? `Etapa: ${etA} → ${etL} · Motivo: ${motivoLabel}`
+      : `Etapa: ${etA} → ${etL}${autoSinSeg?" (sin seguimiento automático)":""}`;
+    setF(p => ({
+      ...p,
+      etapa: nueva,
+      motivoPerdida: nueva === "perdido" ? (motivo || null) : null,
+      sinSeguimiento: autoSinSeg ? true : p.sinSeguimiento,
+      checklist: autoSinSeg ? { ...p.checklist, noInteres: true } : p.checklist,
+      seguimientos: [{
+        id: uid(), fecha: hoy(),
+        texto: textoCambio,
+        tipo: "nota", autor: usuario?.nombre || "", rol: usuario?.rol || "", _auto: true,
+      }, ...(p.seguimientos||[])],
+    }));
+  }
+
+  function confirmarMotivoPerdida() {
+    if (!motivoSeleccionado) return;
+    _aplicarCambioEtapa("perdido", motivoSeleccionado);
+    setPidiendoMotivo(null);
+    setMotivoSeleccionado("");
   }
   function guardar(){
     let payload = { ...f, ultimoContacto: hoy(),
@@ -5065,18 +5136,18 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
     if (sugIgnorada) return null;
     if (f.sinSeguimiento) return null;
     const chk = f.checklist || {};
-    const tieneCita = (f.seguimientos||[]).some(s => /cita|agenda/i.test(s.texto||""));
-    // Nuevo + algún contacto → Contactado/Seguimiento
+    const tieneCita = (f.seguimientos||[]).some(s => /cita|agenda|interesad/i.test(s.texto||""));
+    // Nuevo + algún contacto → Contactado
     if (f.etapa === "nuevo" && (chk.wa1 || chk.call1 || chk.email)) {
-      return { id: "seguimiento", razon: "Detectamos contacto inicial." };
+      return { id: "contactado", razon: "Detectamos contacto inicial." };
     }
-    // Seguimiento + cita en historial → Cita
-    if (f.etapa === "seguimiento" && tieneCita) {
-      return { id: "cita", razon: "Hay cita registrada en el historial." };
+    // Contactado + cita/interés en historial → Interesado
+    if (f.etapa === "contactado" && tieneCita) {
+      return { id: "interesado", razon: "Hay interés o cita registrada en el historial." };
     }
-    // Cita + WhatsApp/llamada después → Asesorado
-    if (f.etapa === "cita" && (chk.wa2 || chk.call2)) {
-      return { id: "asesorado", razon: "Hubo seguimiento posterior a la cita." };
+    // Interesado + WhatsApp/llamada de seguimiento → Cotización
+    if (f.etapa === "interesado" && (chk.wa2 || chk.call2)) {
+      return { id: "cotizacion", razon: "Hubo seguimiento posterior. Listo para cotizar." };
     }
     return null;
   }
@@ -5092,10 +5163,67 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
   ];
   function toggleCadencia(v) { setChk(v, !f.checklist?.[v]); }
 
-  // Etapas visibles del pipeline (no incluye terminales sinSeg)
-  const ETAPAS_PIPE = ETAPAS.filter(e => !e.sinSeg && e.id !== "no_localiz");
+  // Etapas visibles del pipeline (no incluye etapa "Perdido" que tiene sinSeg)
+  const ETAPAS_PIPE = ETAPAS.filter(e => !e.sinSeg);
 
-  return <MFModal onClose={onClose} width={720}>
+  return <Fragment>
+  {/* Modal de motivo de pérdida — se abre al mover el lead a "Perdido" */}
+  {pidiendoMotivo === "perdido" && (
+    <MFModal onClose={()=>{ setPidiendoMotivo(null); setMotivoSeleccionado(""); }} width={460}>
+      <div style={{marginBottom:18}}>
+        <div style={{fontSize:10, fontWeight:500, color:"rgba(10,31,68,0.45)", textTransform:"uppercase", letterSpacing:"0.18em", marginBottom:6}}>Etapa: Perdido</div>
+        <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:26, fontWeight:500, color:B.navy, letterSpacing:"-0.015em", lineHeight:1.1}}>Motivo de pérdida</div>
+        <div style={{fontSize:12.5, color:"rgba(10,31,68,0.55)", marginTop:6, lineHeight:1.5}}>Selecciona el motivo. Esto alimenta las métricas de tu cartera.</div>
+      </div>
+
+      <div style={{display:"flex", flexDirection:"column", gap:8}}>
+        {MOTIVOS_PERDIDA.map(m => {
+          const active = motivoSeleccionado === m.v;
+          return (
+            <button key={m.v} onClick={()=>setMotivoSeleccionado(m.v)}
+              style={{
+                padding:"12px 14px", borderRadius:10,
+                border:`1.5px solid ${active ? B.navy : "rgba(10,31,68,0.10)"}`,
+                background: active ? "rgba(10,31,68,0.04)" : B.white,
+                color: active ? B.navy : "rgba(10,31,68,0.75)",
+                fontFamily:"'Poppins',sans-serif", fontWeight: active ? 600 : 500,
+                fontSize:13, textAlign:"left", cursor:"pointer",
+                letterSpacing:"0.005em",
+                display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}>
+              <span>{m.l}</span>
+              {active && <IconCheck size={14} color={B.navy}/>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{display:"flex", gap:8, justifyContent:"flex-end", marginTop:20, paddingTop:16, borderTop:"1px solid rgba(10,31,68,0.06)"}}>
+        <button onClick={()=>{ setPidiendoMotivo(null); setMotivoSeleccionado(""); }}
+          style={{
+            padding:"9px 16px", borderRadius:8,
+            background:"transparent", border:"1px solid rgba(10,31,68,0.10)",
+            color:"rgba(10,31,68,0.65)",
+            fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+            cursor:"pointer",
+          }}>Cancelar</button>
+        <button onClick={confirmarMotivoPerdida}
+          disabled={!motivoSeleccionado}
+          style={{
+            padding:"9px 20px", borderRadius:8,
+            background: motivoSeleccionado ? B.redBright : "rgba(220,38,38,0.30)",
+            border:"none",
+            color:"#fff",
+            fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12,
+            cursor: motivoSeleccionado ? "pointer" : "not-allowed",
+            letterSpacing:"0.02em",
+          }}>Marcar como perdido</button>
+      </div>
+    </MFModal>
+  )}
+
+  <MFModal onClose={onClose} width={720}>
     {/* ═══ HEADER PREMIUM EDITORIAL ═══ */}
     <div style={{
       display:"flex", alignItems:"flex-start", gap:14, marginBottom:18,
@@ -5891,7 +6019,8 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         </div>
       </div>
     )}
-  </MFModal>;
+  </MFModal>
+  </Fragment>;
 }
 
 /* ═══════════════════════════════════════════
@@ -5933,6 +6062,15 @@ function sustituirVariables(texto, lead, usuario) {
    - Seguimientos: en frontend son array dentro del lead; en DB tabla aparte
 ═══════════════════════════════════════════ */
 function leadFromDB(row, seguimientos = []) {
+  // Migración automática de etapa legacy → nueva (transparente).
+  // Si la DB trae "cita"/"asesorado"/etc., la app la mapea a la nueva ID.
+  const etapaRaw = row.etapa || "nuevo";
+  const etapaMigrada = _ETAPA_MIGRACION[etapaRaw] || etapaRaw;
+  // Para etapas legacy que mapean a "perdido", asignar motivo por default si no existe.
+  const motivoFromDB = row.motivo_perdida || null;
+  const motivoMigrado = motivoFromDB
+    || (etapaMigrada === "perdido" ? _MOTIVO_DEFAULT_POR_ETAPA_LEGACY[etapaRaw] || null : null);
+
   return {
     id: row.id,
     nombre: row.nombre || "",
@@ -5942,7 +6080,8 @@ function leadFromDB(row, seguimientos = []) {
     producto: row.producto || "",
     estado: row.estado || "",
     ejecutivo: row.ejecutivo || "",
-    etapa: row.etapa || "nuevo",
+    etapa: etapaMigrada,
+    motivoPerdida: motivoMigrado,
     ultimoContacto: row.ultimo_contacto || hoy(),
     sinSeguimiento: !!row.sin_seguimiento,
     notas: row.notas || "",
@@ -5985,6 +6124,7 @@ function leadToDB(lead, adminId) {
     estado: lead.estado || null,
     ejecutivo: lead.ejecutivo || null,
     etapa: lead.etapa || "nuevo",
+    motivo_perdida: lead.motivoPerdida || null,
     ultimo_contacto: lead.ultimoContacto || null,
     sin_seguimiento: !!lead.sinSeguimiento,
     notas: lead.notas || null,
