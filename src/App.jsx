@@ -572,17 +572,19 @@ function ConfirmModal({titulo,mensaje,icono="⚠️",onConfirm,onCancel,textoCon
   );
 }
 
-// Catálogo de avatares pre-definidos (emoji-style, sin assets externos).
-// El usuario los elige desde Configuración → Perfil.
+// Catálogo de identidades visuales (6 opciones · 1 "inicial elegante" + 5 emoji).
+// El usuario las elige desde Configuración → Perfil.
 const AVATARES = [
-  { v:"hombre_ejecutivo", l:"Hombre ejecutivo", emoji:"👨‍💼" },
-  { v:"hombre_casual",    l:"Hombre casual",    emoji:"👨"    },
-  { v:"mujer_ejecutiva",  l:"Mujer ejecutiva",  emoji:"👩‍💼" },
-  { v:"mujer_casual",     l:"Mujer casual",     emoji:"👩"    },
-  { v:"emoji_sonriente",  l:"Emoji sonriente",  emoji:"😊"    },
+  { v:"inicial",   l:"Inicial elegante", emoji:null   },
+  { v:"estrella",  l:"Estrella",         emoji:"🌟"   },
+  { v:"mono",      l:"Mono",             emoji:"🐵"   },
+  { v:"dinero",    l:"Dinero",           emoji:"🤑"   },
+  { v:"check",     l:"Check",            emoji:"✔️"   },
+  { v:"cool",      l:"Cool",             emoji:"😎"   },
 ];
 
 function getAvatarEmoji(v) {
+  if (!v || v === "inicial") return null;
   return AVATARES.find(a => a.v === v)?.emoji || null;
 }
 
@@ -3106,7 +3108,313 @@ function ProximamenteItem({ titulo, sub }) {
   );
 }
 
-function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeIdleTimeout, accesibilidad, onChangeAccesibilidad, onChangeAvatar }) {
+/* ═══════════════════════════════════════════
+   CambiarPasswordCard · Acceso y seguridad
+   - Pide contraseña actual (verifica reautenticando contra Supabase)
+   - Nueva + confirmación (validación de coincidencia + mínimo 8 chars)
+═══════════════════════════════════════════ */
+function CambiarPasswordCard() {
+  const [actual, setActual] = useState("");
+  const [nueva, setNueva] = useState("");
+  const [conf, setConf] = useState("");
+  const [verActual, setVerActual] = useState(false);
+  const [verNueva, setVerNueva] = useState(false);
+  const [msg, setMsg] = useState(null);   // { tipo: "ok"|"err", text }
+  const [cargando, setCargando] = useState(false);
+
+  async function cambiar() {
+    setMsg(null);
+    if (!actual || !nueva || !conf) {
+      setMsg({ tipo: "err", text: "Completa todos los campos." });
+      return;
+    }
+    if (nueva.length < 8) {
+      setMsg({ tipo: "err", text: "La nueva contraseña debe tener mínimo 8 caracteres." });
+      return;
+    }
+    if (nueva !== conf) {
+      setMsg({ tipo: "err", text: "Las contraseñas no coinciden." });
+      return;
+    }
+    setCargando(true);
+    try {
+      // 1) Obtener el email del usuario actual
+      const { data: u } = await supabase.auth.getUser();
+      const email = u?.user?.email;
+      if (!email) {
+        setMsg({ tipo: "err", text: "No pudimos obtener tu correo. Vuelve a iniciar sesión." });
+        setCargando(false); return;
+      }
+      // 2) Reautenticar contra Supabase para validar la contraseña actual
+      const { error: vErr } = await supabase.auth.signInWithPassword({ email, password: actual });
+      if (vErr) {
+        setMsg({ tipo: "err", text: "La contraseña actual no es correcta." });
+        setCargando(false); return;
+      }
+      // 3) Cambiar a la nueva
+      const { error: upErr } = await supabase.auth.updateUser({ password: nueva });
+      if (upErr) {
+        setMsg({ tipo: "err", text: upErr.message || "No pudimos actualizar la contraseña." });
+        setCargando(false); return;
+      }
+      setMsg({ tipo: "ok", text: "Contraseña actualizada correctamente." });
+      setActual(""); setNueva(""); setConf("");
+    } catch (e) {
+      setMsg({ tipo: "err", text: "Algo salió mal. Intenta de nuevo." });
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  const inputStyle = {
+    width:"100%", padding:"10px 38px 10px 14px",
+    borderRadius:10, border:"1px solid rgba(10,31,68,0.10)",
+    background:"#FAFAF7", color:B.navy,
+    fontFamily:"'Poppins',sans-serif", fontSize:13.5,
+    outline:"none",
+  };
+
+  return (
+    <div style={{
+      background:"#fff",
+      border:"1px solid rgba(10,31,68,0.06)",
+      borderRadius:16,
+      padding:"22px 24px",
+      boxShadow:"var(--mf-shadow-xs)",
+      marginBottom:14,
+    }}>
+      <div style={{display:"flex", alignItems:"flex-start", gap:14, marginBottom:18}}>
+        <div style={{
+          width:42, height:42, borderRadius:10,
+          background:"rgba(10,31,68,0.05)",
+          border:"1px solid rgba(10,31,68,0.08)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          flexShrink:0,
+        }}>
+          <IconLock size={18} color={B.navy}/>
+        </div>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:20, fontWeight:500, color:B.navy, letterSpacing:"-0.01em",
+            marginBottom:4,
+          }}>Cambiar contraseña</div>
+          <div style={{fontSize:13, color:"rgba(10,31,68,0.60)", lineHeight:1.55}}>
+            Confirma tu contraseña actual antes de elegir una nueva.
+          </div>
+        </div>
+      </div>
+
+      <div style={{display:"flex", flexDirection:"column", gap:12}}>
+        {/* Actual */}
+        <div>
+          <div style={{fontSize:10.5, fontWeight:600, color:"rgba(10,31,68,0.55)", letterSpacing:"0.10em", textTransform:"uppercase", marginBottom:6}}>Contraseña actual</div>
+          <div style={{position:"relative"}}>
+            <input type={verActual?"text":"password"} value={actual} onChange={e=>setActual(e.target.value)}
+              placeholder="••••••••" autoComplete="current-password"
+              style={inputStyle}/>
+            <button type="button" onClick={()=>setVerActual(v=>!v)}
+              style={{position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", background:"transparent", border:"none", cursor:"pointer", padding:6, color:"rgba(10,31,68,0.45)"}}>
+              {verActual ? <IconEyeOff size={15}/> : <IconEye size={15}/>}
+            </button>
+          </div>
+        </div>
+
+        {/* Nueva */}
+        <div>
+          <div style={{fontSize:10.5, fontWeight:600, color:"rgba(10,31,68,0.55)", letterSpacing:"0.10em", textTransform:"uppercase", marginBottom:6}}>Nueva contraseña</div>
+          <div style={{position:"relative"}}>
+            <input type={verNueva?"text":"password"} value={nueva} onChange={e=>setNueva(e.target.value)}
+              placeholder="Mínimo 8 caracteres" autoComplete="new-password"
+              style={inputStyle}/>
+            <button type="button" onClick={()=>setVerNueva(v=>!v)}
+              style={{position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", background:"transparent", border:"none", cursor:"pointer", padding:6, color:"rgba(10,31,68,0.45)"}}>
+              {verNueva ? <IconEyeOff size={15}/> : <IconEye size={15}/>}
+            </button>
+          </div>
+        </div>
+
+        {/* Confirmar nueva */}
+        <div>
+          <div style={{fontSize:10.5, fontWeight:600, color:"rgba(10,31,68,0.55)", letterSpacing:"0.10em", textTransform:"uppercase", marginBottom:6}}>Confirmar nueva contraseña</div>
+          <input type={verNueva?"text":"password"} value={conf} onChange={e=>setConf(e.target.value)}
+            placeholder="Repite la nueva contraseña" autoComplete="new-password"
+            style={{...inputStyle, paddingRight:14}}/>
+          {nueva && conf && nueva !== conf && (
+            <div style={{fontSize:11, color:B.redBright, marginTop:5, letterSpacing:"0.005em"}}>Las contraseñas no coinciden.</div>
+          )}
+          {nueva && conf && nueva === conf && (
+            <div style={{fontSize:11, color:"#0a7c4a", marginTop:5, letterSpacing:"0.005em"}}>✓ Las contraseñas coinciden.</div>
+          )}
+        </div>
+
+        {msg && (
+          <div style={{
+            padding:"10px 13px", borderRadius:10,
+            background: msg.tipo === "ok" ? "rgba(10,124,74,0.06)" : "rgba(220,38,38,0.05)",
+            border: `1px solid ${msg.tipo === "ok" ? "rgba(10,124,74,0.22)" : "rgba(220,38,38,0.20)"}`,
+            color: msg.tipo === "ok" ? "#0a7c4a" : "#991b1b",
+            fontSize:12.5, lineHeight:1.45,
+          }}>{msg.text}</div>
+        )}
+
+        <div>
+          <button onClick={cambiar} disabled={cargando || !actual || !nueva || !conf || nueva !== conf}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:7,
+              padding:"10px 18px", borderRadius:10, border:"none",
+              background: (cargando || !actual || !nueva || !conf || nueva !== conf) ? "rgba(10,31,68,0.30)" : "linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+              color:"#fff",
+              fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:13,
+              cursor: cargando ? "wait" : (!actual || !nueva || !conf || nueva !== conf ? "not-allowed" : "pointer"),
+              boxShadow:"0 1px 2px rgba(10,31,68,0.10)",
+              letterSpacing:"0.02em",
+            }}>
+            {cargando ? <><IconLoader size={13} color="#fff"/> Actualizando…</> : "Actualizar contraseña"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   DatosYRespaldoCard · Datos y respaldo
+   - Exportar leads (reutiliza la lógica de Excel de la pestaña Importar/Exportar)
+   - Exportar métricas (resumen ejecutivo en JSON)
+   - Roadmap: respaldo automático, restaurar, importar
+═══════════════════════════════════════════ */
+function DatosYRespaldoCard({ leads = [] }) {
+  async function exportarLeadsXLSX() {
+    try {
+      const { default: XLSX } = await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
+      const data = leads.map(l => ({
+        "Nombre":             l.nombre,
+        "Edad":               l.edad,
+        "Teléfono":           l.telefono,
+        "Mail":               l.correo,
+        "Estado":             l.estado,
+        "Producto solicitado": l.producto,
+        "Ejecutivo":          l.ejecutivo || "",
+        "Etapa":              ETAPAS.find(e => e.id === l.etapa)?.label || "",
+        "Motivo pérdida":     l.motivoPerdida ? (MOTIVOS_PERDIDA.find(m=>m.v===l.motivoPerdida)?.l || l.motivoPerdida) : "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Leads");
+      XLSX.writeFile(wb, `marflow_leads_${hoy()}.xlsx`);
+      window.__mfToast?.(`${leads.length} leads exportados.`, "success");
+    } catch {
+      window.__mfToast?.("No pudimos exportar el archivo.", "error");
+    }
+  }
+
+  function exportarMetricasJSON() {
+    try {
+      const calificados = leads.filter(l => !l.sinSeguimiento && _ETAPAS_CALIFICADAS.includes(l.etapa)).length;
+      const noCalificados = leads.filter(l => l.sinSeguimiento || _ETAPAS_NO_CALIFICADAS.includes(l.etapa)).length;
+      const cierres = leads.filter(l => l.etapa === "venta").length;
+      const conv = calificados > 0 ? Math.round((cierres / calificados) * 100) : 0;
+      const metricas = {
+        fecha_exportacion: new Date().toISOString(),
+        total_leads: leads.length,
+        leads_calificados: calificados,
+        leads_no_calificados: noCalificados,
+        cierres: cierres,
+        conversion_pct: conv,
+        distribucion_por_etapa: ETAPAS.map(e => ({
+          etapa: e.label,
+          cantidad: leads.filter(l => l.etapa === e.id).length,
+        })),
+        motivos_perdida: MOTIVOS_PERDIDA.map(m => ({
+          motivo: m.l,
+          cantidad: leads.filter(l => l.motivoPerdida === m.v).length,
+        })),
+      };
+      const blob = new Blob([JSON.stringify(metricas, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `marflow_metricas_${hoy()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      window.__mfToast?.("Métricas exportadas.", "success");
+    } catch {
+      window.__mfToast?.("No pudimos exportar las métricas.", "error");
+    }
+  }
+
+  return (
+    <>
+      <div style={{
+        background:"#fff",
+        border:"1px solid rgba(10,31,68,0.06)",
+        borderRadius:16,
+        padding:"22px 24px",
+        boxShadow:"var(--mf-shadow-xs)",
+        marginBottom:14,
+      }}>
+        <div style={{display:"flex", alignItems:"flex-start", gap:14, marginBottom:14}}>
+          <div style={{
+            width:42, height:42, borderRadius:10,
+            background:"rgba(198,169,107,0.10)",
+            border:"1px solid rgba(198,169,107,0.20)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            flexShrink:0,
+          }}>
+            <IconDownload size={18} color={B.gold}/>
+          </div>
+          <div style={{flex:1, minWidth:0}}>
+            <div style={{
+              fontFamily:"'Cormorant Garamond', serif",
+              fontSize:20, fontWeight:500, color:B.navy, letterSpacing:"-0.01em",
+              marginBottom:4,
+            }}>Exportar información</div>
+            <div style={{fontSize:13, color:"rgba(10,31,68,0.60)", lineHeight:1.55}}>
+              Descarga tu cartera o un resumen ejecutivo para uso externo.
+            </div>
+          </div>
+        </div>
+
+        <div style={{display:"flex", gap:10, flexWrap:"wrap"}}>
+          <button onClick={exportarLeadsXLSX}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:7,
+              padding:"10px 16px", borderRadius:10,
+              border:`1px solid ${B.navy}`, background:B.navy, color:"#fff",
+              fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12.5,
+              cursor:"pointer", letterSpacing:"0.02em",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.background="#122550"; e.currentTarget.style.transform="translateY(-1px)";}}
+            onMouseLeave={e=>{e.currentTarget.style.background=B.navy; e.currentTarget.style.transform="translateY(0)";}}>
+            <IconDownload size={13} color="#fff"/> Exportar leads
+          </button>
+          <button onClick={exportarMetricasJSON}
+            style={{
+              display:"inline-flex", alignItems:"center", gap:7,
+              padding:"10px 16px", borderRadius:10,
+              border:"1px solid rgba(10,31,68,0.10)",
+              background:"#fff", color:"rgba(10,31,68,0.85)",
+              fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12.5,
+              cursor:"pointer", letterSpacing:"0.02em",
+              transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+            }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=B.gold; e.currentTarget.style.background="rgba(198,169,107,0.04)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.10)"; e.currentTarget.style.background="#fff";}}>
+            <IconBarChart size={13}/> Exportar métricas
+          </button>
+        </div>
+      </div>
+
+      <ProximamenteItem titulo="Respaldo automático" sub="Snapshot diario de toda tu cartera, seguro y cifrado."/>
+      <ProximamenteItem titulo="Restaurar información" sub="Vuelve a un punto anterior si algo sale mal."/>
+      <ProximamenteItem titulo="Importar datos" sub="Trae leads desde otro CRM o un Excel masivo."/>
+    </>
+  );
+}
+
+function Configuracion({ usuario, cuentas, setCuentas, leads, idleTimeoutMin, onChangeIdleTimeout, accesibilidad, onChangeAccesibilidad, onChangeAvatar }) {
   const esAdminConfig = ["admin","superadmin"].includes(usuario?.rol);
   const [bioActivada, setBioActivada] = useState(() => biometriaActiva(usuario?.id));
   const [bioPlataforma, setBioPlataforma] = useState(true);
@@ -3138,17 +3446,11 @@ function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeI
 
   return (
     <div className="mf-fade-in" style={{maxWidth:760, margin:"0 auto", width:"100%"}}>
-      {/* ═══ Header editorial ═══ */}
-      <div style={{marginBottom:24}}>
-        <div style={{
-          fontSize:10.5, fontWeight:500,
-          color:"rgba(10,31,68,0.45)",
-          textTransform:"uppercase", letterSpacing:"0.22em",
-          marginBottom:8,
-        }}>Preferencias</div>
+      {/* ═══ Header editorial (sin eyebrow "Preferencias") ═══ */}
+      <div style={{marginBottom:20}}>
         <h1 style={{
           fontFamily:"'Cormorant Garamond', serif",
-          fontSize:"clamp(26px, 6vw, 34px)", fontWeight:500,
+          fontSize:"clamp(28px, 6vw, 36px)", fontWeight:500,
           color:"#0A1F44", letterSpacing:"-0.02em",
           margin:"0 0 8px", lineHeight:1.1,
         }}>Configuración</h1>
@@ -3163,11 +3465,28 @@ function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeI
           ACORDEÓN · 5 GRUPOS
       ═══════════════════════════════════════════ */}
 
+      {/* ▸ HISTORIAL (movido al inicio) ───────── */}
+      <AccordionGroup
+        eyebrow="Historial"
+        titulo="Actividad y bitácora"
+        sub="Todo lo que ha pasado en tu cuenta y la de tu equipo."
+        defaultOpen={false}
+        icon={<IconClock size={16} color="#C6A96B"/>}
+      >
+        <SeccionActividadReciente usuario={usuario}/>
+        <div style={{marginTop:14}}>
+          <ProximamenteItem titulo="Cambios realizados" sub="Quién modificó qué lead, cuándo, y qué cambió."/>
+          <ProximamenteItem titulo="Logs del sistema" sub="Eventos técnicos para auditoría y soporte."/>
+          <ProximamenteItem titulo="Leads modificados" sub="Filtra por lead y ve todo su historial de ediciones."/>
+          <ProximamenteItem titulo="Acciones del equipo" sub="Resumen agrupado por asistente o admin."/>
+        </div>
+      </AccordionGroup>
+
       {/* ▸ PERFIL ───────────────────────────────── */}
       <AccordionGroup
         eyebrow="Perfil"
-        titulo="Tu identidad visual"
-        sub="Elige un avatar o usa tu inicial."
+        titulo="Perfil"
+        sub="Foto, avatar y datos de usuario."
         defaultOpen={true}
         icon={<IconUser size={16} color="#C6A96B"/>}
       >
@@ -3248,14 +3567,16 @@ function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeI
         </div>
       </AccordionGroup>
 
-      {/* ▸ ACCESO ───────────────────────────────── */}
+      {/* ▸ ACCESO Y SEGURIDAD ─────────────────── */}
       <AccordionGroup
         eyebrow="Acceso"
-        titulo="Identidad y sesión"
-        sub="Cómo te identifica MarFlow en este dispositivo."
+        titulo="Acceso y seguridad"
+        sub="Contraseña, biométrico y acceso al dispositivo."
         defaultOpen={false}
         icon={<IconLock size={16} color="#C6A96B"/>}
       >
+        {/* Cambiar contraseña */}
+        <CambiarPasswordCard/>
         {/* Tarjeta biometría */}
         <div style={{
           background:"#fff",
@@ -3430,7 +3751,6 @@ function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeI
         {/* Roadmap items */}
         <ProximamenteItem titulo="Roles y permisos" sub="Control granular de qué puede ver/editar cada miembro."/>
         <ProximamenteItem titulo="Sesiones activas" sub="Revisa y cierra sesiones en otros dispositivos."/>
-        <ProximamenteItem titulo="Cambio de contraseña" sub="Actualiza tu contraseña sin salir de la app."/>
       </AccordionGroup>
 
       {/* ▸ USUARIOS (admin only) ───────────────── */}
@@ -3479,20 +3799,40 @@ function Configuracion({ usuario, cuentas, setCuentas, idleTimeoutMin, onChangeI
         </div>
       </AccordionGroup>
 
-      {/* ▸ HISTORIAL ───────────────────────────── */}
+      {/* ▸ DATOS Y RESPALDO (NUEVO) ───────────── */}
       <AccordionGroup
-        eyebrow="Historial"
-        titulo="Actividad y bitácora"
-        sub="Todo lo que ha pasado en tu cuenta y la de tu equipo."
-        icon={<IconClock size={16} color="#C6A96B"/>}
+        eyebrow="Datos"
+        titulo="Datos y respaldo"
+        sub="Exporta información y administra respaldos."
+        icon={<IconDownload size={16} color="#C6A96B"/>}
       >
-        <SeccionActividadReciente usuario={usuario}/>
+        <DatosYRespaldoCard leads={leads}/>
+      </AccordionGroup>
 
+      {/* ▸ MODO VACACIONES (NUEVO · placeholder) ─ */}
+      <AccordionGroup
+        eyebrow="Disponibilidad"
+        titulo="Modo vacaciones"
+        sub="Organiza pendientes antes de ausentarte."
+        icon={<IconClock2 size={16} color="#C6A96B"/>}
+      >
+        <div style={{
+          background:"#fff",
+          border:"1px solid rgba(10,31,68,0.06)",
+          borderRadius:14,
+          padding:"20px 22px",
+          boxShadow:"var(--mf-shadow-xs)",
+        }}>
+          <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:18, fontWeight:500, color:B.navy, marginBottom:6}}>Próximamente</div>
+          <div style={{fontSize:12.5, color:"rgba(10,31,68,0.60)", lineHeight:1.55, marginBottom:14}}>
+            Configura un mensaje automático, transfiere leads a un asistente y pausa recordatorios mientras estás fuera. Tu equipo recibirá un resumen al día siguiente.
+          </div>
+        </div>
         <div style={{marginTop:14}}>
-          <ProximamenteItem titulo="Cambios realizados" sub="Quién modificó qué lead, cuándo, y qué cambió."/>
-          <ProximamenteItem titulo="Logs del sistema" sub="Eventos técnicos para auditoría y soporte."/>
-          <ProximamenteItem titulo="Leads modificados" sub="Filtra por lead y ve todo su historial de ediciones."/>
-          <ProximamenteItem titulo="Acciones del equipo" sub="Resumen agrupado por asistente o admin."/>
+          <ProximamenteItem titulo="Activar modo vacaciones" sub="Define fechas de salida y regreso."/>
+          <ProximamenteItem titulo="Mensaje automático para clientes" sub="Plantilla de respuesta mientras estás fuera."/>
+          <ProximamenteItem titulo="Transferencia temporal" sub="Asigna tus leads críticos a un asistente."/>
+          <ProximamenteItem titulo="Resumen al regresar" sub="Reporte de lo que pasó en tu cartera."/>
         </div>
       </AccordionGroup>
 
@@ -11243,8 +11583,9 @@ export default function App() {
     .mf-app{width:100%;max-width:100vw;min-height:100%;min-height:-webkit-fill-available;overflow-x:hidden;overflow-y:auto;position:relative;}
     .mf-header{position:sticky;top:0;z-index:400;width:100%;max-width:100vw;background:#0A1F44;border-bottom:1px solid rgba(198,169,107,0.15);box-shadow:0 2px 16px rgba(10,31,68,.3);}
     .mf-header{background:linear-gradient(180deg,#0A1F44 0%,#0c2249 100%)!important;border-bottom:1px solid rgba(198,169,107,0.10)!important;box-shadow:0 1px 0 rgba(10,31,68,.04)!important;}
-    .mf-header-row1{display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:52px;gap:10px;width:100%;}
-    .mf-header-row2{display:flex;align-items:center;padding:0 12px 8px;gap:3px;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:transparent;}
+    .mf-header-row1{display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:44px;gap:10px;width:100%;}
+    .mf-header-row2{display:flex;align-items:center;padding:0 12px 6px;gap:3px;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:transparent;}
+    @media(min-width:768px){.mf-header-row1{height:52px;}.mf-header-row2{padding:0 12px 8px;}}
     .mf-header-row2::-webkit-scrollbar{display:none;}
     .mf-nav-btn{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:6px 12px;border-radius:8px;border:none;font-family:'Poppins',sans-serif;font-weight:500;font-size:12px;letter-spacing:0.01em;cursor:pointer;transition:background-color var(--mf-t-fast) var(--mf-ease-out),color var(--mf-t-fast) var(--mf-ease-out);white-space:nowrap;-webkit-tap-highlight-color:transparent;position:relative;user-select:none;-webkit-user-select:none;}
     .mf-nav-btn.active{background:rgba(255,255,255,0.10);color:#fff;}
@@ -11732,6 +12073,7 @@ export default function App() {
           usuario={usuario}
           cuentas={cuentas}
           setCuentas={cs=>{setCuentas(cs);LS.set("mf_cuentas",cs);}}
+          leads={leads}
           idleTimeoutMin={idleTimeoutMin}
           onChangeIdleTimeout={(min)=>{setIdleTimeoutMin(min); setIdleTimeoutMinLS(min);}}
           accesibilidad={accesibilidad}
