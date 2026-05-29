@@ -3580,43 +3580,85 @@ function ActividadReciente({leads}) {
 /* ===========================================
    MÉTRICAS
 =========================================== */
+/* ═══════════════════════════════════════════
+   MÉTRICAS · Dashboard ejecutivo para asesores de seguros.
+   Foco operativo: calidad de leads, conversión, valor comercial.
+═══════════════════════════════════════════ */
+// Etapas que cuentan como "lead calificado" (con potencial real de cierre)
+const _ETAPAS_CALIFICADAS = ["cita", "asesorado", "seguimiento", "cierre"];
+// Etapas que cuentan como "lead no calificado" (descartado u operativamente muerto)
+const _ETAPAS_NO_CALIFICADAS = ["no_localiz", "otro"];
+
 function Metricas({leads}) {
-  const total = leads.length || 1;
-  const activos = leads.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa)).length;
-  const cierres = leads.filter(l=>l.etapa==="cierre").length;
-  const perdidos = leads.filter(l=>l.etapa==="otro"||l.sinSeguimiento).length;
-  const contactados = leads.filter(l=>(l.checklist?.wa1||l.checklist?.call1)&&!l.sinSeguimiento).length;
-  const conv = Math.round((cierres/total)*100);
-  const contRatio = Math.round((contactados/total)*100);
-  // Distribución por Estado de oportunidad (reemplaza calientes/tibios/fríos)
-  const distEstadoOp = ESTADOS_OPORTUNIDAD.map(e => ({
-    l: e.l,
-    v: leads.filter(l => getEstadoOportunidad(l)?.v === e.v).length,
-    c: e.color,
-  }));
-  const sinEstado = leads.filter(l => !l.sinSeguimiento && !getEstadoOportunidad(l)).length;
+  // ── Helpers de fecha ──
+  const ahora = new Date();
+  const mesActual = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,"0")}`;
+  const mesAntDate = new Date(ahora.getFullYear(), ahora.getMonth()-1, 1);
+  const mesAnt = `${mesAntDate.getFullYear()}-${String(mesAntDate.getMonth()+1).padStart(2,"0")}`;
 
-  // KPIs principales
-  const kpis = [
-    { l:"Conversión",      v:`${conv}%`,        sub:"Cierres / total",       dot:B.gold,      icon:<IconTrendingUp size={13} color="rgba(10,31,68,0.40)"/> },
-    { l:"Contactados",     v:`${contRatio}%`,   sub:"Han recibido contacto", dot:B.blue,      icon:<IconPhoneCall  size={13} color="rgba(10,31,68,0.40)"/> },
-    { l:"Activos",         v:activos,           sub:"En seguimiento",        dot:B.navy,      icon:<IconLayers     size={13} color="rgba(10,31,68,0.40)"/> },
-    { l:"Cierres",         v:cierres,           sub:"Ventas concretadas",    dot:B.green,     icon:<IconStar       size={13} color="rgba(10,31,68,0.40)"/> },
-    { l:"Sin seguimiento", v:perdidos,          sub:"Perdidos o descartados",dot:B.redBright, icon:<IconMinusCircle size={13} color="rgba(10,31,68,0.40)"/> },
-  ];
+  // ── Clasificación ──
+  const calificadosArr = leads.filter(l =>
+    !l.sinSeguimiento && _ETAPAS_CALIFICADAS.includes(l.etapa)
+  );
+  const noCalificadosArr = leads.filter(l =>
+    l.sinSeguimiento || _ETAPAS_NO_CALIFICADAS.includes(l.etapa)
+  );
+  const cierresArr = leads.filter(l => l.etapa === "cierre");
 
-  const temps = distEstadoOp;
+  const calificados = calificadosArr.length;
+  const noCalificados = noCalificadosArr.length;
+  const totalClasif = calificados + noCalificados;
+  const pctNoCal = totalClasif > 0 ? Math.round((noCalificados / totalClasif) * 100) : 0;
+  const conv = calificados > 0 ? Math.round((cierresArr.length / calificados) * 100) : 0;
+
+  // ── Deltas mes vs mes anterior ──
+  const calMes = calificadosArr.filter(l => l.mesCreacion === mesActual).length;
+  const calAnt = calificadosArr.filter(l => l.mesCreacion === mesAnt).length;
+  const deltaCal = calMes - calAnt;
+  const noCalMes = noCalificadosArr.filter(l => l.mesCreacion === mesActual).length;
+  const noCalAnt = noCalificadosArr.filter(l => l.mesCreacion === mesAnt).length;
+  const deltaNoCal = noCalMes - noCalAnt;
+
+  // ── Valor comercial del pipeline ──
+  const oportActivas = leads.filter(l =>
+    !l.sinSeguimiento && ["cita","asesorado","seguimiento"].includes(l.etapa)
+  ).length;
+  const referidosMes = leads.filter(l =>
+    l.esReferido && l.mesCreacion === mesActual
+  ).length;
+  const cierresMes = cierresArr.filter(l =>
+    l.mesCreacion === mesActual || (l.ultimoContacto || "").startsWith(mesActual)
+  ).length;
+
+  // ── Datos para gráfica: últimos 6 meses ──
+  const ultimos6 = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(ahora.getFullYear(), ahora.getMonth() - i, 1);
+    const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    const cal = leads.filter(l => !l.sinSeguimiento && _ETAPAS_CALIFICADAS.includes(l.etapa) && l.mesCreacion === k).length;
+    const noCal = leads.filter(l => (l.sinSeguimiento || _ETAPAS_NO_CALIFICADAS.includes(l.etapa)) && l.mesCreacion === k).length;
+    ultimos6.push({ k, label: MESES[d.getMonth()].slice(0,3), cal, noCal });
+  }
+  const maxBar = Math.max(1, ...ultimos6.flatMap(m => [m.cal, m.noCal]));
+
+  // ── Helpers visuales del componente ──
+  const fmtDelta = (n) => n === 0 ? "Sin variación" : n > 0 ? `↑ ${n} vs mes anterior` : `↓ ${Math.abs(n)} vs mes anterior`;
+  const deltaColor = (n, positiveGood = true) => {
+    if (n === 0) return "rgba(10,31,68,0.45)";
+    const isPositive = (n > 0) === positiveGood;
+    return isPositive ? "#0a7c4a" : "#dc2626";
+  };
 
   return (
     <div className="mf-fade-in" style={{maxWidth:1200, margin:"0 auto"}}>
       {/* ═══ Hero editorial ═══ */}
-      <div style={{marginBottom:32}}>
+      <div style={{marginBottom:28}}>
         <div style={{
           fontSize:10.5, fontWeight:500,
           color:"rgba(10,31,68,0.45)",
           textTransform:"uppercase", letterSpacing:"0.22em",
           marginBottom:10,
-        }}>Análisis · Tu cartera</div>
+        }}>Análisis · Cartera ejecutiva</div>
         <h1 style={{
           fontFamily:"'Cormorant Garamond', serif",
           fontSize:"clamp(30px, 4.8vw, 42px)",
@@ -3630,218 +3672,309 @@ function Metricas({leads}) {
           color:"rgba(10,31,68,0.50)",
           margin:0, fontWeight:400, lineHeight:1.5,
           fontStyle:"italic",
-        }}>Lo que los números dicen sobre tu pipeline.</p>
+        }}>Calidad de leads, conversión y oportunidades en movimiento.</p>
       </div>
 
-      {/* ═══ 5 KPIs principales — estilo banca privada ═══ */}
+      <GoldDivider marginY={16}/>
+
+      {/* ═══ 3 KPIs HERO ═══ */}
       <div style={{
         display:"grid",
-        gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",
+        gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",
         gap:14,
         marginBottom:32,
       }}>
-        {kpis.map((s,i) => (
-          <div key={i} className={`mf-fade-up mf-stagger-${(i%4)+1}`}
-            style={{
-              background:B.white,
-              border:"1px solid rgba(10,31,68,0.06)",
-              borderRadius:16,
-              padding:"22px 22px 18px",
-              boxShadow:"var(--mf-shadow-xs)",
-              transition:"box-shadow var(--mf-t-normal) var(--mf-ease-out), transform var(--mf-t-normal) var(--mf-ease-out)",
-            }}
-            onMouseEnter={e=>{e.currentTarget.style.boxShadow="var(--mf-shadow-md)"; e.currentTarget.style.transform="translateY(-2px)";}}
-            onMouseLeave={e=>{e.currentTarget.style.boxShadow="var(--mf-shadow-xs)"; e.currentTarget.style.transform="translateY(0)";}}>
-            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
-              <div style={{display:"flex", alignItems:"center", gap:7}}>
-                <span style={{width:6,height:6,borderRadius:"50%",background:s.dot}}/>
-                <span style={{
-                  fontSize:10, fontWeight:600,
-                  color:"rgba(10,31,68,0.50)",
-                  textTransform:"uppercase", letterSpacing:"0.12em",
-                }}>{s.l}</span>
-              </div>
-              {s.icon}
-            </div>
-            <div style={{
-              fontFamily:"'Cormorant Garamond', serif",
-              fontSize:"clamp(36px, 4.5vw, 48px)",
-              fontWeight:500, lineHeight:1,
-              letterSpacing:"-0.02em",
-              color:B.navy,
-              fontVariantNumeric:"tabular-nums",
-              marginBottom:8,
-            }}><KpiNumber value={s.v}/></div>
-            <div style={{
-              fontSize:11.5, color:"rgba(10,31,68,0.45)",
-              letterSpacing:"0.005em",
-            }}>{s.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Separador editorial muy sutil */}
-      <div style={{
-        height:1,
-        background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.06), transparent)",
-        margin:"4px 0 28px",
-      }}/>
-
-      {/* ═══ 2 cards de detalle ═══ */}
-      <div style={{
-        display:"grid",
-        gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",
-        gap:18,
-      }}>
-        {/* Temperatura de leads */}
+        {/* Leads calificados */}
         <div className="mf-fade-up mf-stagger-1" style={{
           background:B.white,
           border:"1px solid rgba(10,31,68,0.06)",
           borderRadius:16,
-          padding:"22px 24px",
+          padding:"22px 22px 20px",
           boxShadow:"var(--mf-shadow-xs)",
+          transition:"box-shadow var(--mf-t-normal) var(--mf-ease-out), transform var(--mf-t-normal) var(--mf-ease-out)",
         }}>
-          <div style={{display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:18}}>
-            <div style={{
-              fontFamily:"'Cormorant Garamond', serif",
-              fontSize:22, fontWeight:500,
-              letterSpacing:"-0.01em",
-              color:B.navy,
-            }}>Estado de oportunidad</div>
-            <div style={{
-              fontSize:10, fontWeight:500,
-              color:"rgba(10,31,68,0.40)",
-              textTransform:"uppercase", letterSpacing:"0.15em",
-            }}>Distribución</div>
+          <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:10}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:"#0a7c4a"}}/>
+            <span style={{fontSize:10, fontWeight:600, color:"rgba(10,31,68,0.50)", textTransform:"uppercase", letterSpacing:"0.14em"}}>
+              Leads calificados
+            </span>
           </div>
-          {temps.map(t => {
-            const pct = Math.round((t.v/total)*100);
-            return (
-              <div key={t.l} style={{marginBottom:16}}>
-                <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:6}}>
-                  <span style={{
-                    display:"inline-flex", alignItems:"center", gap:8,
-                    fontSize:13, fontWeight:500,
-                    color:"rgba(10,31,68,0.85)",
-                  }}>
-                    <span style={{width:7,height:7,borderRadius:"50%",background:t.c}}/>
-                    {t.l}
-                  </span>
-                  <span style={{
-                    fontFamily:"'Cormorant Garamond', serif",
-                    fontSize:20, fontWeight:500,
-                    color:B.navy, lineHeight:1,
-                    fontVariantNumeric:"tabular-nums",
-                  }}>{t.v}</span>
-                </div>
-                <div style={{
-                  height:3, background:"rgba(10,31,68,0.05)", borderRadius:2,
-                  overflow:"hidden",
-                }}>
-                  <div style={{
-                    height:"100%", width:`${pct}%`,
-                    background:t.c, borderRadius:2,
-                    transition:"width var(--mf-t-slow) var(--mf-ease-out)",
-                  }}/>
-                </div>
-              </div>
-            );
-          })}
           <div style={{
-            marginTop:14, paddingTop:14,
-            borderTop:"1px solid rgba(10,31,68,0.06)",
-            display:"flex", justifyContent:"space-between", alignItems:"center",
-            fontSize:11, color:"rgba(10,31,68,0.45)",
-          }}>
-            <span style={{letterSpacing:"0.01em"}}>Total leads</span>
-            <span style={{
-              fontFamily:"'Cormorant Garamond', serif",
-              fontSize:18, fontWeight:500,
-              color:B.navy, lineHeight:1,
-              fontVariantNumeric:"tabular-nums",
-            }}>{leads.length}</span>
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:"clamp(40px, 5vw, 54px)",
+            fontWeight:500, lineHeight:1,
+            letterSpacing:"-0.025em",
+            color:B.navy,
+            fontVariantNumeric:"tabular-nums",
+            marginBottom:6,
+          }}><KpiNumber value={calificados}/></div>
+          <div style={{fontSize:11.5, color:"rgba(10,31,68,0.45)", marginBottom:6}}>
+            Cita · Asesorado · Seguimiento · Cierre
           </div>
+          <div style={{
+            fontSize:12, fontWeight:500,
+            color: deltaColor(deltaCal, true),
+            letterSpacing:"0.01em",
+          }}>{fmtDelta(deltaCal)}</div>
         </div>
 
-        {/* Pipeline por etapa */}
+        {/* Leads no calificados */}
         <div className="mf-fade-up mf-stagger-2" style={{
           background:B.white,
           border:"1px solid rgba(10,31,68,0.06)",
           borderRadius:16,
-          padding:"22px 24px",
+          padding:"22px 22px 20px",
           boxShadow:"var(--mf-shadow-xs)",
         }}>
-          <div style={{display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:18}}>
-            <div style={{
-              fontFamily:"'Cormorant Garamond', serif",
-              fontSize:22, fontWeight:500,
-              letterSpacing:"-0.01em",
-              color:B.navy,
-            }}>Distribución por etapa</div>
-            <div style={{
-              fontSize:10, fontWeight:500,
-              color:"rgba(10,31,68,0.40)",
-              textTransform:"uppercase", letterSpacing:"0.15em",
-            }}>Pipeline</div>
+          <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:10}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:"#9ca3af"}}/>
+            <span style={{fontSize:10, fontWeight:600, color:"rgba(10,31,68,0.50)", textTransform:"uppercase", letterSpacing:"0.14em"}}>
+              Leads no calificados
+            </span>
           </div>
-          {ETAPAS.map(et => {
-            const cnt = leads.filter(l => l.etapa === et.id).length;
-            const pct = Math.round((cnt/total)*100);
-            return (
-              <div key={et.id} style={{marginBottom:12}}>
-                <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:5}}>
-                  <span style={{
-                    display:"inline-flex", alignItems:"center", gap:8,
-                    fontSize:12.5, fontWeight:500,
-                    color:"rgba(10,31,68,0.80)",
-                  }}>
-                    <span style={{width:6,height:6,borderRadius:"50%",background:et.color}}/>
-                    {et.label.replace(/[¡⭐!]/g,"").trim()}
-                  </span>
-                  <span style={{
-                    fontSize:13, fontWeight:500,
-                    color:cnt > 0 ? B.navy : "rgba(10,31,68,0.30)",
-                    fontVariantNumeric:"tabular-nums",
-                  }}>{cnt}</span>
-                </div>
-                <div style={{
-                  height:3, background:"rgba(10,31,68,0.05)", borderRadius:2,
-                  overflow:"hidden",
-                }}>
-                  <div style={{
-                    height:"100%", width:`${pct}%`,
-                    background:et.color, borderRadius:2,
-                    transition:"width var(--mf-t-slow) var(--mf-ease-out)",
-                    opacity: cnt > 0 ? 0.85 : 0,
-                  }}/>
-                </div>
-              </div>
-            );
-          })}
+          <div style={{
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:"clamp(40px, 5vw, 54px)",
+            fontWeight:500, lineHeight:1,
+            letterSpacing:"-0.025em",
+            color:"rgba(10,31,68,0.65)",
+            fontVariantNumeric:"tabular-nums",
+            marginBottom:6,
+          }}><KpiNumber value={noCalificados}/></div>
+          <div style={{fontSize:11.5, color:"rgba(10,31,68,0.45)", marginBottom:6}}>
+            No localizable · Sin interés · Otro
+          </div>
+          <div style={{
+            fontSize:12, fontWeight:500,
+            color: "rgba(10,31,68,0.55)",
+            letterSpacing:"0.01em",
+          }}>{pctNoCal}% del total clasificado</div>
+        </div>
+
+        {/* Conversión de cierre — DESTACADO con borde gold */}
+        <div className="mf-fade-up mf-stagger-3" style={{
+          background:"linear-gradient(165deg, rgba(198,169,107,0.04) 0%, rgba(255,255,255,1) 100%)",
+          border:`1.5px solid ${B.goldBorder || "rgba(198,169,107,0.45)"}`,
+          borderRadius:16,
+          padding:"22px 22px 20px",
+          boxShadow:"0 4px 18px rgba(198,169,107,0.10), var(--mf-shadow-xs)",
+        }}>
+          <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:10}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:B.gold}}/>
+            <span style={{fontSize:10, fontWeight:600, color:B.gold, textTransform:"uppercase", letterSpacing:"0.14em"}}>
+              Conversión de cierre
+            </span>
+          </div>
+          <div style={{
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:"clamp(48px, 6vw, 64px)",
+            fontWeight:500, lineHeight:1,
+            letterSpacing:"-0.03em",
+            color:B.navy,
+            fontVariantNumeric:"tabular-nums",
+            marginBottom:6,
+          }}><KpiNumber value={conv}/><span style={{fontSize:"0.5em", color:B.gold, marginLeft:4}}>%</span></div>
+          <div style={{fontSize:11.5, color:"rgba(10,31,68,0.55)", letterSpacing:"0.005em"}}>
+            <strong style={{color:B.navy, fontWeight:600, fontVariantNumeric:"tabular-nums"}}>{cierresArr.length}</strong> cierres sobre <strong style={{color:B.navy, fontWeight:600, fontVariantNumeric:"tabular-nums"}}>{calificados}</strong> calificados
+          </div>
         </div>
       </div>
 
-      {/* Nota footer editorial */}
+      {/* ═══ GRÁFICA · Calidad mes a mes ═══ */}
       <div style={{
-        marginTop:32, padding:"18px 22px",
-        background:"rgba(248,246,242,0.6)",
-        border:"1px solid rgba(10,31,68,0.04)",
-        borderRadius:14,
-        display:"flex", alignItems:"flex-start", gap:12,
+        background:B.white,
+        border:"1px solid rgba(10,31,68,0.06)",
+        borderRadius:16,
+        padding:"22px 22px 26px",
+        boxShadow:"var(--mf-shadow-xs)",
+        marginBottom:32,
       }}>
-        <div style={{flexShrink:0, color:"rgba(198,169,107,0.65)", marginTop:2}}>
-          <IconBarChart size={18} color="rgba(198,169,107,0.65)"/>
+        <div style={{display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:6, flexWrap:"wrap", gap:8}}>
+          <div style={{
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:22, fontWeight:500,
+            letterSpacing:"-0.01em",
+            color:B.navy,
+          }}>Calidad mensual</div>
+          <div style={{fontSize:10, fontWeight:500, color:"rgba(10,31,68,0.40)", textTransform:"uppercase", letterSpacing:"0.18em"}}>
+            Últimos 6 meses
+          </div>
         </div>
-        <div>
+        <div style={{fontSize:12, color:"rgba(10,31,68,0.50)", marginBottom:18, fontStyle:"italic"}}>
+          ¿Está mejorando la calidad de los leads que entran a tu cartera?
+        </div>
+
+        {/* Barras */}
+        <div style={{display:"flex", alignItems:"flex-end", gap:"clamp(8px, 2vw, 14px)", height:160, paddingTop:6}}>
+          {ultimos6.map((m, i) => (
+            <div key={m.k} style={{flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:6}}>
+              <div style={{display:"flex", alignItems:"flex-end", gap:3, width:"100%", height:130, justifyContent:"center"}}>
+                {/* Barra calificados */}
+                <div style={{
+                  width:"42%",
+                  maxWidth:28,
+                  height:`${(m.cal/maxBar)*100}%`,
+                  minHeight: m.cal > 0 ? 4 : 0,
+                  background: `linear-gradient(180deg, ${B.gold} 0%, ${B.gold}cc 100%)`,
+                  borderRadius:"4px 4px 0 0",
+                  transition:"height var(--mf-t-slow) var(--mf-ease-spring)",
+                  position:"relative",
+                }} title={`Calificados: ${m.cal}`}>
+                  {m.cal > 0 && (
+                    <span style={{
+                      position:"absolute", top:-18, left:"50%", transform:"translateX(-50%)",
+                      fontSize:10, fontWeight:600, color:B.navy,
+                      fontVariantNumeric:"tabular-nums",
+                    }}>{m.cal}</span>
+                  )}
+                </div>
+                {/* Barra no calificados */}
+                <div style={{
+                  width:"42%",
+                  maxWidth:28,
+                  height:`${(m.noCal/maxBar)*100}%`,
+                  minHeight: m.noCal > 0 ? 4 : 0,
+                  background:"linear-gradient(180deg, rgba(156,163,175,0.85) 0%, rgba(156,163,175,0.55) 100%)",
+                  borderRadius:"4px 4px 0 0",
+                  transition:"height var(--mf-t-slow) var(--mf-ease-spring)",
+                  position:"relative",
+                }} title={`No calificados: ${m.noCal}`}>
+                  {m.noCal > 0 && (
+                    <span style={{
+                      position:"absolute", top:-18, left:"50%", transform:"translateX(-50%)",
+                      fontSize:10, fontWeight:500, color:"rgba(10,31,68,0.55)",
+                      fontVariantNumeric:"tabular-nums",
+                    }}>{m.noCal}</span>
+                  )}
+                </div>
+              </div>
+              {/* Label mes */}
+              <div style={{
+                fontSize:11, fontWeight: i === 5 ? 700 : 500,
+                color: i === 5 ? B.navy : "rgba(10,31,68,0.50)",
+                letterSpacing:"0.02em",
+                textTransform:"uppercase",
+              }}>{m.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Leyenda */}
+        <div style={{display:"flex", gap:18, justifyContent:"center", marginTop:18, fontSize:11.5, color:"rgba(10,31,68,0.55)"}}>
+          <span style={{display:"inline-flex", alignItems:"center", gap:6}}>
+            <span style={{width:10, height:10, borderRadius:2, background:B.gold}}/>
+            Calificados
+          </span>
+          <span style={{display:"inline-flex", alignItems:"center", gap:6}}>
+            <span style={{width:10, height:10, borderRadius:2, background:"rgba(156,163,175,0.75)"}}/>
+            No calificados
+          </span>
+        </div>
+      </div>
+
+      {/* ═══ Valor comercial del pipeline ═══ */}
+      <div style={{marginBottom:14}}>
+        <div style={{
+          fontSize:10.5, fontWeight:500,
+          color:"rgba(10,31,68,0.45)",
+          textTransform:"uppercase", letterSpacing:"0.22em",
+          marginBottom:6,
+        }}>Valor comercial</div>
+        <div style={{
+          fontFamily:"'Cormorant Garamond', serif",
+          fontSize:24, fontWeight:500,
+          letterSpacing:"-0.015em",
+          color:B.navy,
+        }}>El pipeline en movimiento</div>
+      </div>
+
+      <div style={{
+        display:"grid",
+        gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",
+        gap:14,
+      }}>
+        {/* Oportunidades activas */}
+        <div className="mf-fade-up mf-stagger-1" style={{
+          background:B.white,
+          border:"1px solid rgba(10,31,68,0.06)",
+          borderRadius:14,
+          padding:"20px 20px 18px",
+          boxShadow:"var(--mf-shadow-xs)",
+        }}>
+          <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:8}}>
+            <IconLayers size={14} color={B.navy}/>
+            <span style={{fontSize:10, fontWeight:600, color:"rgba(10,31,68,0.55)", textTransform:"uppercase", letterSpacing:"0.12em"}}>
+              Oportunidades activas
+            </span>
+          </div>
           <div style={{
-            fontSize:12, fontWeight:600,
-            color:"rgba(10,31,68,0.75)",
-            marginBottom:3, letterSpacing:"0.005em",
-          }}>Estas son tus métricas actuales</div>
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:"clamp(34px, 4vw, 42px)",
+            fontWeight:500, lineHeight:1,
+            letterSpacing:"-0.02em",
+            color:B.navy,
+            fontVariantNumeric:"tabular-nums",
+            marginBottom:6,
+          }}><KpiNumber value={oportActivas}/></div>
+          <div style={{fontSize:11, color:"rgba(10,31,68,0.45)"}}>
+            Cita · Asesorado · Seguimiento
+          </div>
+        </div>
+
+        {/* Referidos del mes */}
+        <div className="mf-fade-up mf-stagger-2" style={{
+          background:B.white,
+          border:"1px solid rgba(10,31,68,0.06)",
+          borderRadius:14,
+          padding:"20px 20px 18px",
+          boxShadow:"var(--mf-shadow-xs)",
+        }}>
+          <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:8}}>
+            <IconStar size={14} color={B.gold}/>
+            <span style={{fontSize:10, fontWeight:600, color:"rgba(10,31,68,0.55)", textTransform:"uppercase", letterSpacing:"0.12em"}}>
+              Referidos del mes
+            </span>
+          </div>
           <div style={{
-            fontSize:12, color:"rgba(10,31,68,0.55)",
-            lineHeight:1.6, fontStyle:"italic",
-          }}>Próximamente: histórico mensual, mejor día de la semana, horario óptimo de respuesta del cliente y tendencias.</div>
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:"clamp(34px, 4vw, 42px)",
+            fontWeight:500, lineHeight:1,
+            letterSpacing:"-0.02em",
+            color:B.navy,
+            fontVariantNumeric:"tabular-nums",
+            marginBottom:6,
+          }}><KpiNumber value={referidosMes}/></div>
+          <div style={{fontSize:11, color:"rgba(10,31,68,0.45)"}}>
+            Generados en {MESES[ahora.getMonth()]}
+          </div>
+        </div>
+
+        {/* Cierres del mes */}
+        <div className="mf-fade-up mf-stagger-3" style={{
+          background:B.white,
+          border:"1px solid rgba(10,31,68,0.06)",
+          borderRadius:14,
+          padding:"20px 20px 18px",
+          boxShadow:"var(--mf-shadow-xs)",
+        }}>
+          <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:8}}>
+            <IconCheck size={14} color="#0a7c4a"/>
+            <span style={{fontSize:10, fontWeight:600, color:"rgba(10,31,68,0.55)", textTransform:"uppercase", letterSpacing:"0.12em"}}>
+              Cierres del mes
+            </span>
+          </div>
+          <div style={{
+            fontFamily:"'Cormorant Garamond', serif",
+            fontSize:"clamp(34px, 4vw, 42px)",
+            fontWeight:500, lineHeight:1,
+            letterSpacing:"-0.02em",
+            color:B.navy,
+            fontVariantNumeric:"tabular-nums",
+            marginBottom:6,
+          }}><KpiNumber value={cierresMes}/></div>
+          <div style={{fontSize:11, color:"rgba(10,31,68,0.45)"}}>
+            Ventas concretadas en {MESES[ahora.getMonth()]}
+          </div>
         </div>
       </div>
     </div>
