@@ -511,9 +511,18 @@ const Tag = ({color,children,small}) =>
   <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:small?"1px 9px":"3px 11px",borderRadius:20,fontSize:small?10:11,fontWeight:600,background:color+"14",color,border:`1px solid ${color}25`,whiteSpace:"nowrap"}}>{children}</span>;
 
 function ConfirmModal({titulo,mensaje,icono="⚠️",onConfirm,onCancel,textoConfirm="Sí, eliminar",colorConfirm=B.redBright}) {
+  // Body lock + ESC para cerrar (reutiliza el hook estándar)
+  useOverlayLock(true, onCancel);
   return (
-    <div onClick={onCancel} style={{position:"fixed",inset:0,background:"rgba(10,31,68,.55)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:B.white,borderRadius:16,padding:32,maxWidth:360,width:"100%",boxShadow:B.shadowLg,animation:"fadeUp .2s ease",textAlign:"center"}}>
+    <div onClick={onCancel} style={{
+      position:"fixed", inset:0, background:"rgba(10,31,68,.55)", zIndex:1300,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      padding:20,
+      // Respeta safe areas para que el modal no se meta detrás del notch
+      paddingTop:"max(20px, calc(20px + env(safe-area-inset-top)))",
+      paddingBottom:"max(20px, calc(20px + env(safe-area-inset-bottom)))",
+    }}>
+      <div onClick={e=>e.stopPropagation()} style={{background:B.white,borderRadius:16,padding:32,maxWidth:360,width:"100%",maxHeight:"calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 40px)",overflowY:"auto",boxShadow:B.shadowLg,animation:"mfFadeUp .2s var(--mf-ease-spring)",textAlign:"center"}}>
         <div style={{fontSize:44,marginBottom:12}}>{icono}</div>
         <div style={{fontSize:18,fontWeight:800,color:B.navy,marginBottom:8}}>{titulo}</div>
         {mensaje&&<div style={{fontSize:14,color:"#64748b",lineHeight:1.6,marginBottom:24}}>{mensaje}</div>}
@@ -4226,9 +4235,14 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
           boxShadow:"-12px 0 40px rgba(10,31,68,0.18)",
           display:"flex", flexDirection:"column",
           animation:"mfSlideInRight .35s var(--mf-ease-spring)",
+          // Safe areas: el drawer respeta notch/dynamic island arriba
+          // y home indicator abajo. Para landscape también respeta right.
+          paddingTop:"env(safe-area-inset-top, 0px)",
+          paddingRight:"env(safe-area-inset-right, 0px)",
         }}>
           {/* Header drawer */}
           <div style={{
+            flexShrink:0,
             padding:"22px 24px 18px",
             borderBottom:"1px solid rgba(10,31,68,0.06)",
             display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:14,
@@ -4246,17 +4260,18 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
                 letterSpacing:"-0.015em", color:B.navy, lineHeight:1.1,
               }}>Pendientes</div>
             </div>
-            <button onClick={()=>setDrawerPend(false)} style={{
-              width:32, height:32, borderRadius:8,
+            <button onClick={()=>setDrawerPend(false)} aria-label="Cerrar" style={{
+              width:36, height:36, borderRadius:10,
               border:"1px solid rgba(10,31,68,0.08)",
               background:B.white, cursor:"pointer",
               display:"flex", alignItems:"center", justifyContent:"center",
               color:"rgba(10,31,68,0.55)",
-            }}><IconX size={14} color="currentColor"/></button>
+              flexShrink:0,
+            }}><IconX size={15} color="currentColor"/></button>
           </div>
 
-          {/* Lista scroll */}
-          <div style={{flex:1, overflowY:"auto", padding:"14px 18px 24px"}}>
+          {/* Lista scroll (respeta home indicator abajo) */}
+          <div style={{flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:"14px 18px", paddingBottom:"max(24px, calc(24px + env(safe-area-inset-bottom)))"}}>
             {(() => {
               const conPend = leadsConPendientes(leads);
               if (conPend.length === 0) {
@@ -4357,9 +4372,12 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
           boxShadow:"-12px 0 40px rgba(10,31,68,0.18)",
           display:"flex", flexDirection:"column",
           animation:"mfSlideInRight .35s var(--mf-ease-spring)",
+          paddingTop:"env(safe-area-inset-top, 0px)",
+          paddingRight:"env(safe-area-inset-right, 0px)",
         }}>
           {/* Header drawer */}
           <div style={{
+            flexShrink:0,
             padding:"22px 24px 18px",
             borderBottom:"1px solid rgba(10,31,68,0.06)",
             display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:14,
@@ -4377,17 +4395,18 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
                 letterSpacing:"-0.015em", color:B.navy, lineHeight:1.1,
               }}>Renovaciones pendientes</div>
             </div>
-            <button onClick={()=>setDrawerRenov(false)} style={{
-              width:32, height:32, borderRadius:8,
+            <button onClick={()=>setDrawerRenov(false)} aria-label="Cerrar" style={{
+              width:36, height:36, borderRadius:10,
               border:"1px solid rgba(10,31,68,0.08)",
               background:B.white, cursor:"pointer",
               display:"flex", alignItems:"center", justifyContent:"center",
               color:"rgba(10,31,68,0.55)",
-            }}><IconX size={14} color="currentColor"/></button>
+              flexShrink:0,
+            }}><IconX size={15} color="currentColor"/></button>
           </div>
 
-          {/* Lista scroll */}
-          <div style={{flex:1, overflowY:"auto", padding:"14px 18px 24px"}}>
+          {/* Lista scroll (respeta home indicator abajo) */}
+          <div style={{flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:"14px 18px", paddingBottom:"max(24px, calc(24px + env(safe-area-inset-bottom)))"}}>
             {renovaciones.length === 0 ? (
               <div style={{
                 textAlign:"center", padding:"60px 20px",
@@ -10553,11 +10572,11 @@ export default function App() {
     .mf-nav-btn.inactive:active{background:rgba(255,255,255,0.10);color:#fff;}
     .mf-nav-btn svg{flex-shrink:0;opacity:0.85;}
     .mf-nav-btn.active svg{opacity:1;}
-    .mf-main{width:100%;max-width:100vw;padding:12px;overflow-x:hidden;}
-    @media(min-width:480px){.mf-main{padding:16px;}}
-    @media(min-width:768px){.mf-main{padding:20px;}}
+    .mf-main{width:100%;max-width:100vw;padding:18px 12px 12px;overflow-x:hidden;padding-left:max(12px, env(safe-area-inset-left));padding-right:max(12px, env(safe-area-inset-right));}
+    @media(min-width:480px){.mf-main{padding:20px 16px 16px;padding-left:max(16px, env(safe-area-inset-left));padding-right:max(16px, env(safe-area-inset-right));}}
+    @media(min-width:768px){.mf-main{padding:24px 20px;}}
     @media(min-width:1024px){.mf-main{padding:28px;max-width:1440px;margin:0 auto;}}
-    .mf-pipeline-filters{width:100%;max-width:100vw;display:flex;gap:5px;padding:7px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:rgba(255,255,255,0.97);border-bottom:1px solid rgba(229,231,235,0.7);}
+    .mf-pipeline-filters{width:100%;max-width:100vw;display:flex;gap:5px;padding:7px 12px;padding-left:max(12px, env(safe-area-inset-left));padding-right:max(12px, env(safe-area-inset-right));overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:rgba(255,255,255,0.97);border-bottom:1px solid rgba(229,231,235,0.7);}
     .mf-pipeline-filters::-webkit-scrollbar{display:none;}
     .mf-pipeline-filters>button{flex-shrink:0;min-height:34px;}
     .mf-kanban{display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:20px;align-items:flex-start;scrollbar-width:thin;}
@@ -10565,8 +10584,10 @@ export default function App() {
     .mf-table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
     .mf-user-name{display:none;}
     @media(min-width:500px){.mf-user-name{display:block;}}
+    /* Safe area: bottom respeta home indicator iPhone */
     .mf-app{padding-bottom:env(safe-area-inset-bottom);}
-    .mf-header{padding-top:env(safe-area-inset-top);}
+    /* Header respeta notch/dynamic island arriba + paddings laterales */
+    .mf-header{padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
   `;
 
   return (
