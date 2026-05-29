@@ -656,28 +656,36 @@ function MFModal({onClose,children,width=520}) {
     <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{
       position:"fixed", inset:0,
       background:"rgba(10,31,68,.5)",
-      zIndex:1200,                            // por encima del header sticky (400) y banner update (9999 es global)
+      zIndex:1500,                            // bien arriba de TODO (header sticky, banners, etc.)
       display:"flex", alignItems:"flex-end", justifyContent:"center",
-      // Respeta safe-area en iPhone para que el modal NO se meta detrás del notch
-      paddingTop:"env(safe-area-inset-top, 0px)",
     }}>
-      <style>{`@media(min-width:520px){.mf-modal-sheet{align-self:center!important;border-radius:16px!important;margin:16px;max-height:90vh!important;}}`}</style>
+      <style>{`@media(min-width:520px){.mf-modal-sheet{align-self:center!important;border-radius:16px!important;margin:16px;max-height:90vh!important;}.mf-modal-sheet .mf-modal-inner{padding-top:24px!important;}}`}</style>
       <div ref={sheetRef} className="mf-modal-sheet" style={{
         background:B.white,
         borderRadius:"20px 20px 0 0",
-        padding:"24px 16px 32px",
-        paddingBottom:"max(32px, calc(32px + env(safe-area-inset-bottom)))",
+        // Mobile: el sheet ocupa hasta TODO el viewport. El padding-top
+        // incluye safe-area-top → el contenido (drag handle + nombre del lead)
+        // NUNCA queda detrás del notch ni del header sticky.
+        padding:0,
         width:"100%", maxWidth:width,
-        // maxHeight: no más alto que el viewport visible (cuenta safe-area-top)
-        maxHeight:"calc(100dvh - env(safe-area-inset-top, 0px) - 8px)",
+        maxHeight:"100dvh",
+        height:"auto",
         overflowY:"auto", WebkitOverflowScrolling:"touch",
         boxShadow:B.shadowLg,
         animation:"mfSlideUp .28s var(--mf-ease-spring)",
         border:`1px solid ${B.gray}`, borderBottom:"none",
         alignSelf:"flex-end",
       }}>
-        <div style={{width:36,height:4,borderRadius:2,background:"#d1d5db",margin:"0 auto 20px"}}/>
-        {children}
+        {/* Inner wrapper: aplica padding con safe areas y aloja el contenido */}
+        <div className="mf-modal-inner" style={{
+          paddingTop:"max(16px, calc(16px + env(safe-area-inset-top, 0px)))",
+          paddingLeft:16,
+          paddingRight:16,
+          paddingBottom:"max(32px, calc(32px + env(safe-area-inset-bottom, 0px)))",
+        }}>
+          <div style={{width:36,height:4,borderRadius:2,background:"#d1d5db",margin:"0 auto 16px"}}/>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -10634,20 +10642,23 @@ export default function App() {
 
               {notifOpen && (
                 <div onClick={e=>e.stopPropagation()} style={{
-                  position:"absolute", top:44, right:0,
-                  // En mobile: ancho ~ casi pantalla (con margen lateral 16+16=32),
-                  // en desktop: 360px fijo. Garantiza que SIEMPRE quepa.
-                  width:"min(360px, calc(100vw - 32px))",
-                  // Altura máxima: 70vh para que NUNCA salga del viewport,
-                  // incluso si hay muchos leads en alertas.
-                  maxHeight:"min(72vh, 580px)",
+                  // POSITION:FIXED relativo al viewport (no al bell button).
+                  // Esto evita el bug de "panel a la mitad" porque ya no depende
+                  // de dónde caiga el botón en el header.
+                  position:"fixed",
+                  // Justo debajo del header (safe area + ~96px) y a 12px del borde derecho
+                  top:"calc(env(safe-area-inset-top, 0px) + 96px)",
+                  right:"max(12px, calc(12px + env(safe-area-inset-right, 0px)))",
+                  // Ancho que cabe en mobile + reserva para safe areas laterales
+                  width:"min(360px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)))",
+                  // Altura máxima: nunca sale del viewport. Cuenta safe-area-bottom.
+                  maxHeight:"calc(100dvh - env(safe-area-inset-top, 0px) - 110px - env(safe-area-inset-bottom, 0px))",
                   background:"#F8F6F2",
                   borderRadius:16,
                   border:"1px solid rgba(10,31,68,0.08)",
                   boxShadow:"0 20px 50px rgba(10,31,68,0.18), 0 4px 12px rgba(10,31,68,0.06)",
-                  zIndex:800,
+                  zIndex:1400,
                   animation:"mfFadeUp .22s var(--mf-ease-spring)",
-                  // Scroll interno habilitado cuando el contenido excede maxHeight
                   display:"flex", flexDirection:"column",
                   overflow:"hidden",
                 }}>
