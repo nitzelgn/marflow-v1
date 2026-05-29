@@ -10832,65 +10832,135 @@ export default function App() {
                     overflowY:"auto", WebkitOverflowScrolling:"touch",
                   }}>
 
-                  {/* Sesión actual */}
-                  <div style={{
-                    padding:"14px 18px",
-                    borderBottom:"1px solid rgba(10,31,68,0.06)",
-                  }}>
-                    <div style={{
-                      fontSize:10, fontWeight:500,
-                      color:"rgba(10,31,68,0.45)",
-                      textTransform:"uppercase", letterSpacing:"0.18em",
-                      marginBottom:6,
-                    }}>Sesión actual</div>
-                    <div style={{
-                      fontFamily:"'Cormorant Garamond', serif",
-                      fontSize:26, fontWeight:500, lineHeight:1,
-                      color:B.navy, letterSpacing:"-0.025em",
-                      fontVariantNumeric:"tabular-nums",
-                    }}>{Math.floor((Date.now()-sessionStart)/60000)} <span style={{fontFamily:"'Poppins',sans-serif", fontSize:11, color:"rgba(10,31,68,0.50)", fontWeight:500, letterSpacing:"0.05em", textTransform:"uppercase"}}>min</span></div>
-                    <div style={{fontSize:11.5, color:"rgba(10,31,68,0.50)", marginTop:4}}>Desde que ingresaste hoy</div>
-                  </div>
+                  {/* ═══ RESUMEN DEL DÍA — accionable, sin "minutos conectado" ═══ */}
+                  {(() => {
+                    // Cómputos accionables
+                    const citasHoy = (eventos || []).filter(e =>
+                      (e.tipo === "cita cliente" || e.tipo === "cita") && e.fecha === hoy()
+                    ).length;
+                    const pendAbiertos = totalPendientesAbiertos(leads);
+                    const leadsNuevosSinContacto = leads.filter(l =>
+                      l.etapa === "nuevo" &&
+                      !l.checklist?.wa1 && !l.checklist?.call1 && !l.checklist?.email
+                    ).length;
+                    // Renovaciones próximos 15 días: pólizas manuales + Cobranza Excel
+                    const renovManualesProx = leads.flatMap(l => (l.polizas || [])).filter(p => {
+                      if (!p.fechaRenovacion) return false;
+                      const d = diasParaFecha(p.fechaRenovacion);
+                      return d !== null && d >= 0 && d <= 15;
+                    }).length;
+                    let renovCobranzaProx = 0;
+                    let cobranzaCritica40d = 0;
+                    try {
+                      const raw = JSON.parse(localStorage.getItem("mf_cobranza_datos") || "[]");
+                      // Renovaciones Cobranza próximas 15d (AUIN/GMMI/HOFP/VIPP)
+                      raw.forEach(d => {
+                        if (d.esPeriodoComp) return; // periodo comprometido no cuenta
+                        if (emisorAplicaRenovacion && emisorAplicaRenovacion(d.producto)) {
+                          const r = calcularRenovacion(d.vigenciaInicio);
+                          if (r && r.diasHasta >= 0 && r.diasHasta <= 15) renovCobranzaProx++;
+                        }
+                      });
+                      // Cobranza crítica +40d para PLU3 + OP3D en periodo inicial o saldo inicial pendiente
+                      cobranzaCritica40d = raw.filter(d => {
+                        const prod = String(d.producto || "").toUpperCase();
+                        const esPLU3OP3D = prod.includes("PLU3") || prod.includes("OP3D");
+                        const dias = Number(d.diasAtraso) || 0;
+                        if (!esPLU3OP3D || dias <= 40) return false;
+                        // Verifica que esté en periodo inicial / saldo inicial pendiente
+                        const textoRaw = Object.values(d._raw || {})
+                          .map(v => String(v).toLowerCase()).join(" | ");
+                        return textoRaw.includes("periodo inicial") || textoRaw.includes("saldo inicial");
+                      }).length;
+                    } catch {}
+                    const renov15d = renovManualesProx + renovCobranzaProx;
 
-                  {/* Alertas de leads */}
-                  <div style={{padding:"14px 18px"}}>
-                    <div style={{
-                      fontSize:10, fontWeight:500,
-                      color:"rgba(10,31,68,0.45)",
-                      textTransform:"uppercase", letterSpacing:"0.18em",
-                      marginBottom:10,
-                    }}>Leads que requieren acción</div>
-                    {alertaCount===0 && (
-                      <div style={{
-                        fontSize:12.5, color:"rgba(10,31,68,0.55)",
-                        fontStyle:"italic", padding:"4px 0",
-                      }}>Todo en orden por ahora.</div>
-                    )}
-                    {leads.filter(l=>getAlertas(l).some(a=>a.tipo==="riesgo")).slice(0,3).map(l=>(
-                      <div key={l.id} style={{display:"flex", gap:10, alignItems:"center", padding:"8px 0", borderBottom:"1px solid rgba(10,31,68,0.04)"}}>
-                        <span style={{width:6, height:6, borderRadius:"50%", background:B.redBright, animation:"mfPulseDot 1.6s infinite", flexShrink:0}}/>
-                        <div style={{flex:1, minWidth:0}}>
-                          <div style={{fontSize:12.5, fontWeight:600, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{l.nombre}</div>
-                          <div style={{fontSize:10.5, color:B.redBright, marginTop:1, textTransform:"uppercase", letterSpacing:"0.10em"}}>Riesgo de pérdida</div>
-                        </div>
-                      </div>
-                    ))}
-                    {leads.filter(l=>getAlertas(l).some(a=>a.tipo==="sin_contacto")).slice(0,3).map(l=>(
-                      <div key={l.id} style={{display:"flex", gap:10, alignItems:"center", padding:"8px 0", borderBottom:"1px solid rgba(10,31,68,0.04)"}}>
-                        <span style={{width:6, height:6, borderRadius:"50%", background:B.gold, flexShrink:0}}/>
-                        <div style={{flex:1, minWidth:0}}>
-                          <div style={{fontSize:12.5, fontWeight:600, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{l.nombre}</div>
-                          <div style={{fontSize:10.5, color:"rgba(10,31,68,0.55)", marginTop:1}}>{diasDesde(l.ultimoContacto)} días sin contacto</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                    const items = [
+                      { icon:"📅", label:"Citas programadas hoy",         value: citasHoy },
+                      { icon:"📋", label:"Pendientes abiertos",            value: pendAbiertos },
+                      { icon:"👤", label:"Leads nuevos sin contactar",     value: leadsNuevosSinContacto },
+                      { icon:"⚠️", label:"Renovaciones próximas 15 días",  value: renov15d },
+                      { icon:"🚨", label:"Cobranza crítica +40d",          value: cobranzaCritica40d, sub:"PLU3 · OP3D · Periodo inicial" },
+                    ];
 
-                  {/* Actividad equipo (si tiene asistentes) */}
-                  {esAdmin&&(()=>{
-                    const miEquipo=usuario.rol==="superadmin"?cuentas.filter(c=>c.rol==="asistente"):cuentas.filter(c=>c.rol==="asistente"&&c.adminId===usuario.id);
-                    if(miEquipo.length===0)return null;
-                    const actHoy=(uid)=>{const all=allLeads[cuentas.find(c=>c.id===uid)?.adminId||uid]||leads;return all.flatMap(l=>l.seguimientos||[]).filter(s=>s.autor&&s.fecha===hoy()).length;};
+                    return (
+                      <div style={{padding:"14px 18px"}}>
+                        <div style={{
+                          fontSize:10, fontWeight:500,
+                          color:"rgba(10,31,68,0.45)",
+                          textTransform:"uppercase", letterSpacing:"0.18em",
+                          marginBottom:8,
+                        }}>Resumen del día</div>
+
+                        {items.map((item, i) => (
+                          <div key={item.label} style={{
+                            display:"flex", alignItems:"center", gap:12,
+                            padding:"11px 0",
+                            borderBottom: i < items.length - 1 ? "1px solid rgba(10,31,68,0.05)" : "none",
+                          }}>
+                            <span style={{
+                              fontSize:18, flexShrink:0, width:24, textAlign:"center", lineHeight:1,
+                              opacity: item.value > 0 ? 1 : 0.40,
+                            }}>{item.icon}</span>
+                            <div style={{flex:1, minWidth:0}}>
+                              <div style={{
+                                fontSize:12.5, fontWeight:500,
+                                color:"rgba(10,31,68,0.85)",
+                                letterSpacing:"0.005em",
+                              }}>{item.label}</div>
+                              {item.sub && (
+                                <div style={{
+                                  fontSize:9.5, fontWeight:500,
+                                  color:"rgba(10,31,68,0.40)",
+                                  letterSpacing:"0.10em", textTransform:"uppercase",
+                                  marginTop:2,
+                                }}>{item.sub}</div>
+                              )}
+                            </div>
+                            <div style={{
+                              fontFamily:"'Cormorant Garamond', serif",
+                              fontSize:24, fontWeight:500, lineHeight:1,
+                              color: item.value > 0 ? B.navy : "rgba(10,31,68,0.25)",
+                              fontVariantNumeric:"tabular-nums",
+                              letterSpacing:"-0.02em",
+                              minWidth:24, textAlign:"right",
+                            }}>{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ═══ INTELIGENCIA COMERCIAL — insights accionables ═══ */}
+                  {(() => {
+                    // Mejor horario de respuesta: hora más frecuente en eventos con hora
+                    const eventosConHora = (eventos || []).filter(e => e.hora && /^\d{1,2}:\d{2}/.test(e.hora));
+                    const conteoHora = {};
+                    eventosConHora.forEach(e => {
+                      const h = parseInt(e.hora.split(":")[0], 10);
+                      if (!isNaN(h)) conteoHora[h] = (conteoHora[h] || 0) + 1;
+                    });
+                    const horaPeak = Object.entries(conteoHora).sort((a,b) => b[1] - a[1])[0]?.[0];
+                    const mejorHorarioResp = horaPeak != null
+                      ? `${String(horaPeak).padStart(2,"0")}:00 - ${String(Math.min(23, +horaPeak + 2)).padStart(2,"0")}:00`
+                      : null;
+
+                    // Mejor conversión: día de la semana donde más cierres + hora más activa
+                    const cierres = leads.filter(l => l.etapa === "cierre" && l.ultimoContacto);
+                    const conteoDia = {};
+                    cierres.forEach(l => {
+                      try {
+                        const d = new Date(l.ultimoContacto + "T00:00:00");
+                        const dia = d.getDay();
+                        conteoDia[dia] = (conteoDia[dia] || 0) + 1;
+                      } catch {}
+                    });
+                    const diaPeak = Object.entries(conteoDia).sort((a,b) => b[1] - a[1])[0]?.[0];
+                    const diasNombre = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+                    const mejorDiaNombre = diaPeak != null ? diasNombre[+diaPeak] : null;
+
+                    const tieneDatos = mejorHorarioResp || mejorDiaNombre;
+
                     return (
                       <div style={{padding:"14px 18px", borderTop:"1px solid rgba(10,31,68,0.06)"}}>
                         <div style={{
@@ -10898,31 +10968,71 @@ export default function App() {
                           color:"rgba(10,31,68,0.45)",
                           textTransform:"uppercase", letterSpacing:"0.18em",
                           marginBottom:10,
-                        }}>{usuario.rol==="superadmin" ? "Asistentes (todos)" : "Tu equipo"}</div>
-                        {miEquipo.map(c=>{
-                          const act=actHoy(c.id);
-                          const adminNombre=cuentas.find(a=>a.id===c.adminId)?.nombre||"";
-                          return (
-                            <div key={c.id} style={{display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"1px solid rgba(10,31,68,0.04)"}}>
-                              <Av name={c.nombre} size={26} color={B.navy}/>
-                              <div style={{flex:1, minWidth:0}}>
-                                <div style={{fontSize:12.5, fontWeight:600, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.nombre}</div>
-                                {usuario.rol==="superadmin"&&adminNombre && (
-                                  <div style={{fontSize:10, color:"rgba(10,31,68,0.45)", letterSpacing:"0.04em"}}>Admin · {adminNombre}</div>
-                                )}
-                              </div>
-                              <div style={{textAlign:"right", flexShrink:0}}>
-                                <div style={{
-                                  fontFamily:"'Cormorant Garamond', serif",
-                                  fontSize:18, fontWeight:500, lineHeight:1,
-                                  color: act>0 ? "#059669" : "rgba(10,31,68,0.30)",
-                                  letterSpacing:"-0.02em",
-                                }}>{act}</div>
-                                <div style={{fontSize:9, color:"rgba(10,31,68,0.45)", marginTop:2, textTransform:"uppercase", letterSpacing:"0.10em"}}>hoy</div>
-                              </div>
+                        }}>Inteligencia comercial</div>
+
+                        {!tieneDatos && (
+                          <div style={{
+                            fontSize:12, color:"rgba(10,31,68,0.50)",
+                            fontStyle:"italic", padding:"6px 0",
+                          }}>Acumulando datos. Después de algunas semanas de uso verás aquí tus mejores horarios.</div>
+                        )}
+
+                        {mejorHorarioResp && (
+                          <div style={{
+                            background:"rgba(198,169,107,0.05)",
+                            border:"1px solid rgba(198,169,107,0.22)",
+                            borderRadius:10,
+                            padding:"12px 14px",
+                            marginBottom:10,
+                            display:"flex", alignItems:"center", gap:12,
+                          }}>
+                            <span style={{fontSize:18, flexShrink:0}}>🕒</span>
+                            <div style={{flex:1, minWidth:0}}>
+                              <div style={{
+                                fontSize:9.5, fontWeight:600,
+                                color:B.gold, letterSpacing:"0.14em", textTransform:"uppercase",
+                                marginBottom:2,
+                              }}>Mejor horario de respuesta</div>
+                              <div style={{
+                                fontFamily:"'Cormorant Garamond', serif",
+                                fontSize:20, fontWeight:500,
+                                color:B.navy, letterSpacing:"-0.01em", lineHeight:1.05,
+                              }}>{mejorHorarioResp}</div>
+                              <div style={{
+                                fontSize:10, color:"rgba(10,31,68,0.50)",
+                                marginTop:3, lineHeight:1.4,
+                              }}>Basado en respuestas e interacciones</div>
                             </div>
-                          );
-                        })}
+                          </div>
+                        )}
+
+                        {mejorDiaNombre && (
+                          <div style={{
+                            background:"rgba(10,31,68,0.03)",
+                            border:"1px solid rgba(10,31,68,0.08)",
+                            borderRadius:10,
+                            padding:"12px 14px",
+                            display:"flex", alignItems:"center", gap:12,
+                          }}>
+                            <span style={{fontSize:18, flexShrink:0}}>📈</span>
+                            <div style={{flex:1, minWidth:0}}>
+                              <div style={{
+                                fontSize:9.5, fontWeight:600,
+                                color:"rgba(10,31,68,0.55)", letterSpacing:"0.14em", textTransform:"uppercase",
+                                marginBottom:2,
+                              }}>Mejor conversión</div>
+                              <div style={{
+                                fontFamily:"'Cormorant Garamond', serif",
+                                fontSize:20, fontWeight:500,
+                                color:B.navy, letterSpacing:"-0.01em", lineHeight:1.05,
+                              }}>{mejorDiaNombre}{mejorHorarioResp ? ` · ${mejorHorarioResp}` : ""}</div>
+                              <div style={{
+                                fontSize:10, color:"rgba(10,31,68,0.50)",
+                                marginTop:3, lineHeight:1.4,
+                              }}>Día con más cierres registrados</div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
