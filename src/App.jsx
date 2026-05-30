@@ -5817,7 +5817,7 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         {masAccionesAbierto && (
           <div onClick={e=>e.stopPropagation()} style={{
             position:"absolute", top:38, right:0, zIndex:50,
-            width:200, background:"#F8F6F2",
+            width:240, background:"#F8F6F2",
             border:"1px solid rgba(10,31,68,0.08)", borderRadius:12,
             boxShadow:"0 12px 30px rgba(10,31,68,0.14)",
             overflow:"hidden", animation:"mfFadeUp .18s var(--mf-ease-spring)",
@@ -5827,6 +5827,47 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
               padding:"10px 14px", fontSize:12, color:B.navy, letterSpacing:"0.005em",
               borderBottom:"1px solid rgba(10,31,68,0.04)",
             }}>Ver historial completo</button>
+
+            {/* Referido: toggle + ¿Por quién? */}
+            <div style={{
+              padding:"10px 14px",
+              borderBottom:"1px solid rgba(10,31,68,0.04)",
+              background: f.esReferido ? "rgba(198,169,107,0.06)" : "transparent",
+            }}>
+              <button onClick={()=>set("esReferido", !f.esReferido)} style={{
+                all:"unset", cursor:"pointer",
+                display:"flex", alignItems:"center", gap:9, width:"100%",
+              }}>
+                <span style={{
+                  width:16, height:16, borderRadius:4,
+                  background: f.esReferido ? "#C6A96B" : "#fff",
+                  border: `1.5px solid ${f.esReferido ? "#C6A96B" : "rgba(10,31,68,0.20)"}`,
+                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                }}>{f.esReferido && <IconCheck size={10} color="#fff"/>}</span>
+                <span style={{fontSize:12, fontWeight: f.esReferido ? 600 : 500, color:B.navy, letterSpacing:"0.005em"}}>
+                  {f.esReferido ? "Es referido" : "Marcar como referido"}
+                </span>
+              </button>
+              {f.esReferido && (
+                <div style={{marginTop:8}}>
+                  <input
+                    value={f.referidoPor||""}
+                    onChange={e=>set("referidoPor", e.target.value)}
+                    placeholder="¿Por quién? (opcional)"
+                    style={{
+                      width:"100%", padding:"8px 10px",
+                      borderRadius:7, border:"1px solid rgba(10,31,68,0.12)",
+                      background:"#fff", color:B.navy,
+                      fontFamily:"'Poppins',sans-serif", fontSize:12,
+                      outline:"none",
+                    }}
+                    onFocus={e=>e.target.style.borderColor="#C6A96B"}
+                    onBlur={e=>e.target.style.borderColor="rgba(10,31,68,0.12)"}
+                  />
+                </div>
+              )}
+            </div>
+
             <button onClick={()=>{toggleSinSeg(); setMasAccionesAbierto(false);}} style={{
               all:"unset", cursor:"pointer", display:"block", width:"100%",
               padding:"10px 14px", fontSize:12, color: f.sinSeguimiento ? "#059669" : B.navy,
@@ -6029,6 +6070,76 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
     ))}
     {/* (Tab "Etapa" removida — ahora pipeline visual horizontal arriba) */}
     {/* (Info / Estado / Estrategia movidos al bloque "Información completa" colapsable al final) */}
+    {/* ═══ HISTORIAL (primero — contexto antes que acciones) ═══ */}
+    <div style={{marginBottom:20}}>
+      <div style={{
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        marginBottom:10, gap:10,
+      }}>
+        <div style={{
+          fontSize:10, fontWeight:500,
+          color:"rgba(10,31,68,0.40)",
+          textTransform:"uppercase", letterSpacing:"0.18em",
+        }}>Historial</div>
+        {(f.seguimientos||[]).length > 3 && (
+          <button onClick={()=>setHistorialCompleto(true)} style={{
+            all:"unset", cursor:"pointer",
+            fontSize:11, color:"rgba(10,31,68,0.55)",
+            letterSpacing:"0.01em",
+            display:"inline-flex", alignItems:"center", gap:4,
+          }}
+            onMouseEnter={e=>{e.currentTarget.style.color=B.navy;}}
+            onMouseLeave={e=>{e.currentTarget.style.color="rgba(10,31,68,0.55)";}}>
+            Ver historial completo
+            <IconChevronRight size={11} color="currentColor"/>
+          </button>
+        )}
+      </div>
+
+      <div style={{display:"flex", gap:6, marginBottom:12, flexWrap:"wrap"}}>
+        <div style={{minWidth:120}}>
+          <Sel value={tipoN} onChange={setTipoN} options={[
+            {v:"llamada",l:"Llamada"},{v:"whatsapp",l:"WhatsApp"},{v:"visita",l:"Visita"},{v:"correo",l:"Correo"},{v:"nota",l:"Nota"},
+          ]}/>
+        </div>
+        <div style={{flex:1, minWidth:160}}>
+          <Inp value={nota} onChange={setNota} placeholder="Registro rápido…" onKeyDown={e=>e.key==="Enter"&&addNota()}/>
+        </div>
+        <button onClick={addNota} style={{
+          display:"inline-flex", alignItems:"center", justifyContent:"center",
+          padding:"0 12px", minHeight:44, borderRadius:8, border:"none",
+          background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+          color:"#fff", cursor:"pointer",
+        }}><IconPlus size={12} color="#fff"/></button>
+      </div>
+
+      {(f.seguimientos||[]).length > 0 && (
+        <div style={{display:"flex", flexDirection:"column", gap:8}}>
+          {(f.seguimientos||[]).slice(0, 3).map((s,i) => (
+            <div key={s.id||i} style={{
+              display:"flex", alignItems:"flex-start", gap:10,
+              padding:"10px 12px",
+              background:"rgba(248,246,242,0.6)",
+              border:"1px solid rgba(10,31,68,0.05)",
+              borderRadius:10,
+            }}>
+              <span style={{
+                width:8, height:8, borderRadius:"50%", flexShrink:0, marginTop:6,
+                background: tipoColor[s.tipo] || "rgba(10,31,68,0.30)",
+              }}/>
+              <div style={{flex:1, minWidth:0, overflowWrap:"anywhere"}}>
+                <div style={{fontSize:12.5, color:B.navy, lineHeight:1.45, letterSpacing:"-0.005em"}}>{s.texto}</div>
+                <div style={{
+                  fontSize:10, color:"rgba(10,31,68,0.45)",
+                  marginTop:3, textTransform:"uppercase", letterSpacing:"0.10em",
+                }}>{fmtF(s.fecha)} · {s.tipo}{s.autor ? ` · ${s.autor}` : ""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
     {!f.sinSeguimiento && (
       <div style={{marginBottom:20}}>
         <div style={{
@@ -6066,14 +6177,8 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
           </button>
         </div>
 
-        {/* Lista de pendientes */}
-        {(f.pendientes||[]).length === 0 ? (
-          <div style={{
-            fontSize:13, color:"rgba(10,31,68,0.30)",
-            textAlign:"center", padding:"32px 0",
-            fontStyle:"italic", letterSpacing:"0.01em",
-          }}>Sin pendientes para este lead</div>
-        ) : (
+        {/* Lista de pendientes (sin empty state) */}
+        {(f.pendientes||[]).length > 0 && (
           <div>
             {(f.pendientes||[]).map(p => {
               const tipo = PENDIENTE_TIPOS.find(t => t.v === p.tipo) || PENDIENTE_TIPOS[7];
@@ -6148,84 +6253,6 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         )}
       </div>
     )}
-    {/* ═══ HISTORIAL (últimas 3 + ver completo) ═══ */}
-    <div style={{marginBottom:20}}>
-      <div style={{
-        display:"flex", alignItems:"center", justifyContent:"space-between",
-        marginBottom:10, gap:10,
-      }}>
-        <div style={{
-          fontSize:10, fontWeight:500,
-          color:"rgba(10,31,68,0.40)",
-          textTransform:"uppercase", letterSpacing:"0.18em",
-        }}>Historial</div>
-        {(f.seguimientos||[]).length > 3 && (
-          <button onClick={()=>setHistorialCompleto(true)} style={{
-            all:"unset", cursor:"pointer",
-            fontSize:11, color:"rgba(10,31,68,0.55)",
-            letterSpacing:"0.01em",
-            display:"inline-flex", alignItems:"center", gap:4,
-          }}
-            onMouseEnter={e=>{e.currentTarget.style.color=B.navy;}}
-            onMouseLeave={e=>{e.currentTarget.style.color="rgba(10,31,68,0.55)";}}>
-            Ver historial completo
-            <IconChevronRight size={11} color="currentColor"/>
-          </button>
-        )}
-      </div>
-
-      {/* Form alta inline compacto */}
-      <div style={{display:"flex", gap:6, marginBottom:12, flexWrap:"wrap"}}>
-        <div style={{minWidth:120}}>
-          <Sel value={tipoN} onChange={setTipoN} options={[
-            {v:"llamada",l:"Llamada"},{v:"whatsapp",l:"WhatsApp"},{v:"visita",l:"Visita"},{v:"correo",l:"Correo"},{v:"nota",l:"Nota"},
-          ]}/>
-        </div>
-        <div style={{flex:1, minWidth:160}}>
-          <Inp value={nota} onChange={setNota} placeholder="Registro rápido…" onKeyDown={e=>e.key==="Enter"&&addNota()}/>
-        </div>
-        <button onClick={addNota} style={{
-          display:"inline-flex", alignItems:"center", justifyContent:"center",
-          padding:"0 12px", minHeight:44, borderRadius:8, border:"none",
-          background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
-          color:"#fff", cursor:"pointer",
-        }}><IconPlus size={12} color="#fff"/></button>
-      </div>
-
-      {/* Solo últimas 3 actividades */}
-      {(f.seguimientos||[]).length === 0 ? (
-        <div style={{
-          fontSize:12, color:"rgba(10,31,68,0.45)",
-          textAlign:"center", padding:"20px 0",
-          fontStyle:"italic", letterSpacing:"0.01em",
-        }}>Sin actividad registrada aún.</div>
-      ) : (
-        <div style={{display:"flex", flexDirection:"column", gap:8}}>
-          {(f.seguimientos||[]).slice(0, 3).map((s,i) => (
-            <div key={s.id||i} style={{
-              display:"flex", alignItems:"flex-start", gap:10,
-              padding:"10px 12px",
-              background:"rgba(248,246,242,0.6)",
-              border:"1px solid rgba(10,31,68,0.05)",
-              borderRadius:10,
-            }}>
-              <span style={{
-                width:8, height:8, borderRadius:"50%", flexShrink:0, marginTop:6,
-                background: tipoColor[s.tipo] || "rgba(10,31,68,0.30)",
-              }}/>
-              <div style={{flex:1, minWidth:0, overflowWrap:"anywhere"}}>
-                <div style={{fontSize:12.5, color:B.navy, lineHeight:1.45, letterSpacing:"-0.005em"}}>{s.texto}</div>
-                <div style={{
-                  fontSize:10, color:"rgba(10,31,68,0.45)",
-                  marginTop:3, textTransform:"uppercase", letterSpacing:"0.10em",
-                }}>{fmtF(s.fecha)} · {s.tipo}{s.autor ? ` · ${s.autor}` : ""}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-
     {/* ═══ INFORMACIÓN COMPLETA (collapsable, cerrada por defecto) ═══ */}
     <div style={{marginBottom:18, borderTop:"1px solid rgba(10,31,68,0.06)", paddingTop:16}}>
       <button onClick={()=>setInfoExpandida(o=>!o)} style={{
@@ -6305,34 +6332,7 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
             </FL>
           </div>
         )}
-        <div style={{
-          display:"flex", alignItems:"center", gap:12, marginTop:14,
-          padding:"12px 14px",
-          background:"rgba(198,169,107,0.05)",
-          border:"1px solid rgba(198,169,107,0.18)",
-          borderRadius:10, flexWrap:"wrap",
-        }}>
-          <button onClick={()=>set("esReferido", !f.esReferido)} style={{
-            all:"unset", cursor:"pointer",
-            display:"flex", alignItems:"center", gap:9,
-          }}>
-            <span style={{
-              width:18, height:18, borderRadius:5,
-              background: f.esReferido ? "#C6A96B" : "#fff",
-              border: `1.5px solid ${f.esReferido ? "#C6A96B" : "rgba(10,31,68,0.20)"}`,
-              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-            }}>{f.esReferido && <IconCheck size={11} color="#fff"/>}</span>
-            <span style={{fontSize:12.5, fontWeight:600, color:B.navy, letterSpacing:"-0.005em"}}>Es referido</span>
-          </button>
-          {f.esReferido && (
-            <div style={{flex:"1 1 180px", minWidth:140}}>
-              <Inp value={f.referidoPor||""} onChange={v=>set("referidoPor", v)} placeholder="¿Por quién? (opcional)"/>
-            </div>
-          )}
-        </div>
-        <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:8, lineHeight:1.45, fontStyle:"italic"}}>
-          Los referidos se marcan automáticamente como "Alta oportunidad" cuando no eliges otro estado manual.
-        </div>
+        {/* "Es referido" se controla desde el menú "Más" abajo del nombre del lead. */}
       </div>
 
       {/* Comentarios — campo único para captura rápida (reemplaza Estrategia) */}
