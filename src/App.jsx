@@ -572,86 +572,41 @@ function ConfirmModal({titulo,mensaje,icono="⚠️",onConfirm,onCancel,textoCon
   );
 }
 
-// Catálogo de identidades visuales (6 opciones · 1 "inicial elegante" + 5 símbolos SVG).
-// SVG inline → se ven idénticos en web, iOS, Android (los emojis cambian por OS).
+// Catálogo de identidades visuales (6 opciones · 1 "inicial elegante" + 5 emoji).
 // El usuario las elige desde Configuración → Perfil.
 const AVATARES = [
-  { v:"inicial",   l:"Inicial elegante" },
-  { v:"estrella",  l:"Estrella"         },
-  { v:"mono",      l:"Sonrisa"          },
-  { v:"dinero",    l:"Dinero"           },
-  { v:"check",     l:"Check"            },
-  { v:"cool",      l:"Cool"             },
+  { v:"inicial",   l:"Inicial elegante", emoji:null   },
+  { v:"estrella",  l:"Estrella",         emoji:"🌟"   },
+  { v:"mono",      l:"Mono",             emoji:"🐵"   },
+  { v:"dinero",    l:"Dinero",           emoji:"🤑"   },
+  { v:"check",     l:"Check",            emoji:"✔️"   },
+  { v:"cool",      l:"Cool",             emoji:"😎"   },
 ];
 
-// Símbolo SVG por avatar. Trazo gold minimalista estilo Lucide.
-function AvatarSymbol({ v, size=28, color=B.gold }) {
+function getAvatarEmoji(v) {
   if (!v || v === "inicial") return null;
-  const common = {
-    width: size, height: size, viewBox: "0 0 24 24",
-    fill: "none", stroke: color, strokeWidth: 1.8,
-    strokeLinecap: "round", strokeLinejoin: "round",
-    style: { display: "block" },
-  };
-  switch (v) {
-    case "estrella":
-      return (
-        <svg {...common}>
-          <path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z"/>
-        </svg>
-      );
-    case "mono": // sonrisa
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
-          <line x1="9" y1="9" x2="9.01" y2="9"/>
-          <line x1="15" y1="9" x2="15.01" y2="9"/>
-        </svg>
-      );
-    case "dinero":
-      return (
-        <svg {...common}>
-          <line x1="12" y1="2" x2="12" y2="22"/>
-          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-        </svg>
-      );
-    case "check":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="10"/>
-          <path d="m8 12 3 3 5-6"/>
-        </svg>
-      );
-    case "cool": // gafas de sol
-      return (
-        <svg {...common}>
-          <path d="M2 11h20"/>
-          <circle cx="6.5" cy="14" r="3.5"/>
-          <circle cx="17.5" cy="14" r="3.5"/>
-          <path d="M10 14h4"/>
-        </svg>
-      );
-    default:
-      return null;
-  }
+  return AVATARES.find(a => a.v === v)?.emoji || null;
 }
 
 function Av({name, size=34, color=B.gold, avatar=null}) {
-  const hasSymbol = avatar && avatar !== "inicial";
-  // Con símbolo → fondo beige cream + SVG gold centrado
-  // Sin símbolo → fallback a inicial (comportamiento original)
+  const emoji = avatar ? getAvatarEmoji(avatar) : null;
+  // Si tiene avatar custom → render emoji centrado dentro del círculo
+  // Sin avatar → fallback a inicial (comportamiento original)
   return (
     <div style={{
       width:size, height:size, borderRadius:"50%",
-      background: hasSymbol ? B.cream : color+"18",
+      background: emoji ? "#fff" : color+"18",
       border:`1.5px solid ${color}44`,
       display:"flex", alignItems:"center", justifyContent:"center",
       flexShrink:0,
       overflow:"hidden",
     }}>
-      {hasSymbol ? (
-        <AvatarSymbol v={avatar} size={Math.round(size*0.58)} color={color}/>
+      {emoji ? (
+        <span style={{
+          fontSize: size * 0.56, lineHeight:1,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          width:"100%", height:"100%",
+        }}>{emoji}</span>
       ) : (
         <span style={{
           fontSize: size*.34, fontWeight:700, color,
@@ -858,67 +813,14 @@ function ContactoModal({lead,onClose}) {
    "MAR" en blanco + "FLOW" en gold champagne
    Sans-serif geométrica fina con letter-spacing amplio
 ═══════════════════════════════════════════ */
-/* ───────────────────────────────────────────────
-   MarflowBrandMark · símbolo oficial de la marca
-   (ola gold + sol/punto sobre navy redondeado)
-   Espejo SVG del favicon.svg — para usar inline.
-─────────────────────────────────────────────── */
-function MarflowBrandMark({ size = 22, navy = "#0A1F44", gold = "#C6A96B" }) {
-  const id = `mfbm-${size}`;
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 512 512"
-      role="img"
-      aria-label="MarFlow"
-      style={{ flexShrink: 0, display: "block" }}
-    >
-      <defs>
-        <linearGradient id={`${id}-bg`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#0E2654"/>
-          <stop offset="1" stopColor={navy}/>
-        </linearGradient>
-        <linearGradient id={`${id}-gold`} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#B8985A"/>
-          <stop offset=".55" stopColor="#D4B576"/>
-          <stop offset="1" stopColor={gold}/>
-        </linearGradient>
-      </defs>
-      <rect width="512" height="512" rx="112" ry="112" fill={`url(#${id}-bg)`}/>
-      <path
-        d="M 64 312 C 120 312, 144 252, 200 252 S 280 312, 336 296 S 416 232, 448 220"
-        fill="none"
-        stroke={`url(#${id}-gold)`}
-        strokeWidth="32"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M 88 360 C 152 360, 184 320, 240 320 S 312 360, 368 348"
-        fill="none"
-        stroke={`url(#${id}-gold)`}
-        strokeWidth="14"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity=".5"
-      />
-      <circle cx="372" cy="168" r="34" fill={`url(#${id}-gold)`}/>
-      <circle cx="364" cy="160" r="10" fill="#F5E4BD" opacity=".75"/>
-    </svg>
-  );
-}
-
-function MarflowWordmark({ height = 18, colorMar = "#FFFFFF", colorFlow = "#C6A96B", withMark = true, markSize }) {
-  const _markSize = markSize ?? Math.round(height * 1.7);
+function MarflowWordmark({ height = 18, colorMar = "#FFFFFF", colorFlow = "#C6A96B" }) {
   return (
     <div
       role="img"
       aria-label="MARFLOW"
       style={{
         display: "inline-flex",
-        alignItems: "center",
-        gap: withMark ? Math.round(height * 0.55) : 0,
+        alignItems: "baseline",
         fontFamily: "'Helvetica Neue', 'Inter', 'SF Pro Display', system-ui, -apple-system, sans-serif",
         fontWeight: 300,
         fontSize: height,
@@ -930,11 +832,8 @@ function MarflowWordmark({ height = 18, colorMar = "#FFFFFF", colorFlow = "#C6A9
         textRendering: "geometricPrecision",
       }}
     >
-      {withMark && <MarflowBrandMark size={_markSize}/>}
-      <span style={{ display: "inline-flex", alignItems: "baseline" }}>
-        <span style={{ color: colorMar }}>MAR</span>
-        <span style={{ color: colorFlow }}>FLOW</span>
-      </span>
+      <span style={{ color: colorMar }}>MAR</span>
+      <span style={{ color: colorFlow }}>FLOW</span>
     </div>
   );
 }
@@ -2660,9 +2559,6 @@ function SeccionActividadReciente({ usuario }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminId]);
 
-  // Sin actividad y ya terminó de cargar → no renderizar el card (sin empty state).
-  if (!loading && items.length === 0) return null;
-
   return (
     <div>
       <SeccionTitulo eyebrow="Historial" titulo="Actividad reciente"
@@ -2678,7 +2574,12 @@ function SeccionActividadReciente({ usuario }) {
           <div style={{padding:"36px 16px", textAlign:"center", color:"rgba(10,31,68,0.45)", fontSize:12.5}}>
             <IconLoader size={16} color="rgba(10,31,68,0.45)"/>
           </div>
-        ) : items.length > 0 && (
+        ) : items.length === 0 ? (
+          <div style={{padding:"36px 18px", textAlign:"center", color:"rgba(10,31,68,0.50)"}}>
+            <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:18, color:"#0A1F44", marginBottom:4}}>Sin actividad aún</div>
+            <div style={{fontSize:12.5}}>Conforme uses MarFlow, verás aquí los movimientos.</div>
+          </div>
+        ) : (
           <>
             <style>{`
               .mf-act-row { padding: 14px 16px; gap: 12px; }
@@ -3631,15 +3532,11 @@ function Configuracion({ usuario, cuentas, setCuentas, leads, idleTimeoutMin, on
                   onMouseLeave={e=>{ if(!active){ e.currentTarget.style.borderColor="rgba(10,31,68,0.10)"; e.currentTarget.style.background="#fff"; } }}>
                   <div style={{
                     width:54, height:54, borderRadius:"50%",
-                    background: B.cream,
+                    background:"#fff",
                     border:`1.5px solid ${active ? B.gold+"66" : "rgba(10,31,68,0.10)"}`,
                     display:"flex", alignItems:"center", justifyContent:"center",
-                    lineHeight:1,
-                  }}>
-                    {av.v === "inicial"
-                      ? <span style={{fontFamily:"'Cormorant Garamond', serif", fontSize:26, fontWeight:500, color:B.navy, letterSpacing:"-0.01em"}}>{initials(usuario?.nombre || "M")}</span>
-                      : <AvatarSymbol v={av.v} size={30} color={B.gold}/>}
-                  </div>
+                    fontSize:30, lineHeight:1,
+                  }}>{av.emoji}</div>
                   <div style={{
                     fontSize:10.5, fontWeight: active ? 600 : 500,
                     color: active ? B.navy : "rgba(10,31,68,0.65)",
@@ -3978,19 +3875,16 @@ function VentaDelDia({leads}) {
     (l.checklist?.sigues === true || l.etapa === "cotizacion")
   ).filter((l,i,arr) => arr.findIndex(x=>x.id===l.id)===i).slice(0,6);
 
-  // Si ambos bloques están vacíos → no renderizar el card "Venta del día"
-  if (nuevos.length === 0 && deseanSeguimiento.length === 0) return null;
-
-  const Block = ({title, color, items, icon}) => {
-    if (!items || items.length === 0) return null; // sin items → no renderiza el card
-    return (
-      <div style={{background:"rgba(255,255,255,.07)",borderRadius:10,padding:"12px 14px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
-          <span style={{fontSize:13}}>{icon}</span>
-          <span style={{fontSize:11,fontWeight:700,color,textTransform:"uppercase",letterSpacing:.6}}>{title}</span>
-          <span style={{marginLeft:"auto",background:color+"22",color,borderRadius:20,padding:"1px 8px",fontSize:10,fontWeight:700}}>{items.length}</span>
-        </div>
-        {items.map(l=>{
+  const Block = ({title, color, items, emptyMsg, icon}) => (
+    <div style={{background:"rgba(255,255,255,.07)",borderRadius:10,padding:"12px 14px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+        <span style={{fontSize:13}}>{icon}</span>
+        <span style={{fontSize:11,fontWeight:700,color,textTransform:"uppercase",letterSpacing:.6}}>{title}</span>
+        {items.length>0&&<span style={{marginLeft:"auto",background:color+"22",color,borderRadius:20,padding:"1px 8px",fontSize:10,fontWeight:700}}>{items.length}</span>}
+      </div>
+      {items.length===0
+        ?<div style={{fontSize:11,color:"rgba(255,255,255,.3)",fontStyle:"italic"}}>{emptyMsg}</div>
+        :items.map(l=>{
           const etapa = ETAPAS.find(e=>e.id===l.etapa)||ETAPAS[0];
           return (
             <div key={l.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
@@ -4004,10 +3898,10 @@ function VentaDelDia({leads}) {
               </div>
             </div>
           );
-        })}
-      </div>
-    );
-  };
+        })
+      }
+    </div>
+  );
 
   return (
     <div style={{background:"#0A1F44",borderRadius:14,padding:"20px 24px",marginBottom:20,position:"relative",overflow:"hidden"}}>
@@ -4131,8 +4025,14 @@ function ActividadReciente({leads}) {
   const tipoIcon = {llamada:"📞", whatsapp:"💬", visita:"🤝", correo:"📧", nota:"📝"};
   const tipoColor = {llamada:"#1e3a8a", whatsapp:"#25d366", visita:"#4c1d95", correo:"#92400e", nota:"#9ca3af"};
 
-  // Sin movimientos → no renderiza el card (sin empty state).
-  if (ultimos15.length === 0) return null;
+  if(ultimos15.length === 0) {
+    return (
+      <div style={{background:"#fff",border:"1px solid #E5E7EB",borderRadius:12,padding:"18px 20px",boxShadow:"0 1px 4px rgba(10,31,68,.08)"}}>
+        <div style={{fontSize:14,fontWeight:700,color:"#0A1F44",marginBottom:14}}>📋 Actividad reciente</div>
+        <div style={{fontSize:13,color:"#9ca3af",textAlign:"center",padding:"20px 0",fontStyle:"italic"}}>Sin movimientos registrados aún</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{background:"#fff",border:"1px solid #E5E7EB",borderRadius:12,padding:"18px 20px",boxShadow:"0 1px 4px rgba(10,31,68,.08)"}}>
@@ -5017,7 +4917,15 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
           <div style={{flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:"14px 18px", paddingBottom:"max(24px, calc(24px + env(safe-area-inset-bottom)))"}}>
             {(() => {
               const conPend = leadsConPendientes(leads);
-              if (conPend.length === 0) return null; // sin pendientes → drawer vacío, sin empty state
+              if (conPend.length === 0) {
+                return <div style={{
+                  textAlign:"center", padding:"60px 20px",
+                  color:"rgba(10,31,68,0.50)", fontSize:13,
+                }}>
+                  <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:20, color:B.navy, marginBottom:6}}>Sin pendientes</div>
+                  Todo al día.
+                </div>;
+              }
               return conPend.map(l => {
                 const abiertos = (l.pendientes || []).filter(p => !p.hecho);
                 if (abiertos.length === 0) return null;
@@ -5909,7 +5817,7 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         {masAccionesAbierto && (
           <div onClick={e=>e.stopPropagation()} style={{
             position:"absolute", top:38, right:0, zIndex:50,
-            width:240, background:"#F8F6F2",
+            width:200, background:"#F8F6F2",
             border:"1px solid rgba(10,31,68,0.08)", borderRadius:12,
             boxShadow:"0 12px 30px rgba(10,31,68,0.14)",
             overflow:"hidden", animation:"mfFadeUp .18s var(--mf-ease-spring)",
@@ -5919,47 +5827,6 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
               padding:"10px 14px", fontSize:12, color:B.navy, letterSpacing:"0.005em",
               borderBottom:"1px solid rgba(10,31,68,0.04)",
             }}>Ver historial completo</button>
-
-            {/* Referido: toggle + ¿Por quién? */}
-            <div style={{
-              padding:"10px 14px",
-              borderBottom:"1px solid rgba(10,31,68,0.04)",
-              background: f.esReferido ? "rgba(198,169,107,0.06)" : "transparent",
-            }}>
-              <button onClick={()=>set("esReferido", !f.esReferido)} style={{
-                all:"unset", cursor:"pointer",
-                display:"flex", alignItems:"center", gap:9, width:"100%",
-              }}>
-                <span style={{
-                  width:16, height:16, borderRadius:4,
-                  background: f.esReferido ? "#C6A96B" : "#fff",
-                  border: `1.5px solid ${f.esReferido ? "#C6A96B" : "rgba(10,31,68,0.20)"}`,
-                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-                }}>{f.esReferido && <IconCheck size={10} color="#fff"/>}</span>
-                <span style={{fontSize:12, fontWeight: f.esReferido ? 600 : 500, color:B.navy, letterSpacing:"0.005em"}}>
-                  {f.esReferido ? "Es referido" : "Marcar como referido"}
-                </span>
-              </button>
-              {f.esReferido && (
-                <div style={{marginTop:8}}>
-                  <input
-                    value={f.referidoPor||""}
-                    onChange={e=>set("referidoPor", e.target.value)}
-                    placeholder="¿Por quién? (opcional)"
-                    style={{
-                      width:"100%", padding:"8px 10px",
-                      borderRadius:7, border:"1px solid rgba(10,31,68,0.12)",
-                      background:"#fff", color:B.navy,
-                      fontFamily:"'Poppins',sans-serif", fontSize:12,
-                      outline:"none",
-                    }}
-                    onFocus={e=>e.target.style.borderColor="#C6A96B"}
-                    onBlur={e=>e.target.style.borderColor="rgba(10,31,68,0.12)"}
-                  />
-                </div>
-              )}
-            </div>
-
             <button onClick={()=>{toggleSinSeg(); setMasAccionesAbierto(false);}} style={{
               all:"unset", cursor:"pointer", display:"block", width:"100%",
               padding:"10px 14px", fontSize:12, color: f.sinSeguimiento ? "#059669" : B.navy,
@@ -6162,78 +6029,6 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
     ))}
     {/* (Tab "Etapa" removida — ahora pipeline visual horizontal arriba) */}
     {/* (Info / Estado / Estrategia movidos al bloque "Información completa" colapsable al final) */}
-    {/* ═══ HISTORIAL (primero — contexto antes que acciones) ═══ */}
-    <div style={{marginBottom:20}}>
-      <div style={{
-        display:"flex", alignItems:"center", justifyContent:"space-between",
-        marginBottom:10, gap:10,
-      }}>
-        <div style={{
-          fontSize:10, fontWeight:500,
-          color:"rgba(10,31,68,0.40)",
-          textTransform:"uppercase", letterSpacing:"0.18em",
-        }}>Historial</div>
-        {(f.seguimientos||[]).length > 3 && (
-          <button onClick={()=>setHistorialCompleto(true)} style={{
-            all:"unset", cursor:"pointer",
-            fontSize:11, color:"rgba(10,31,68,0.55)",
-            letterSpacing:"0.01em",
-            display:"inline-flex", alignItems:"center", gap:4,
-          }}
-            onMouseEnter={e=>{e.currentTarget.style.color=B.navy;}}
-            onMouseLeave={e=>{e.currentTarget.style.color="rgba(10,31,68,0.55)";}}>
-            Ver historial completo
-            <IconChevronRight size={11} color="currentColor"/>
-          </button>
-        )}
-      </div>
-
-      {/* Form alta inline compacto */}
-      <div style={{display:"flex", gap:6, marginBottom:12, flexWrap:"wrap"}}>
-        <div style={{minWidth:120}}>
-          <Sel value={tipoN} onChange={setTipoN} options={[
-            {v:"llamada",l:"Llamada"},{v:"whatsapp",l:"WhatsApp"},{v:"visita",l:"Visita"},{v:"correo",l:"Correo"},{v:"nota",l:"Nota"},
-          ]}/>
-        </div>
-        <div style={{flex:1, minWidth:160}}>
-          <Inp value={nota} onChange={setNota} placeholder="Registro rápido…" onKeyDown={e=>e.key==="Enter"&&addNota()}/>
-        </div>
-        <button onClick={addNota} style={{
-          display:"inline-flex", alignItems:"center", justifyContent:"center",
-          padding:"0 12px", minHeight:44, borderRadius:8, border:"none",
-          background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
-          color:"#fff", cursor:"pointer",
-        }}><IconPlus size={12} color="#fff"/></button>
-      </div>
-
-      {/* Solo últimas 3 actividades (sin empty state) */}
-      {(f.seguimientos||[]).length > 0 && (
-        <div style={{display:"flex", flexDirection:"column", gap:8}}>
-          {(f.seguimientos||[]).slice(0, 3).map((s,i) => (
-            <div key={s.id||i} style={{
-              display:"flex", alignItems:"flex-start", gap:10,
-              padding:"10px 12px",
-              background:"rgba(248,246,242,0.6)",
-              border:"1px solid rgba(10,31,68,0.05)",
-              borderRadius:10,
-            }}>
-              <span style={{
-                width:8, height:8, borderRadius:"50%", flexShrink:0, marginTop:6,
-                background: tipoColor[s.tipo] || "rgba(10,31,68,0.30)",
-              }}/>
-              <div style={{flex:1, minWidth:0, overflowWrap:"anywhere"}}>
-                <div style={{fontSize:12.5, color:B.navy, lineHeight:1.45, letterSpacing:"-0.005em"}}>{s.texto}</div>
-                <div style={{
-                  fontSize:10, color:"rgba(10,31,68,0.45)",
-                  marginTop:3, textTransform:"uppercase", letterSpacing:"0.10em",
-                }}>{fmtF(s.fecha)} · {s.tipo}{s.autor ? ` · ${s.autor}` : ""}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-
     {!f.sinSeguimiento && (
       <div style={{marginBottom:20}}>
         <div style={{
@@ -6271,8 +6066,14 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
           </button>
         </div>
 
-        {/* Lista de pendientes (sólo si hay; sin empty state) */}
-        {(f.pendientes||[]).length > 0 && (
+        {/* Lista de pendientes */}
+        {(f.pendientes||[]).length === 0 ? (
+          <div style={{
+            fontSize:13, color:"rgba(10,31,68,0.30)",
+            textAlign:"center", padding:"32px 0",
+            fontStyle:"italic", letterSpacing:"0.01em",
+          }}>Sin pendientes para este lead</div>
+        ) : (
           <div>
             {(f.pendientes||[]).map(p => {
               const tipo = PENDIENTE_TIPOS.find(t => t.v === p.tipo) || PENDIENTE_TIPOS[7];
@@ -6347,6 +6148,84 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
         )}
       </div>
     )}
+    {/* ═══ HISTORIAL (últimas 3 + ver completo) ═══ */}
+    <div style={{marginBottom:20}}>
+      <div style={{
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        marginBottom:10, gap:10,
+      }}>
+        <div style={{
+          fontSize:10, fontWeight:500,
+          color:"rgba(10,31,68,0.40)",
+          textTransform:"uppercase", letterSpacing:"0.18em",
+        }}>Historial</div>
+        {(f.seguimientos||[]).length > 3 && (
+          <button onClick={()=>setHistorialCompleto(true)} style={{
+            all:"unset", cursor:"pointer",
+            fontSize:11, color:"rgba(10,31,68,0.55)",
+            letterSpacing:"0.01em",
+            display:"inline-flex", alignItems:"center", gap:4,
+          }}
+            onMouseEnter={e=>{e.currentTarget.style.color=B.navy;}}
+            onMouseLeave={e=>{e.currentTarget.style.color="rgba(10,31,68,0.55)";}}>
+            Ver historial completo
+            <IconChevronRight size={11} color="currentColor"/>
+          </button>
+        )}
+      </div>
+
+      {/* Form alta inline compacto */}
+      <div style={{display:"flex", gap:6, marginBottom:12, flexWrap:"wrap"}}>
+        <div style={{minWidth:120}}>
+          <Sel value={tipoN} onChange={setTipoN} options={[
+            {v:"llamada",l:"Llamada"},{v:"whatsapp",l:"WhatsApp"},{v:"visita",l:"Visita"},{v:"correo",l:"Correo"},{v:"nota",l:"Nota"},
+          ]}/>
+        </div>
+        <div style={{flex:1, minWidth:160}}>
+          <Inp value={nota} onChange={setNota} placeholder="Registro rápido…" onKeyDown={e=>e.key==="Enter"&&addNota()}/>
+        </div>
+        <button onClick={addNota} style={{
+          display:"inline-flex", alignItems:"center", justifyContent:"center",
+          padding:"0 12px", minHeight:44, borderRadius:8, border:"none",
+          background:"linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+          color:"#fff", cursor:"pointer",
+        }}><IconPlus size={12} color="#fff"/></button>
+      </div>
+
+      {/* Solo últimas 3 actividades */}
+      {(f.seguimientos||[]).length === 0 ? (
+        <div style={{
+          fontSize:12, color:"rgba(10,31,68,0.45)",
+          textAlign:"center", padding:"20px 0",
+          fontStyle:"italic", letterSpacing:"0.01em",
+        }}>Sin actividad registrada aún.</div>
+      ) : (
+        <div style={{display:"flex", flexDirection:"column", gap:8}}>
+          {(f.seguimientos||[]).slice(0, 3).map((s,i) => (
+            <div key={s.id||i} style={{
+              display:"flex", alignItems:"flex-start", gap:10,
+              padding:"10px 12px",
+              background:"rgba(248,246,242,0.6)",
+              border:"1px solid rgba(10,31,68,0.05)",
+              borderRadius:10,
+            }}>
+              <span style={{
+                width:8, height:8, borderRadius:"50%", flexShrink:0, marginTop:6,
+                background: tipoColor[s.tipo] || "rgba(10,31,68,0.30)",
+              }}/>
+              <div style={{flex:1, minWidth:0, overflowWrap:"anywhere"}}>
+                <div style={{fontSize:12.5, color:B.navy, lineHeight:1.45, letterSpacing:"-0.005em"}}>{s.texto}</div>
+                <div style={{
+                  fontSize:10, color:"rgba(10,31,68,0.45)",
+                  marginTop:3, textTransform:"uppercase", letterSpacing:"0.10em",
+                }}>{fmtF(s.fecha)} · {s.tipo}{s.autor ? ` · ${s.autor}` : ""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
     {/* ═══ INFORMACIÓN COMPLETA (collapsable, cerrada por defecto) ═══ */}
     <div style={{marginBottom:18, borderTop:"1px solid rgba(10,31,68,0.06)", paddingTop:16}}>
       <button onClick={()=>setInfoExpandida(o=>!o)} style={{
@@ -6426,7 +6305,34 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
             </FL>
           </div>
         )}
-        {/* "Es referido" se controla desde el menú "Más" abajo del nombre del lead. */}
+        <div style={{
+          display:"flex", alignItems:"center", gap:12, marginTop:14,
+          padding:"12px 14px",
+          background:"rgba(198,169,107,0.05)",
+          border:"1px solid rgba(198,169,107,0.18)",
+          borderRadius:10, flexWrap:"wrap",
+        }}>
+          <button onClick={()=>set("esReferido", !f.esReferido)} style={{
+            all:"unset", cursor:"pointer",
+            display:"flex", alignItems:"center", gap:9,
+          }}>
+            <span style={{
+              width:18, height:18, borderRadius:5,
+              background: f.esReferido ? "#C6A96B" : "#fff",
+              border: `1.5px solid ${f.esReferido ? "#C6A96B" : "rgba(10,31,68,0.20)"}`,
+              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+            }}>{f.esReferido && <IconCheck size={11} color="#fff"/>}</span>
+            <span style={{fontSize:12.5, fontWeight:600, color:B.navy, letterSpacing:"-0.005em"}}>Es referido</span>
+          </button>
+          {f.esReferido && (
+            <div style={{flex:"1 1 180px", minWidth:140}}>
+              <Inp value={f.referidoPor||""} onChange={v=>set("referidoPor", v)} placeholder="¿Por quién? (opcional)"/>
+            </div>
+          )}
+        </div>
+        <div style={{fontSize:11, color:"rgba(10,31,68,0.45)", marginTop:8, lineHeight:1.45, fontStyle:"italic"}}>
+          Los referidos se marcan automáticamente como "Alta oportunidad" cuando no eliges otro estado manual.
+        </div>
       </div>
 
       {/* Comentarios — campo único para captura rápida (reemplaza Estrategia) */}
@@ -6544,7 +6450,9 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
             }}><IconX size={12} color="currentColor"/></button>
           </div>
           <div style={{flex:1, overflowY:"auto", padding:"16px 22px 22px"}}>
-            {(f.seguimientos||[]).length > 0 && (
+            {(f.seguimientos||[]).length === 0 ? (
+              <div style={{textAlign:"center", padding:"40px 20px", color:"rgba(10,31,68,0.50)", fontStyle:"italic"}}>Sin actividad registrada aún.</div>
+            ) : (
               <div style={{position:"relative", paddingLeft:22}}>
                 <div style={{position:"absolute", left:8, top:6, bottom:6, width:1, background:"rgba(10,31,68,0.08)"}}/>
                 {(f.seguimientos||[]).map((s,i) => (
@@ -7664,8 +7572,33 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
               }}>{cols.length}</span>
             </div>
 
-            {/* Cards (sin empty state — el "0" del header ya indica vacío) */}
-            {cols.map(l => <LeadCard key={l.id} lead={l} onClick={setLeadAct} onContacto={setContactoL}/>)}
+            {/* Cards o estado vacío premium */}
+            {cols.length === 0 ? (
+              <div style={{
+                border: `1px dashed ${B.goldBorder}`,
+                borderRadius: 12,
+                padding: "26px 14px",
+                textAlign: "center",
+                background: "linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(248,246,242,0.5) 100%)",
+                display:"flex", flexDirection:"column", alignItems:"center", gap:8,
+              }}>
+                <div style={{
+                  width:32, height:32, borderRadius:"50%",
+                  background:B.cream, border:`1px solid ${B.goldBorder}`,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  color:B.gold,
+                }}><IconLayers size={14} color={B.gold}/></div>
+                <div style={{
+                  fontFamily:"'Cormorant Garamond', serif",
+                  fontSize:15, color:B.navy, lineHeight:1.2,
+                }}>Etapa libre</div>
+                <div style={{fontSize:10.5, color:"rgba(10,31,68,0.45)", letterSpacing:"0.02em", maxWidth:160, lineHeight:1.4}}>
+                  Arrastra un lead aquí o crea uno nuevo desde el botón “+”.
+                </div>
+              </div>
+            ) : (
+              cols.map(l => <LeadCard key={l.id} lead={l} onClick={setLeadAct} onContacto={setContactoL}/>)
+            )}
           </div>
         );
       })}
@@ -8198,7 +8131,20 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
               <div style={{fontSize:11.5, color:"rgba(10,31,68,0.50)", fontVariantNumeric:"tabular-nums"}}>{evsDia.length} compromiso{evsDia.length===1?"":"s"}</div>
             </div>
 
-            {evsDia.length > 0 && (
+            {evsDia.length === 0 ? (
+              <button onClick={()=>abrirNuevo(fechaAncla)} style={{
+                width:"100%", padding:"28px 16px", borderRadius:10,
+                border:"1px dashed rgba(10,31,68,0.12)",
+                background:"transparent", color:"rgba(10,31,68,0.50)",
+                fontFamily:"'Poppins',sans-serif", fontSize:13, fontWeight:500,
+                cursor:"pointer", letterSpacing:"0.005em",
+                transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+              }}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=B.goldBorder||"rgba(198,169,107,0.35)"; e.currentTarget.style.color=B.gold;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(10,31,68,0.12)"; e.currentTarget.style.color="rgba(10,31,68,0.50)";}}>
+                Sin compromisos este día · + Agregar
+              </button>
+            ) : (
               <div style={{display:"flex", flexDirection:"column", gap:10}}>
                 {evsDia.map(ev => (
                   <button key={ev.id} onClick={()=>!ev._privado && abrirEditar(ev)}
@@ -8285,7 +8231,27 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
             <div style={{height:1, background:"linear-gradient(90deg, transparent, rgba(10,31,68,0.08), transparent)", marginTop:18}}/>
           </div>
 
-          {/* Lista de eventos (sin empty state) */}
+          {/* Empty state editorial */}
+          {diasConEvs.length === 0 && (
+            <div style={{textAlign:"center", padding:"32px 0 16px"}}>
+              <div style={{
+                width:48, height:48, borderRadius:"50%",
+                background:"rgba(248,246,242,0.8)",
+                border:"1px solid rgba(10,31,68,0.06)",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                margin:"0 auto 12px",
+                color:"rgba(10,31,68,0.35)",
+              }}>
+                <IconCalendar size={20} color="rgba(10,31,68,0.35)"/>
+              </div>
+              <div style={{
+                fontSize:13, color:"rgba(10,31,68,0.45)",
+                fontStyle:"italic", letterSpacing:"0.01em",
+              }}>Sin eventos este día</div>
+            </div>
+          )}
+
+          {/* Lista de eventos */}
           <div style={{display:"flex", flexDirection:"column", gap:0}}>
             {diasConEvs.map((ev, idx) => (
               <div key={ev.id} style={{
@@ -12080,9 +12046,7 @@ export default function App() {
                       { icon:"👤", label:"Leads nuevos sin contactar",     value: leadsNuevosSinContacto },
                       { icon:"⚠️", label:"Renovaciones próximas 15 días",  value: renov15d },
                       { icon:"🚨", label:"Cobranza crítica +40d",          value: cobranzaCritica40d, sub:"PLU3 · OP3D · Periodo inicial" },
-                    ].filter(it => it.value > 0); // solo items con valor — sin "0" ocupando espacio
-
-                    if (items.length === 0) return null; // todo en cero → no renderiza el bloque
+                    ];
 
                     return (
                       <div style={{padding:"14px 18px"}}>
@@ -12101,6 +12065,7 @@ export default function App() {
                           }}>
                             <span style={{
                               fontSize:18, flexShrink:0, width:24, textAlign:"center", lineHeight:1,
+                              opacity: item.value > 0 ? 1 : 0.40,
                             }}>{item.icon}</span>
                             <div style={{flex:1, minWidth:0}}>
                               <div style={{
@@ -12120,7 +12085,7 @@ export default function App() {
                             <div style={{
                               fontFamily:"'Cormorant Garamond', serif",
                               fontSize:24, fontWeight:500, lineHeight:1,
-                              color: B.navy,
+                              color: item.value > 0 ? B.navy : "rgba(10,31,68,0.25)",
                               fontVariantNumeric:"tabular-nums",
                               letterSpacing:"-0.02em",
                               minWidth:24, textAlign:"right",
