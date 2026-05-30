@@ -5430,13 +5430,15 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
   const [motivoSeleccionado, setMotivoSeleccionado] = useState("");
 
   function cambiarEtapa(nueva){
-    const anterior=f.etapa;if(nueva===anterior)return;
-    // Si la nueva etapa es "perdido", abrir modal de motivo PRIMERO
+    const anterior=f.etapa;
+    // Si destino es "perdido": SIEMPRE abrir el modal de motivo
+    // (incluso si ya está en perdido → permite editar el motivo).
     if (nueva === "perdido") {
       setMotivoSeleccionado(f.motivoPerdida || "");
       setPidiendoMotivo("perdido");
       return;
     }
+    if (nueva === anterior) return;
     _aplicarCambioEtapa(nueva, null);
   }
 
@@ -5868,6 +5870,12 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
               )}
             </div>
 
+            <button onClick={()=>{cambiarEtapa("perdido"); setMasAccionesAbierto(false);}} style={{
+              all:"unset", cursor:"pointer", display:"block", width:"100%",
+              padding:"10px 14px", fontSize:12, color: f.etapa === "perdido" ? "#dc2626" : B.navy,
+              letterSpacing:"0.005em",
+              borderBottom:"1px solid rgba(10,31,68,0.04)",
+            }}>{f.etapa === "perdido" ? "Cambiar motivo de pérdida" : "Marcar como perdido"}</button>
             <button onClick={()=>{toggleSinSeg(); setMasAccionesAbierto(false);}} style={{
               all:"unset", cursor:"pointer", display:"block", width:"100%",
               padding:"10px 14px", fontSize:12, color: f.sinSeguimiento ? "#059669" : B.navy,
