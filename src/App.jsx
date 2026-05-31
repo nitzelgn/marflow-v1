@@ -11378,34 +11378,43 @@ export default function App() {
 
   // Cargar perfil desde la tabla cuentas (con auto-create si el trigger falló)
   async function cargarPerfil(userId) {
-    let { data, error } = await supabase
-      .from("cuentas").select("*").eq("id", userId).maybeSingle();
-    if (error) { console.error("cargarPerfil error:", error); return null; }
-    if (!data) {
-      const { data: userData } = await supabase.auth.getUser();
-      const meta = userData?.user?.user_metadata || {};
-      const emailUser = userData?.user?.email || "";
-      const prefijo = emailUser.split("@")[0] || "usuario";
-      const { data: nuevo, error: insErr } = await supabase
-        .from("cuentas")
-        .insert({
-          id: userId,
-          nombre: meta.nombre || prefijo,
-          usuario: prefijo + "_" + userId.substring(0, 4),
-          rol: meta.rol || "admin",
-        })
-        .select().single();
-      if (insErr) { console.error("auto-create perfil falló:", insErr); return null; }
-      data = nuevo;
+    const log = (...a) => { try { console.log("[AUTH·cargarPerfil]", ...a); } catch {} };
+    try {
+      log("SELECT cuentas para", userId);
+      let { data, error } = await supabase
+        .from("cuentas").select("*").eq("id", userId).maybeSingle();
+      if (error) { log("SELECT error:", error.message || error); return null; }
+      if (!data) {
+        log("sin perfil → auto-create");
+        const { data: userData } = await supabase.auth.getUser();
+        const meta = userData?.user?.user_metadata || {};
+        const emailUser = userData?.user?.email || "";
+        const prefijo = emailUser.split("@")[0] || "usuario";
+        const { data: nuevo, error: insErr } = await supabase
+          .from("cuentas")
+          .insert({
+            id: userId,
+            nombre: meta.nombre || prefijo,
+            usuario: prefijo + "_" + userId.substring(0, 4),
+            rol: meta.rol || "admin",
+          })
+          .select().single();
+        if (insErr) { log("auto-create error:", insErr.message || insErr); return null; }
+        data = nuevo;
+        log("auto-create ok");
+      }
+      // Augmenta el perfil con el avatar guardado localmente (por user id).
+      const avatarGuardado = LS.get("mf_avatar_" + data.id, null);
+      log("perfil resuelto", { id: data.id, rol: data.rol });
+      return {
+        id: data.id, nombre: data.nombre, usuario: data.usuario,
+        rol: data.rol, color: data.color, adminId: data.admin_id,
+        avatar: avatarGuardado,
+      };
+    } catch (e) {
+      log("excepción inesperada:", e?.message || e);
+      return null;
     }
-    // Augmenta el perfil con el avatar guardado localmente (por user id).
-    // Si nunca eligió uno → null y se usa la inicial.
-    const avatarGuardado = LS.get("mf_avatar_" + data.id, null);
-    return {
-      id: data.id, nombre: data.nombre, usuario: data.usuario,
-      rol: data.rol, color: data.color, adminId: data.admin_id,
-      avatar: avatarGuardado,
-    };
   }
 
   // Helper para actualizar el avatar del usuario (persiste en LS y refresca header).
@@ -11467,56 +11476,152 @@ export default function App() {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════
   // Verificar sesión al cargar y escuchar cambios
+  // ───────────────────────────────────────────────────────────────
+  // BLINDADO contra cuelgues en "Verificando…":
+  //   1) Safety net 10s: setAuthReady(true) SIEMPRE se llama, pase lo que pase.
+  //   2) try/finally en cada flujo async — garantía de que setAuthReady/setDatosCargando
+  //      siempre liberan el estado.
+  //   3) Timeouts independientes para getSession (4s), cargarPerfil (6s) y
+  //      cargarEquipo+leads+eventos (8s). Si Supabase cuelga en cualquier paso,
+  //      la app suelta el "Verificando…" en lugar de quedarse infinitamente.
+  //   4) Logs detallados con prefijo [AUTH] + timestamp para diagnosticar
+  //      en consola del navegador qué paso quedó atorado.
+  // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
     let mounted = true;
-    const enRecovery = detectarRecovery();
+    const t0 = Date.now();
+    const lap = () => `${Date.now()-t0}ms`;
+    const log = (...args) => { try { console.log(`[AUTH ${lap()}]`, ...args); } catch {} };
 
-    // RACE getSession vs timeout 4s — si la red está lenta, no se queda
-    // colgado en "Cargando..." infinito. Si hay timeout, mostramos login y
-    // dejamos que onAuthStateChange tome el control después si llega.
-    const SESSION_TIMEOUT_MS = 4000;
+    log("init → useEffect montado");
+
+    let enRecovery = false;
+    try { enRecovery = detectarRecovery(); }
+    catch (e) { log("detectarRecovery throw:", e?.message || e); }
+    log("recovery flag:", enRecovery);
+
+    // Wrapper genérico: una promesa con timeout. Si la promesa rechaza o se
+    // pasa del timeout, resuelve con `fallback` (no rejecta nunca).
+    const withTimeout = (label, promise, ms, fallback = null) =>
+      Promise.race([
+        Promise.resolve(promise)
+          .then(v => { log(`${label} ok`); return v; })
+          .catch(e => { log(`${label} threw:`, e?.message || e); return fallback; }),
+        new Promise(resolve => setTimeout(() => { log(`${label} TIMEOUT (${ms}ms)`); resolve(fallback); }, ms)),
+      ]);
+
+    // 🛡️ Safety net: pase lo que pase, en 10 s suelta el "Verificando…".
+    const safetyNet = setTimeout(() => {
+      if (!mounted) return;
+      log("⚠️ SAFETY NET disparado — forzando authReady=true después de 10s");
+      setAuthReady(true);
+      setDatosCargando(false);
+    }, 10000);
+
+    // ── 1) getSession con timeout 4s ──────────────────────────────
+    log("getSession → llamando");
     const sessionPromise = supabase.auth.getSession()
-      .then(r => ({ session: r?.data?.session || null, timedOut: false }))
-      .catch(() => ({ session: null, timedOut: false }));
+      .then(r => { log("getSession resuelta", r?.data?.session ? "(con sesión)" : "(sin sesión)"); return { session: r?.data?.session || null, timedOut: false }; })
+      .catch(e => { log("getSession throw:", e?.message || e); return { session: null, timedOut: false }; });
     const timeoutPromise = new Promise(resolve =>
-      setTimeout(() => resolve({ session: null, timedOut: true }), SESSION_TIMEOUT_MS)
+      setTimeout(() => { log("getSession TIMEOUT 4s"); resolve({ session: null, timedOut: true }); }, 4000)
     );
 
     Promise.race([sessionPromise, timeoutPromise]).then(async ({ session, timedOut }) => {
       if (!mounted) return;
-      if (session?.user && !enRecovery) {
-        const perfil = await cargarPerfil(session.user.id);
-        if (perfil) {
-          setUsuario(perfil);
-          setSeccion(perfil.rol === "asistente" ? "agenda" : "dashboard");
-          const targetCid = perfil.rol === "asistente" ? perfil.adminId : perfil.id;
-          setDatosCargando(true);
-          await Promise.all([cargarEquipo(), cargarLeadsDeDB(targetCid), cargarEventosDeDB(targetCid)]);
-          setDatosCargando(false);
+      try {
+        if (session?.user && !enRecovery) {
+          log("session activa → cargarPerfil");
+          // ── 2) cargarPerfil con timeout 6s ──
+          const perfil = await withTimeout("cargarPerfil", cargarPerfil(session.user.id), 6000, null);
+          if (perfil) {
+            log("perfil cargado", { id: perfil.id, rol: perfil.rol });
+            setUsuario(perfil);
+            setSeccion(perfil.rol === "asistente" ? "agenda" : "dashboard");
+            const targetCid = perfil.rol === "asistente" ? perfil.adminId : perfil.id;
+            setDatosCargando(true);
+            try {
+              // ── 3) Equipo + leads + eventos con timeout 8s total ──
+              await withTimeout(
+                "cargar datos (equipo+leads+eventos)",
+                Promise.all([
+                  cargarEquipo().catch(e => log("cargarEquipo throw:", e?.message || e)),
+                  cargarLeadsDeDB(targetCid).catch(e => log("cargarLeadsDeDB throw:", e?.message || e)),
+                  cargarEventosDeDB(targetCid).catch(e => log("cargarEventosDeDB throw:", e?.message || e)),
+                ]),
+                8000,
+                null,
+              );
+            } finally {
+              setDatosCargando(false);
+              log("datosCargando → false");
+            }
+          } else {
+            log("perfil null → mostrando login");
+          }
+        } else {
+          log(session ? "session pero enRecovery=true" : "sin session → mostrando login");
         }
-      }
-      // Aunque haya timeout, soltar la pantalla de Cargando para que se vea login.
-      setAuthReady(true);
-      if (timedOut && !session) {
-        console.warn("getSession timeout — mostrando login.");
+      } catch (e) {
+        log("⚠️ excepción en flujo principal:", e?.message || e);
+      } finally {
+        // 🔓 PASE LO QUE PASE: liberar pantalla "Verificando…"
+        setAuthReady(true);
+        clearTimeout(safetyNet);
+        log("✅ authReady=true (flujo principal completado)");
+        if (timedOut && !session) console.warn("[AUTH] getSession timeout — mostrando login.");
       }
     });
+
+    // ── Listener de cambios de sesión (signin tardío, signout, recovery) ──
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "PASSWORD_RECOVERY") { setRecoveryMode(true); return; }
-      if (event === "SIGNED_OUT") { setUsuario(null); setCuentas([]); setAllLeads({}); setAllEventos({}); return; }
-      if (event === "SIGNED_IN" && session?.user && !recoveryMode && !detectarRecovery()) {
-        const perfil = await cargarPerfil(session.user.id);
-        if (perfil) {
-          setUsuario(perfil);
-          const targetCid = perfil.rol === "asistente" ? perfil.adminId : perfil.id;
-          setDatosCargando(true);
-          await Promise.all([cargarEquipo(), cargarLeadsDeDB(targetCid), cargarEventosDeDB(targetCid)]);
-          setDatosCargando(false);
+      log("onAuthStateChange event:", event);
+      try {
+        if (event === "PASSWORD_RECOVERY") { setRecoveryMode(true); return; }
+        if (event === "SIGNED_OUT") {
+          setUsuario(null); setCuentas([]); setAllLeads({}); setAllEventos({});
+          setAuthReady(true);
+          return;
         }
+        if (event === "SIGNED_IN" && session?.user && !recoveryMode && !detectarRecovery()) {
+          const perfil = await withTimeout("cargarPerfil (signin)", cargarPerfil(session.user.id), 6000, null);
+          if (perfil) {
+            setUsuario(perfil);
+            const targetCid = perfil.rol === "asistente" ? perfil.adminId : perfil.id;
+            setDatosCargando(true);
+            try {
+              await withTimeout(
+                "cargar datos (signin)",
+                Promise.all([
+                  cargarEquipo().catch(e => log("cargarEquipo throw:", e?.message || e)),
+                  cargarLeadsDeDB(targetCid).catch(e => log("cargarLeadsDeDB throw:", e?.message || e)),
+                  cargarEventosDeDB(targetCid).catch(e => log("cargarEventosDeDB throw:", e?.message || e)),
+                ]),
+                8000,
+                null,
+              );
+            } finally {
+              setDatosCargando(false);
+            }
+          }
+        }
+      } catch (e) {
+        log("⚠️ excepción en onAuthStateChange:", e?.message || e);
+        setDatosCargando(false);
+      } finally {
+        // Garantía: cualquier evento del listener también suelta el "Verificando…".
+        setAuthReady(true);
       }
     });
-    return () => { mounted = false; subscription.unsubscribe(); };
+
+    return () => {
+      mounted = false;
+      clearTimeout(safetyNet);
+      subscription.unsubscribe();
+      log("cleanup");
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
