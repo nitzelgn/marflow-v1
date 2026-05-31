@@ -761,7 +761,7 @@ function MFModal({onClose,children,width=520}) {
           paddingRight:16,
           paddingBottom:"max(32px, calc(32px + env(safe-area-inset-bottom, 0px)))",
         }}>
-          <div style={{width:36,height:4,borderRadius:2,background:"#d1d5db",margin:"0 auto 16px"}}/>
+          <div className="mf-drag-handle" style={{width:36,height:4,borderRadius:2,background:"#d1d5db",margin:"0 auto 16px"}}/>
           {children}
         </div>
       </div>
@@ -11904,6 +11904,53 @@ export default function App() {
     .mf-app{padding-bottom:env(safe-area-inset-bottom);}
     /* Header respeta notch/dynamic island arriba + paddings laterales */
     .mf-header{padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
+
+    /* ═══════════════════════════════════════════════════════════
+       DESKTOP/TABLET RESPONSIVE — solo aplica ≥768px
+       Mobile-first intacto. Mejora layout sin tocar lógica.
+       ═══════════════════════════════════════════════════════════ */
+
+    /* Tablet (≥768px): paddings más cómodos en header + ocultar drag-handle del modal */
+    @media (min-width: 768px) {
+      .mf-drag-handle { display: none !important; }
+      .mf-header-row1 { padding: 0 24px; }
+      .mf-header-row2 { padding: 0 24px 8px; gap: 4px; }
+      .mf-pipeline-filters { padding: 9px 24px; gap: 7px; }
+      .mf-nav-btn { padding: 7px 14px; font-size: 12.5px; min-height: 34px; }
+    }
+
+    /* Desktop (≥1024px): columnas del Kanban más amplias, padding generoso */
+    @media (min-width: 1024px) {
+      .mf-kanban { gap: 16px; padding-bottom: 24px; }
+      .mf-kanban-col { min-width: 280px; max-width: 320px; }
+      .mf-header-row1 { padding: 0 28px; }
+      .mf-header-row2 { padding: 0 28px 10px; gap: 6px; }
+      .mf-pipeline-filters { padding: 11px 28px; gap: 8px; }
+      .mf-nav-btn { padding: 8px 16px; font-size: 13px; }
+      /* Tablas: respetar el ancho del contenedor en desktop */
+      .mf-table-wrap > table { min-width: auto !important; }
+    }
+
+    /* Desktop ancho (≥1280px): aprovechar pantalla, columnas aún más cómodas */
+    @media (min-width: 1280px) {
+      .mf-kanban-col { min-width: 300px; max-width: 340px; }
+      .mf-kanban { gap: 18px; }
+    }
+
+    /* Modal: padding interno más cómodo en desktop (sin afectar mobile) */
+    @media (min-width: 768px) {
+      .mf-modal-sheet .mf-modal-inner {
+        padding-left: 24px !important;
+        padding-right: 24px !important;
+      }
+    }
+    @media (min-width: 1024px) {
+      .mf-modal-sheet .mf-modal-inner {
+        padding-left: 28px !important;
+        padding-right: 28px !important;
+        padding-top: 28px !important;
+      }
+    }
   `;
 
   return (
