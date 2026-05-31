@@ -11489,6 +11489,14 @@ export default function App() {
   //   4) Logs detallados con prefijo [AUTH] + timestamp para diagnosticar
   //      en consola del navegador qué paso quedó atorado.
   // ═══════════════════════════════════════════════════════════════
+  // 🛡️ Dedupe de la carga inicial entre el flujo initial (Promise.race con
+  // getSession) y el listener onAuthStateChange. Supabase v2 SIEMPRE dispara
+  // INITIAL_SESSION + SIGNED_IN al suscribirse si hay sesión activa — sin esta
+  // guarda cargaríamos perfil + equipo + leads + eventos dos veces al arranque.
+  // Guarda el id del usuario que el initial flow ya procesó; el listener
+  // compara y omite eventos redundantes del mismo usuario.
+  const usuarioInicialIdRef = useRef(null);
+
   useEffect(() => {
     let mounted = true;
     const t0 = Date.now();
@@ -11558,6 +11566,9 @@ export default function App() {
               setDatosCargando(false);
               log("datosCargando → false");
             }
+            // 📌 Marca que este usuario ya está cargado por el flujo initial
+            // → el listener onAuthStateChange evitará cargarlo de nuevo.
+            usuarioInicialIdRef.current = perfil.id;
           } else {
             log("perfil null → mostrando login");
           }
@@ -11582,10 +11593,27 @@ export default function App() {
         if (event === "PASSWORD_RECOVERY") { setRecoveryMode(true); return; }
         if (event === "SIGNED_OUT") {
           setUsuario(null); setCuentas([]); setAllLeads({}); setAllEventos({});
+          // Reset de flags para permitir re-login limpio
+          usuarioInicialIdRef.current = null;
           setAuthReady(true);
           return;
         }
+        // ─── DEDUPE — evita la doble carga al arranque ───
+        // Supabase v2 dispara INITIAL_SESSION y luego SIGNED_IN al subscribirse
+        // si la sesión venía persistida. El flujo initial (Promise.race) ya
+        // procesó eso, así que ignoramos los eventos redundantes para no
+        // re-ejecutar cargarPerfil + cargarEquipo + leads + eventos.
+        if (event === "INITIAL_SESSION") {
+          log("INITIAL_SESSION ignorado — flujo initial ya lo maneja");
+          return;
+        }
+        if (event === "SIGNED_IN" && session?.user && usuarioInicialIdRef.current === session.user.id) {
+          log("SIGNED_IN duplicado del mismo usuario — skip (ya cargado por initial)");
+          return;
+        }
+        // ─── SIGNED_IN legítimo (login fresco, post-logout o cambio de cuenta) ───
         if (event === "SIGNED_IN" && session?.user && !recoveryMode && !detectarRecovery()) {
+          log("SIGNED_IN legítimo → cargando perfil + datos");
           const perfil = await withTimeout("cargarPerfil (signin)", cargarPerfil(session.user.id), 6000, null);
           if (perfil) {
             setUsuario(perfil);
@@ -11605,6 +11633,8 @@ export default function App() {
             } finally {
               setDatosCargando(false);
             }
+            // Marca este usuario como cargado para deduplicar futuros eventos redundantes
+            usuarioInicialIdRef.current = perfil.id;
           }
         }
       } catch (e) {
