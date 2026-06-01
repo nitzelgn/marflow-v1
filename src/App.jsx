@@ -11512,13 +11512,17 @@ export default function App() {
 
     // Wrapper genérico: una promesa con timeout. Si la promesa rechaza o se
     // pasa del timeout, resuelve con `fallback` (no rejecta nunca).
-    const withTimeout = (label, promise, ms, fallback = null) =>
-      Promise.race([
+    // Cancela el setTimeout cuando la promesa principal resuelve primero —
+    // evita logs falsos "TIMEOUT" después de una resolución exitosa.
+    const withTimeout = (label, promise, ms, fallback = null) => {
+      let timer;
+      return Promise.race([
         Promise.resolve(promise)
-          .then(v => { log(`${label} ok`); return v; })
-          .catch(e => { log(`${label} threw:`, e?.message || e); return fallback; }),
-        new Promise(resolve => setTimeout(() => { log(`${label} TIMEOUT (${ms}ms)`); resolve(fallback); }, ms)),
+          .then(v => { clearTimeout(timer); log(`${label} ok`); return v; })
+          .catch(e => { clearTimeout(timer); log(`${label} threw:`, e?.message || e); return fallback; }),
+        new Promise(resolve => { timer = setTimeout(() => { log(`${label} TIMEOUT (${ms}ms)`); resolve(fallback); }, ms); }),
       ]);
+    };
 
     // 🛡️ Safety net: pase lo que pase, en 10 s suelta el "Verificando…".
     const safetyNet = setTimeout(() => {
