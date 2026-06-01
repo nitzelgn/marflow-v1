@@ -11546,6 +11546,10 @@ export default function App() {
       try {
         if (session?.user && !enRecovery) {
           log("session activa → cargarPerfil");
+          // 🔒 Marca PROACTIVA antes del await: aunque cargarPerfil tarde mucho
+          // o haga timeout, los SIGNED_IN duplicados del mismo usuario (token
+          // refresh) que lleguen mientras tanto se filtrarán en el listener.
+          usuarioInicialIdRef.current = session.user.id;
           // ── 2) cargarPerfil con timeout 6s ──
           const perfil = await withTimeout("cargarPerfil", cargarPerfil(session.user.id), 6000, null);
           if (perfil) {
@@ -11570,11 +11574,11 @@ export default function App() {
               setDatosCargando(false);
               log("datosCargando → false");
             }
-            // 📌 Marca que este usuario ya está cargado por el flujo initial
-            // → el listener onAuthStateChange evitará cargarlo de nuevo.
-            usuarioInicialIdRef.current = perfil.id;
           } else {
-            log("perfil null → mostrando login");
+            // Perfil no cargó → reset del ref para permitir reintento en el
+            // próximo SIGNED_IN sin que sea filtrado como "duplicado".
+            usuarioInicialIdRef.current = null;
+            log("perfil null → mostrando login (ref reseteado)");
           }
         } else {
           log(session ? "session pero enRecovery=true" : "sin session → mostrando login");
@@ -11618,6 +11622,9 @@ export default function App() {
         // ─── SIGNED_IN legítimo (login fresco, post-logout o cambio de cuenta) ───
         if (event === "SIGNED_IN" && session?.user && !recoveryMode && !detectarRecovery()) {
           log("SIGNED_IN legítimo → cargando perfil + datos");
+          // 🔒 Marca PROACTIVA: bloquea SIGNED_IN duplicados del mismo user que
+          // lleguen mientras cargarPerfil/datos están en flight (redes lentas).
+          usuarioInicialIdRef.current = session.user.id;
           const perfil = await withTimeout("cargarPerfil (signin)", cargarPerfil(session.user.id), 6000, null);
           if (perfil) {
             setUsuario(perfil);
@@ -11637,8 +11644,11 @@ export default function App() {
             } finally {
               setDatosCargando(false);
             }
-            // Marca este usuario como cargado para deduplicar futuros eventos redundantes
-            usuarioInicialIdRef.current = perfil.id;
+          } else {
+            // Perfil no cargó → reset del ref para permitir reintento en el
+            // próximo SIGNED_IN del mismo user.
+            usuarioInicialIdRef.current = null;
+            log("⚠️ perfil no cargó en signin → ref reseteado para reintento");
           }
         }
       } catch (e) {
