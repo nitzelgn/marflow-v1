@@ -11215,9 +11215,10 @@ function useAutoUpdate() {
       }
     }
 
-    // Check inmediato + cada 30 segundos
+    // Check inmediato + cada 2 minutos (el listener de focus/visibilitychange
+    // cubre el caso "estuviste fuera" → no se justifica polling más agresivo).
     checkForUpdate();
-    const interval = setInterval(checkForUpdate, 30000);
+    const interval = setInterval(checkForUpdate, 120000);
 
     // Re-check cuando la pestaña vuelve a foco (cubre el caso "estuviste fuera")
     const onVisible = () => { if (document.visibilityState === "visible") checkForUpdate(); };
