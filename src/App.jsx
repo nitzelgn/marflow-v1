@@ -5544,9 +5544,6 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
   // Pendientes operativos del lead
   const [nuevoPendTipo, setNuevoPendTipo] = useState("cotizacion");
   const [nuevoPendTexto, setNuevoPendTexto] = useState("");
-  // Persistencia inmediata: agregar/toggle/eliminar pendiente dispara onSave
-  // sin cerrar el modal. Antes solo se guardaban al hacer click en "Guardar"
-  // — y si la columna jsonb no existía, PostgREST los descartaba en silencio.
   function agregarPendiente() {
     const tipo = PENDIENTE_TIPOS.find(p => p.v === nuevoPendTipo);
     const texto = nuevoPendTexto.trim() || tipo?.l || "Pendiente";
@@ -5558,25 +5555,19 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
       fechaCreacion: hoy(),
       fechaCompletado: null,
     };
-    const nuevoF = { ...f, pendientes: [...(f.pendientes||[]), nuevo] };
-    setF(nuevoF);
-    onSave(nuevoF);
+    setF(p => ({ ...p, pendientes: [...(p.pendientes||[]), nuevo] }));
     setNuevoPendTexto("");
   }
   function togglePendiente(id) {
-    const nuevoF = {
-      ...f,
-      pendientes: (f.pendientes||[]).map(x =>
+    setF(p => ({
+      ...p,
+      pendientes: (p.pendientes||[]).map(x =>
         x.id === id ? { ...x, hecho: !x.hecho, fechaCompletado: !x.hecho ? hoy() : null } : x
       ),
-    };
-    setF(nuevoF);
-    onSave(nuevoF);
+    }));
   }
   function eliminarPendiente(id) {
-    const nuevoF = { ...f, pendientes: (f.pendientes||[]).filter(x => x.id !== id) };
-    setF(nuevoF);
-    onSave(nuevoF);
+    setF(p => ({ ...p, pendientes: (p.pendientes||[]).filter(x => x.id !== id) }));
   }
 
   // Pólizas de cartera (Auto/GMM/Hogar/Vida con fecha de renovación)
