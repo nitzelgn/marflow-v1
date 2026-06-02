@@ -5155,15 +5155,15 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
   </div>;
 }
 
-function LeadCard({lead,onClick,onContacto}) {
+function LeadCard({lead,onClick,onContacto,modoSeleccion=false,seleccionado=false,onToggleSeleccion}) {
   const etapa=ETAPAS.find(e=>e.id===lead.etapa)||ETAPAS[0];
   const alerts=getAlertas(lead);
   const sinSeg=lead.sinSeguimiento||lead.checklist?.noInteres;
   const estadoOp = getEstadoOportunidad(lead);
-  return <div onClick={()=>onClick(lead)}
+  return <div onClick={modoSeleccion ? ()=>onToggleSeleccion?.(lead.id) : ()=>onClick(lead)}
     style={{
-      background: sinSeg ? "rgba(220,38,38,0.03)" : B.white,
-      border: `1px solid ${sinSeg ? "rgba(220,38,38,0.15)" : "rgba(10,31,68,0.06)"}`,
+      background: seleccionado ? "rgba(198,169,107,0.10)" : (sinSeg ? "rgba(220,38,38,0.03)" : B.white),
+      border: `1px solid ${seleccionado ? B.gold : (sinSeg ? "rgba(220,38,38,0.15)" : "rgba(10,31,68,0.06)")}`,
       borderRadius: 12,
       padding: "13px 14px 12px",
       cursor: "pointer",
@@ -5173,15 +5173,33 @@ function LeadCard({lead,onClick,onContacto}) {
       position: "relative",
     }}
     onMouseEnter={e=>{
+      if (modoSeleccion) return;
       e.currentTarget.style.boxShadow = "var(--mf-shadow-sm)";
       e.currentTarget.style.transform = "translateY(-1px)";
       e.currentTarget.style.borderColor = sinSeg ? "rgba(220,38,38,0.25)" : "rgba(198,169,107,0.20)";
     }}
     onMouseLeave={e=>{
+      if (modoSeleccion) return;
       e.currentTarget.style.boxShadow = "var(--mf-shadow-xs)";
       e.currentTarget.style.transform = "translateY(0)";
       e.currentTarget.style.borderColor = sinSeg ? "rgba(220,38,38,0.15)" : "rgba(10,31,68,0.06)";
     }}>
+    {modoSeleccion && (
+      <div style={{
+        position:"absolute", top:10, right:10, zIndex:3,
+        pointerEvents:"none",
+      }}>
+        <span style={{
+          display:"inline-flex", alignItems:"center", justifyContent:"center",
+          width:20, height:20, borderRadius:"50%",
+          background: seleccionado ? B.gold : "#fff",
+          border: `1.5px solid ${seleccionado ? B.gold : "rgba(10,31,68,0.25)"}`,
+          transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+        }}>
+          {seleccionado && <IconCheck size={12} color="#fff"/>}
+        </span>
+      </div>
+    )}
     {/* Línea de color de etapa lateral, muy delgada */}
     <div style={{
       position: "absolute", left: 0, top: 10, bottom: 10, width: 2,
@@ -7357,6 +7375,10 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
   const [busq,setBusq]=useState("");
   const [filtProd,setFiltProd]=useState("");
   const [filtTemp,setFiltTemp]=useState("");
+  // ── Modo selección múltiple (eliminación masiva, estilo iOS Mail) ──
+  const [modoSeleccion,setModoSeleccion]=useState(false);
+  const [seleccionados,setSeleccionados]=useState(()=>new Set());
+  const [confirmandoBorrado,setConfirmandoBorrado]=useState(false);
   const fileRef=useRef();
   const emptyL={id:uid(),nombre:"",telefono:"",correo:"",edad:"",producto:PRODUCTOS_LEAD[0],estado:"",etapa:"nuevo",ultimoContacto:hoy(),notas:"",objeciones:"",intereses:"",motivador:"",checklist:{...EMPTY_CHECK},seguimientos:[],sinSeguimiento:false,asignadoA:null,pendientes:[],polizas:[],estadoOportunidad:null,esReferido:false,referidoPor:"",pausaHasta:null,mesCreacion:hoy().slice(0,7)};
   function save(d){
@@ -7377,6 +7399,22 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
     if (viejo) registrarActividad({ adminId: getAdminId(usuario), autor: usuario,
       tipo: "lead.eliminado", entidad: "lead", entidadId: id, entidadNombre: viejo.nombre });
     setLeads(p => p.filter(l => l.id !== id));
+  }
+  // ── Helpers de modo selección ──
+  function toggleSeleccion(id){
+    setSeleccionados(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function entrarModoSeleccion(){ setModoSeleccion(true); setSeleccionados(new Set()); }
+  function salirModoSeleccion(){ setModoSeleccion(false); setSeleccionados(new Set()); }
+  function confirmarBorradoMasivo(){
+    setLeads(p => p.filter(l => !seleccionados.has(l.id)));
+    setSeleccionados(new Set());
+    setModoSeleccion(false);
+    setConfirmandoBorrado(false);
   }
   let vis=leads;
   if(filtroNav==="activos") vis=vis.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa));
@@ -7544,7 +7582,16 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
         options={[{v:"",l:"Todos los productos"},...PRODUCTOS_LEAD.map(p=>({v:p,l:p}))]}/>
 
       {/* Botón Nuevo Lead (Importar/Exportar viven en la subtab "Importar / Exportar") */}
-      {esAdmin && <ToolbarBtn onClick={()=>setNuevoM(true)} icon={<IconPlus size={14} color="#fff"/>} label="Nuevo lead" variant="primary"/>}
+      {esAdmin && !modoSeleccion && <ToolbarBtn onClick={()=>setNuevoM(true)} icon={<IconPlus size={14} color="#fff"/>} label="Nuevo lead" variant="primary"/>}
+      {/* Botón Modo Selección (eliminación masiva) */}
+      {esAdmin && (
+        <ToolbarBtn
+          onClick={modoSeleccion ? salirModoSeleccion : entrarModoSeleccion}
+          icon={<IconCheck size={13} color={modoSeleccion ? "#fff" : "rgba(10,31,68,0.85)"}/>}
+          label={modoSeleccion ? "Cancelar selección" : "Seleccionar"}
+          variant={modoSeleccion ? "primary" : "ghost"}
+        />
+      )}
     </div>
 
     {/* ═══ Kanban refinado ═══ */}
@@ -7605,7 +7652,11 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
                 </div>
               </div>
             ) : (
-              cols.map(l => <LeadCard key={l.id} lead={l} onClick={setLeadAct} onContacto={setContactoL}/>)
+              cols.map(l => <LeadCard key={l.id} lead={l} onClick={setLeadAct} onContacto={setContactoL}
+                modoSeleccion={modoSeleccion}
+                seleccionado={seleccionados.has(l.id)}
+                onToggleSeleccion={toggleSeleccion}
+              />)
             )}
           </div>
         );
@@ -7615,6 +7666,69 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
     {nuevoM&&<LeadModal lead={emptyL} onClose={()=>setNuevoM(false)} onSave={save} onDelete={()=>{}} cuentas={cuentas} usuario={usuario} setEventos={setEventos}/>}
     {contactoL&&<ContactoModal lead={contactoL} onClose={()=>setContactoL(null)}/>}
     {preview&&<ImportarLeadsModal datos={preview} onConfirm={confirmarImport} onClose={()=>setPreview(null)}/>}
+
+    {/* ═══ Barra flotante de selección múltiple (estilo iOS Mail) ═══ */}
+    {modoSeleccion && (
+      <div style={{
+        position:"fixed", bottom:18, left:"50%", transform:"translateX(-50%)",
+        zIndex:800, background:B.navy, color:B.white,
+        borderRadius:14, padding:"12px 16px",
+        boxShadow:"0 12px 40px rgba(10,31,68,.4)",
+        display:"flex", alignItems:"center", gap:14, flexWrap:"wrap",
+        border:`1px solid ${B.gold}55`,
+        maxWidth:"calc(100vw - 32px)",
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:30,height:30,borderRadius:"50%",background:B.gold,color:B.navy,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:13}}>
+            {seleccionados.size}
+          </div>
+          <span style={{fontSize:13,fontWeight:600}}>
+            {seleccionados.size === 0 ? "Selecciona leads" : seleccionados.size === 1 ? "1 lead seleccionado" : `${seleccionados.size} leads seleccionados`}
+          </span>
+        </div>
+        {(() => {
+          const visIds = vis.map(l => l.id);
+          const todosVis = visIds.length > 0 && visIds.every(id => seleccionados.has(id));
+          return (
+            <button onClick={()=>{
+              if (todosVis) setSeleccionados(prev => { const n = new Set(prev); visIds.forEach(id => n.delete(id)); return n; });
+              else setSeleccionados(prev => new Set([...prev, ...visIds]));
+            }} style={{
+              padding:"9px 12px", borderRadius:9,
+              border:"1px solid rgba(255,255,255,0.2)",
+              background:"transparent", color:"rgba(255,255,255,0.85)",
+              fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+              cursor:"pointer", whiteSpace:"nowrap",
+            }}>{todosVis ? "Deseleccionar todos" : "Seleccionar todos"}</button>
+          );
+        })()}
+        <button onClick={()=>setConfirmandoBorrado(true)}
+          disabled={seleccionados.size === 0}
+          style={{
+            padding:"9px 14px", borderRadius:9, border:"none",
+            background: seleccionados.size === 0 ? "rgba(220,38,38,0.30)" : B.redBright, color:"#fff",
+            fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12,
+            cursor: seleccionados.size === 0 ? "not-allowed" : "pointer",
+            display:"inline-flex", alignItems:"center", gap:7,
+            boxShadow: seleccionados.size === 0 ? "none" : `0 4px 14px ${B.redBright}55`,
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+          }}>
+          <IconTrash size={13} color="#fff"/>Eliminar
+        </button>
+      </div>
+    )}
+
+    {/* Modal de confirmación de borrado masivo */}
+    {confirmandoBorrado && (
+      <ConfirmModal
+        titulo={`¿Estás seguro de eliminar ${seleccionados.size} ${seleccionados.size === 1 ? "lead" : "leads"}?`}
+        mensaje="Esta acción no se puede deshacer."
+        icono="🗑️"
+        textoConfirm="Eliminar"
+        onConfirm={confirmarBorradoMasivo}
+        onCancel={()=>setConfirmandoBorrado(false)}
+      />
+    )}
   </div>;
 }
 
@@ -8749,7 +8863,10 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
   const [leadAct,setLeadAct]=useState(null);
   const [nuevoM,setNuevoM]=useState(false);
   const [seleccionados,setSeleccionados]=useState(()=>new Set());
+  const [modoSeleccion,setModoSeleccion]=useState(false);
   const [confirmandoBorrado,setConfirmandoBorrado]=useState(false);
+  function entrarModoSeleccion(){ setModoSeleccion(true); setSeleccionados(new Set()); }
+  function salirModoSeleccion(){ setModoSeleccion(false); setSeleccionados(new Set()); }
   const emptyL={id:uid(),nombre:"",telefono:"",correo:"",edad:"",producto:PRODUCTOS_LEAD[0],estado:"",etapa:"nuevo",ultimoContacto:hoy(),notas:"",objeciones:"",intereses:"",motivador:"",checklist:{...EMPTY_CHECK},seguimientos:[],sinSeguimiento:false,asignadoA:null,mesCreacion:tab==="sig"?mesSig:mesHoy};
   const mesesDisponibles=[...new Set(leads.map(l=>l.mesCreacion||l.ultimoContacto?.slice(0,7)||mesHoy).filter(Boolean))].sort().reverse();
   const leadsActual=leads.filter(l=>{const mc=l.mesCreacion||l.ultimoContacto?.slice(0,7)||mesHoy;return mc===mesHoy||(mc<mesHoy&&l.etapa==="seguimiento"&&!l.sinSeguimiento);});
@@ -8805,6 +8922,7 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
   function confirmarBorradoMasivo(){
     setLeads(p => p.filter(l => !seleccionados.has(l.id)));
     setSeleccionados(new Set());
+    setModoSeleccion(false);
     setConfirmandoBorrado(false);
   }
 
@@ -9033,21 +9151,39 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
           <IconX size={12}/>Limpiar
         </button>
       )}
-      <button onClick={()=>setNuevoM(true)}
+      {!modoSeleccion && (
+        <button onClick={()=>setNuevoM(true)}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "8px 14px", borderRadius: 8,
+            border: "none",
+            background: "linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
+            color: "#fff",
+            fontFamily: "'Poppins', sans-serif",
+            fontWeight: 600, fontSize: 12.5,
+            cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+            boxShadow: "0 1px 2px rgba(10,31,68,0.10)",
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
+          onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
+          <IconPlus size={13} color="#fff"/>Nuevo lead
+        </button>
+      )}
+      {/* Botón Modo Selección */}
+      <button onClick={modoSeleccion ? salirModoSeleccion : entrarModoSeleccion}
         style={{
           display: "inline-flex", alignItems: "center", gap: 6,
           padding: "8px 14px", borderRadius: 8,
-          border: "none",
-          background: "linear-gradient(135deg, #0A1F44 0%, #122550 100%)",
-          color: "#fff",
+          border: modoSeleccion ? "none" : "1px solid rgba(10,31,68,0.08)",
+          background: modoSeleccion ? B.navy : B.white,
+          color: modoSeleccion ? "#fff" : "rgba(10,31,68,0.85)",
           fontFamily: "'Poppins', sans-serif",
-          fontWeight: 600, fontSize: 12.5,
+          fontWeight: 500, fontSize: 12.5,
           cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
-          boxShadow: "0 1px 2px rgba(10,31,68,0.10)",
-        }}
-        onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(10,31,68,0.20)"; e.currentTarget.style.transform="translateY(-1px)";}}
-        onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 2px rgba(10,31,68,0.10)"; e.currentTarget.style.transform="translateY(0)";}}>
-        <IconPlus size={13} color="#fff"/>Nuevo lead
+          boxShadow: "var(--mf-shadow-xs)",
+        }}>
+        <IconCheck size={13} color={modoSeleccion ? "#fff" : "rgba(10,31,68,0.85)"}/>
+        {modoSeleccion ? "Cancelar selección" : "Seleccionar"}
       </button>
     </div>
 
@@ -9062,11 +9198,13 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
       <div className="mf-table-wrap">
         <table className="mf-table">
           <thead><tr>
-            <th className="mf-th" style={{width: 40, textAlign: "center", padding: "12px 8px"}}>
-              <input type="checkbox" checked={todosVisSeleccionados} onChange={toggleSeleccionarTodos}
-                aria-label="Seleccionar todos los visibles"
-                style={{width: 16, height: 16, cursor: "pointer", accentColor: B.navy}}/>
-            </th>
+            {modoSeleccion && (
+              <th className="mf-th" style={{width: 40, textAlign: "center", padding: "12px 8px"}}>
+                <input type="checkbox" checked={todosVisSeleccionados} onChange={toggleSeleccionarTodos}
+                  aria-label="Seleccionar todos los visibles"
+                  style={{width: 16, height: 16, cursor: "pointer", accentColor: B.navy}}/>
+              </th>
+            )}
             <th className="mf-th" style={{width: 36}}>#</th>
             <th className="mf-th">Nombre</th>
             <th className="mf-th">Contacto</th>
@@ -9079,7 +9217,7 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
           </tr></thead>
           <tbody>
             {vis.length === 0 && (
-              <tr><td colSpan={10} className="mf-td" style={{
+              <tr><td colSpan={modoSeleccion ? 10 : 9} className="mf-td" style={{
                 textAlign: "center", color: "rgba(10,31,68,0.30)",
                 padding: "48px 16px", fontStyle: "italic", fontSize: 13,
                 letterSpacing: "0.01em",
@@ -9098,15 +9236,17 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
               return (
                 <tr key={lead.id}
                   className={`mf-tr${sinSeg2 ? " rojo" : esSeguAnt ? " seg-ant" : ""}`}
-                  onClick={()=>setLeadAct(lead)}
+                  onClick={()=>{ if (modoSeleccion) toggleSeleccion(lead.id); else setLeadAct(lead); }}
                   style={seleccionado ? {background: "rgba(198,169,107,0.07)"} : {}}>
-                  <td className="mf-td" style={{width: 40, textAlign: "center", padding: "12px 8px"}}
-                    onClick={e=>e.stopPropagation()}>
-                    <input type="checkbox" checked={seleccionado}
-                      onChange={(e)=>toggleSeleccion(lead.id, e)}
-                      aria-label={`Seleccionar ${lead.nombre}`}
-                      style={{width: 16, height: 16, cursor: "pointer", accentColor: B.navy}}/>
-                  </td>
+                  {modoSeleccion && (
+                    <td className="mf-td" style={{width: 40, textAlign: "center", padding: "12px 8px"}}
+                      onClick={e=>e.stopPropagation()}>
+                      <input type="checkbox" checked={seleccionado}
+                        onChange={(e)=>toggleSeleccion(lead.id, e)}
+                        aria-label={`Seleccionar ${lead.nombre}`}
+                        style={{width: 16, height: 16, cursor: "pointer", accentColor: B.navy}}/>
+                    </td>
+                  )}
                   <td className="mf-td" style={{color: "rgba(10,31,68,0.35)", fontSize: 11, width: 36, fontVariantNumeric: "tabular-nums"}}>{idx+1}</td>
                   <td className="mf-td">
                     <div style={{display: "flex", alignItems: "center", gap: 10}}>
@@ -9233,7 +9373,7 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
     {nuevoM&&<LeadModal lead={{...emptyL,mesCreacion:tab==="sig"?mesSig:mesHoy}} onClose={()=>setNuevoM(false)} onSave={d=>{save(d);setNuevoM(false);}} onDelete={()=>{}} cuentas={cuentas} usuario={usuario} setEventos={setEventos}/>}
 
     {/* Barra de acción de selección múltiple — flotante abajo */}
-    {seleccionados.size > 0 && (
+    {modoSeleccion && (
       <div style={{
         position:"fixed", bottom:18, left:"50%", transform:"translateX(-50%)",
         zIndex:800, background:B.navy, color:B.white,
@@ -9249,27 +9389,37 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
             {seleccionados.size}
           </div>
           <span style={{fontSize:13,fontWeight:600}}>
-            {seleccionados.size === 1 ? "1 lead seleccionado" : `${seleccionados.size} leads seleccionados`}
+            {seleccionados.size === 0 ? "Selecciona leads" : seleccionados.size === 1 ? "1 lead seleccionado" : `${seleccionados.size} leads seleccionados`}
           </span>
         </div>
-        <button onClick={()=>setConfirmandoBorrado(true)} style={{
-          padding:"9px 14px", borderRadius:9, border:"none",
-          background:B.redBright, color:"#fff",
-          fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12,
-          cursor:"pointer", display:"inline-flex", alignItems:"center", gap:7,
-          boxShadow:`0 4px 14px ${B.redBright}55`,
-          transition:"all var(--mf-t-fast) var(--mf-ease-out)",
-        }}>
+        <button onClick={toggleSeleccionarTodos} style={{
+          padding:"9px 12px", borderRadius:9,
+          border:"1px solid rgba(255,255,255,0.2)",
+          background:"transparent", color:"rgba(255,255,255,0.85)",
+          fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
+          cursor:"pointer", whiteSpace:"nowrap",
+        }}>{todosVisSeleccionados ? "Deseleccionar todos" : "Seleccionar todos"}</button>
+        <button onClick={()=>setConfirmandoBorrado(true)}
+          disabled={seleccionados.size === 0}
+          style={{
+            padding:"9px 14px", borderRadius:9, border:"none",
+            background: seleccionados.size === 0 ? "rgba(220,38,38,0.30)" : B.redBright, color:"#fff",
+            fontFamily:"'Poppins',sans-serif", fontWeight:600, fontSize:12,
+            cursor: seleccionados.size === 0 ? "not-allowed" : "pointer",
+            display:"inline-flex", alignItems:"center", gap:7,
+            boxShadow: seleccionados.size === 0 ? "none" : `0 4px 14px ${B.redBright}55`,
+            transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+          }}>
           <IconTrash size={13} color="#fff"/>Eliminar
         </button>
-        <button onClick={limpiarSeleccion} style={{
+        <button onClick={salirModoSeleccion} style={{
           padding:"9px 14px", borderRadius:9,
           border:"1px solid rgba(255,255,255,0.2)",
           background:"transparent", color:"rgba(255,255,255,0.85)",
           fontFamily:"'Poppins',sans-serif", fontWeight:500, fontSize:12,
           cursor:"pointer",
         }}>
-          Limpiar
+          Cancelar selección
         </button>
       </div>
     )}
@@ -9277,10 +9427,10 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
     {/* Modal de confirmación de borrado masivo */}
     {confirmandoBorrado && (
       <ConfirmModal
-        titulo={`¿Eliminar ${seleccionados.size} ${seleccionados.size === 1 ? "lead" : "leads"}?`}
-        mensaje="Esta acción no se puede deshacer. Los leads seleccionados se borrarán permanentemente."
+        titulo={`¿Estás seguro de eliminar ${seleccionados.size} ${seleccionados.size === 1 ? "lead" : "leads"}?`}
+        mensaje="Esta acción no se puede deshacer."
         icono="🗑️"
-        textoConfirm={`Sí, eliminar ${seleccionados.size}`}
+        textoConfirm="Eliminar"
         onConfirm={confirmarBorradoMasivo}
         onCancel={()=>setConfirmandoBorrado(false)}
       />
