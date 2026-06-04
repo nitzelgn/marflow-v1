@@ -6640,13 +6640,19 @@ function leadToDB(lead, adminId) {
 }
 
 function eventoFromDB(row) {
+  const fInicio = row.fecha || hoy();
+  const hInicio = row.hora_inicio || row.hora || "";
   return {
     id: row.id,
     titulo: row.titulo || "",
     tipo: row.tipo || "trabajo",
     subtipo: row.subtipo || "",
-    fecha: row.fecha || hoy(),
-    hora: row.hora || "",
+    fecha: fInicio,
+    fechaInicio: fInicio,
+    fechaFin: row.fecha_fin || fInicio,
+    hora: hInicio,
+    horaInicio: hInicio,
+    horaFin: row.hora_fin || "",
     repeticion: row.repeticion || "none",
     notas: row.notas || "",
     privado: !!row.privado,
@@ -6656,6 +6662,10 @@ function eventoFromDB(row) {
 }
 
 function eventoToDB(evento, adminId, creadorId) {
+  const fInicio = evento.fechaInicio || evento.fecha || null;
+  const fFin    = evento.fechaFin    || fInicio;
+  const hInicio = evento.horaInicio  || evento.hora || null;
+  const hFin    = evento.horaFin     || null;
   return {
     id: evento.id,
     admin_id: adminId,
@@ -6664,8 +6674,11 @@ function eventoToDB(evento, adminId, creadorId) {
     titulo: evento.titulo || "",
     tipo: evento.tipo || "trabajo",
     subtipo: evento.subtipo || null,
-    fecha: evento.fecha,
-    hora: evento.hora || null,
+    fecha: fInicio,
+    fecha_fin: fFin,
+    hora: hInicio,
+    hora_inicio: hInicio,
+    hora_fin: hFin,
     repeticion: evento.repeticion || "none",
     notas: evento.notas || null,
     privado: !!evento.privado,
