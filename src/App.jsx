@@ -550,9 +550,9 @@ const Tag = ({color,children,small}) =>
 function ConfirmModal({titulo,mensaje,icono="⚠️",onConfirm,onCancel,textoConfirm="Sí, eliminar",colorConfirm=B.redBright}) {
   // Body lock + ESC para cerrar (reutiliza el hook estándar)
   useOverlayLock(true, onCancel);
-  return (
+  return createPortal(
     <div onClick={onCancel} style={{
-      position:"fixed", inset:0, background:"rgba(10,31,68,.55)", zIndex:1300,
+      position:"fixed", inset:0, background:"rgba(10,31,68,.55)", zIndex:1600,
       display:"flex", alignItems:"center", justifyContent:"center",
       padding:20,
       // Respeta safe areas para que el modal no se meta detrás del notch
@@ -568,7 +568,8 @@ function ConfirmModal({titulo,mensaje,icono="⚠️",onConfirm,onCancel,textoCon
           <button onClick={()=>{onConfirm();}} style={{flex:1,padding:"11px 20px",borderRadius:10,border:"none",background:colorConfirm,color:"#fff",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:13,cursor:"pointer",boxShadow:`0 4px 14px ${colorConfirm}44`}}>{textoConfirm}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
