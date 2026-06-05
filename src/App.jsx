@@ -68,11 +68,11 @@ const _MOTIVO_DEFAULT_POR_ETAPA_LEGACY = {
   "otro":       "otro",
 };
 
-const PRODUCTOS_LEAD = ["Vida","GMM","Auto","Hogar","Retiro","Ahorro","Inversión","Patrimonial","Educación","Otro"];
+const PRODUCTOS_LEAD = ["Vida","GMM","Auto","Hogar","Ahorro","Inversión","Patrimonial","Educación"];
 
 // Clasificación por línea de negocio (Allianz México)
 const PRODUCTOS_RIESGOS = ["Vida","GMM","Auto","Hogar"];
-const PRODUCTOS_AHORRO  = ["Retiro","Ahorro","Inversión","Patrimonial","Educación"];
+const PRODUCTOS_AHORRO  = ["Ahorro","Inversión","Patrimonial","Educación"];
 
 // Productos que tienen póliza con fecha de renovación (cartera vigente)
 const POLIZA_PRODUCTOS = ["Auto","GMM","Hogar","Vida"];
@@ -4685,7 +4685,7 @@ function Dashboard({leads, setLeads, eventos = [], setEventos, usuario, cuentas 
       key: "ahorro",
       v: ahorroPendientes.length,
       titulo: "Asesorados (Ahorro)",
-      sub: "Retiro · Ahorro · Inversión · sin contacto >2 semanas",
+      sub: "Ahorro · Inversión · Patrimonial · Educación · sin contacto >2 semanas",
       color: B.gold,
       icon: <IconDollar size={16} color={B.gold}/>,
       action: ()=>{ irALeads("pipeline", "cotizacion"); },
