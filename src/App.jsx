@@ -7775,6 +7775,23 @@ function sumarMinutosHora(horaStr, mins) {
   return `${String(nh).padStart(2,"0")}:${String(nm).padStart(2,"0")}`;
 }
 
+// Helper: convierte "HH:MM" (24h) a formato AM/PM. Devuelve "" si input vacío/inválido.
+function formatHoraAMPM(hora24) {
+  if (!hora24 || !/^\d{1,2}:\d{2}/.test(hora24)) return "";
+  const [h, m] = hora24.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${String(m).padStart(2,"0")} ${period}`;
+}
+
+// Helper: rango "H:MM AM - H:MM AM". Si solo hay inicio, devuelve "H:MM AM".
+function formatHoraRango(inicio, fin) {
+  const i = formatHoraAMPM(inicio);
+  if (!i) return "";
+  const f = formatHoraAMPM(fin);
+  return f ? `${i} - ${f}` : i;
+}
+
 function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
   const now=new Date();
   const [mes,setMes]=useState(now.getMonth());
@@ -7853,7 +7870,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
   ];
   let nextDia=1;
   while(celdas.length%7!==0){const[ny,nm]=mes===11?[anio+1,0]:[anio,mes+1];celdas.push({dia:nextDia,tipo:"next",fecha:strFull(ny,nm,nextDia)});nextDia++;}
-  const diasConEvs=diaClick?mapEvDia(strD(diaClick)):[];
+  const diasConEvs=diaClick?mapEvDia(strD(diaClick)).sort((a,b) => (a.horaInicio||"99:99").localeCompare(b.horaInicio||"99:99")):[];
   const DIAS_MIN=["L","M","X","J","V","S","D"];
   const AGENDA_CSS = `
     .mf-cal-wrap { width: 100%; box-sizing: border-box; overflow-x: hidden; font-family: 'Poppins', sans-serif; }
@@ -8160,7 +8177,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
         <div className="mf-cal-grid">
           {celdas.map((celda,i)=>{
             const{dia,tipo,fecha:fs}=celda;
-            const esGhost=tipo!=="actual";const evs=esGhost?[]:mapEvDia(fs).filter(pasaFiltro);const esH=fs===hoy();const sel=!esGhost&&diaClick===dia;const colIdx=i%7;const esFin=colIdx>=5;
+            const esGhost=tipo!=="actual";const evs=esGhost?[]:mapEvDia(fs).filter(pasaFiltro).sort((a,b) => (a.horaInicio||"99:99").localeCompare(b.horaInicio||"99:99"));const esH=fs===hoy();const sel=!esGhost&&diaClick===dia;const colIdx=i%7;const esFin=colIdx>=5;
             const cellClass=["mf-cell",esGhost?"ghost":"",esH?"today":"",sel?"selected":"",esFin&&!esGhost?"weekend":""].filter(Boolean).join(" ");
             return(<div key={`${tipo}-${dia}-${i}`} className={cellClass} style={esGhost?{opacity:.35,cursor:"default",background:esFin?"#faf8f4":"#f9f9f9"}:{}} onClick={()=>{if(esGhost)return;setDiaClick(dia===diaClick?null:dia);setModalDia(true);}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
@@ -8168,7 +8185,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
                 {evs.length>0&&<span style={{fontSize:8,color:"#94a3b8",fontWeight:600,marginRight:1}}>{evs.length}</span>}
               </div>
               {!esGhost&&(<div style={{overflow:"hidden",flex:1}}>
-                {evs.slice(0,2).map(ev=>(<div key={ev.id} className="mf-pill" onClick={e=>{e.stopPropagation();if(!ev._privado)abrirEditar(ev);}} style={{background:ev._privado?"#f3f4f680":tipoC(ev.tipo)+"20",color:ev._privado?"#9ca3af":tipoC(ev.tipo),borderLeft:`2.5px solid ${tipoC(ev.tipo)}`}}>{ev.horaInicio?`${ev.horaInicio} `:""}{ev.titulo}</div>))}
+                {evs.slice(0,2).map(ev=>(<div key={ev.id} className="mf-pill" onClick={e=>{e.stopPropagation();if(!ev._privado)abrirEditar(ev);}} style={{background:ev._privado?"#f3f4f680":tipoC(ev.tipo)+"20",color:ev._privado?"#9ca3af":tipoC(ev.tipo),borderLeft:`2.5px solid ${tipoC(ev.tipo)}`}}>{ev.horaInicio?`${formatHoraAMPM(ev.horaInicio)} `:""}{ev.titulo}</div>))}
                 {evs.length>2&&<div style={{fontSize:8,color:"#94a3b8",fontWeight:600,paddingLeft:2,lineHeight:1.4}}>+{evs.length-2} más</div>}
               </div>)}
             </div>);
@@ -8186,7 +8203,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
           overflow:"hidden",
         }}>
           {diasSemana.map((d, i) => {
-            const evs = mapEvDia(d.iso).filter(pasaFiltro).sort((a,b) => (a.horaInicio||"99").localeCompare(b.horaInicio||"99"));
+            const evs = mapEvDia(d.iso).filter(pasaFiltro).sort((a,b) => (a.horaInicio||"99:99").localeCompare(b.horaInicio||"99:99"));
             return (
               <div key={d.iso} style={{
                 display:"flex",
@@ -8254,7 +8271,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
                             <span style={{
                               fontFamily:"'Cormorant Garamond', serif", fontSize:14, fontWeight:500,
                               color: tipoC(ev.tipo), minWidth:42, fontVariantNumeric:"tabular-nums",
-                            }}>{ev.horaInicio}{ev.horaFin?`–${ev.horaFin}`:""}</span>
+                            }}>{formatHoraRango(ev.horaInicio, ev.horaFin)}</span>
                           )}
                           <span style={{flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{ev.titulo}</span>
                         </button>
@@ -8270,7 +8287,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
 
       {/* ═══ Vista DÍA (compromisos del día seleccionado) ═══ */}
       {vista === "dia" && (() => {
-        const evsDia = mapEvDia(fechaAncla).filter(pasaFiltro).sort((a,b) => (a.horaInicio||"99").localeCompare(b.horaInicio||"99"));
+        const evsDia = mapEvDia(fechaAncla).filter(pasaFiltro).sort((a,b) => (a.horaInicio||"99:99").localeCompare(b.horaInicio||"99:99"));
         return (
           <div style={{
             background:B.white, borderRadius:14,
@@ -8318,8 +8335,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
                     onMouseLeave={e=>{ e.currentTarget.style.boxShadow="none"; }}>
                     {ev.horaInicio ? (
                       <div style={{minWidth:72}}>
-                        <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:20, fontWeight:500, color:tipoC(ev.tipo), letterSpacing:"-0.01em", lineHeight:1, fontVariantNumeric:"tabular-nums"}}>{ev.horaInicio}</div>
-                        {ev.horaFin && <div style={{fontSize:10, color:"rgba(10,31,68,0.50)", marginTop:3, letterSpacing:"0.02em"}}>hasta {ev.horaFin}</div>}
+                        <div style={{fontFamily:"'Cormorant Garamond', serif", fontSize:18, fontWeight:500, color:tipoC(ev.tipo), letterSpacing:"-0.01em", lineHeight:1.1, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap"}}>{formatHoraRango(ev.horaInicio, ev.horaFin)}</div>
                       </div>
                     ) : (
                       <div style={{minWidth:72, fontSize:10, color:"rgba(10,31,68,0.45)", letterSpacing:"0.12em", textTransform:"uppercase"}}>Todo el día</div>
@@ -8414,20 +8430,12 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
                 borderBottom: idx < diasConEvs.length - 1 ? "1px solid rgba(10,31,68,0.05)" : "none",
               }}>
                 {/* Hora */}
-                <div style={{width:62, flexShrink:0, paddingTop:2}}>
+                <div style={{minWidth:62, flexShrink:0, paddingTop:2}}>
                   {!ev._privado && ev.horaInicio ? (
-                    <>
-                      <div style={{
-                        fontSize:12.5, fontWeight:500, color:B.navy,
-                        fontVariantNumeric:"tabular-nums",
-                      }}>{ev.horaInicio}</div>
-                      {ev.horaFin && (
-                        <div style={{
-                          fontSize:10.5, color:"rgba(10,31,68,0.40)", marginTop:1,
-                          fontVariantNumeric:"tabular-nums",
-                        }}>{ev.horaFin}</div>
-                      )}
-                    </>
+                    <div style={{
+                      fontSize:12.5, fontWeight:500, color:B.navy,
+                      fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap",
+                    }}>{formatHoraRango(ev.horaInicio, ev.horaFin)}</div>
                   ) : (
                     <div style={{
                       fontSize:10, color:"rgba(10,31,68,0.35)",
