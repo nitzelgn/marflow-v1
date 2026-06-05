@@ -8892,6 +8892,7 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
   const [filtProd,setFiltProd]=useState("");
   const [filtEtapa,setFiltEtapa]=useState("");
   const [filtTemp,setFiltTemp]=useState("");
+  const [filtRef,setFiltRef]=useState(false);
   const [contactoL,setContactoL]=useState(null);
   const [leadAct,setLeadAct]=useState(null);
   const [nuevoM,setNuevoM]=useState(false);
@@ -8910,6 +8911,7 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
   if(filtProd)base=base.filter(l=>l.producto===filtProd);
   if(filtEtapa)base=base.filter(l=>l.etapa===filtEtapa);
   if(filtTemp)base=base.filter(l=>getEstadoOportunidad(l)?.v===filtTemp);
+  if(filtRef)base=base.filter(l=>l.esReferido);
   const vis=base;
   const total=vis.length;const activos=vis.filter(l=>!l.sinSeguimiento&&!["otro","cierre"].includes(l.etapa)).length;const sinSeg=vis.filter(l=>l.sinSeguimiento).length;const calientes=vis.filter(l=>getTempLead(l)?.nivel==="caliente").length;
   const seguAnt=tab==="actual"?leadsActual.filter(l=>{const mc=l.mesCreacion||l.ultimoContacto?.slice(0,7)||mesHoy;return mc<mesHoy&&l.etapa==="seguimiento"&&!l.sinSeguimiento;}).length:0;
@@ -9096,46 +9098,6 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
       )}
     </div>
 
-    {/* ═══ Stats minimalistas (mismo lenguaje que Dashboard) ═══ */}
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-      gap: 12, marginBottom: 18,
-    }}>
-      {[
-        { l: "Total", v: total, dot: null },
-        { l: "Activos", v: activos, dot: B.green },
-        { l: "Calientes", v: calientes, dot: "#dc2626" },
-        { l: "Sin seguimiento", v: sinSeg, dot: B.redBright },
-      ].map((s, i) => (
-        <div key={i} className={`mf-fade-up mf-stagger-${i+1}`}
-          style={{
-            background: B.white,
-            border: "1px solid rgba(10,31,68,0.06)",
-            borderRadius: 12,
-            padding: "14px 16px 12px",
-            boxShadow: "var(--mf-shadow-xs)",
-          }}>
-          <div style={{display: "flex", alignItems: "center", gap: 6, marginBottom: 6}}>
-            {s.dot && <span style={{width: 6, height: 6, borderRadius: "50%", background: s.dot}}/>}
-            <div style={{
-              fontSize: 10, fontWeight: 500,
-              color: "rgba(10,31,68,0.45)",
-              textTransform: "uppercase",
-              letterSpacing: "0.10em",
-            }}>{s.l}</div>
-          </div>
-          <div style={{
-            fontFamily: "'Cormorant Garamond', serif",
-            fontSize: 30, fontWeight: 500,
-            lineHeight: 1, letterSpacing: "-0.01em",
-            color: B.navy,
-            fontVariantNumeric: "tabular-nums",
-          }}>{s.v}</div>
-        </div>
-      ))}
-    </div>
-
     {/* ═══ Toolbar: buscador + filtros + nuevo lead ═══ */}
     <div style={{display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center"}}>
       <div style={{position: "relative", flex: 1, minWidth: 200, display: "flex", alignItems: "center"}}>
@@ -9169,8 +9131,8 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
         {v:"",l:"Estado de oportunidad"},
         ...ESTADOS_OPORTUNIDAD.map(e => ({ v:e.v, l:e.l })),
       ]}/>
-      {(busq||filtProd||filtEtapa||filtTemp) && (
-        <button onClick={()=>{setBusq(""); setFiltProd(""); setFiltEtapa(""); setFiltTemp("");}}
+      {(busq||filtProd||filtEtapa||filtTemp||filtRef) && (
+        <button onClick={()=>{setBusq(""); setFiltProd(""); setFiltEtapa(""); setFiltTemp(""); setFiltRef(false);}}
           style={{
             display: "inline-flex", alignItems: "center", gap: 5,
             padding: "8px 12px", borderRadius: 8,
@@ -9217,6 +9179,21 @@ function ListaLeads({leads,setLeads,setEventos,cuentas,usuario,esAsistente}) {
         }}>
         <IconCheck size={13} color={modoSeleccion ? "#fff" : "rgba(10,31,68,0.85)"}/>
         {modoSeleccion ? "Cancelar selección" : "Seleccionar"}
+      </button>
+      <button onClick={() => setFiltRef(v => !v)}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "8px 14px", borderRadius: 8,
+          border: filtRef ? `1px solid ${B.navy}` : "1px solid rgba(10,31,68,0.08)",
+          background: filtRef ? B.navy : B.white,
+          color: filtRef ? "#fff" : "rgba(10,31,68,0.85)",
+          fontFamily: "'Poppins', sans-serif",
+          fontWeight: 500, fontSize: 12.5,
+          cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+          boxShadow: "var(--mf-shadow-xs)",
+        }}>
+        <IconCheck size={13} color="#fff" style={{opacity: filtRef ? 1 : 0}}/>
+        Referidos
       </button>
     </div>
 
