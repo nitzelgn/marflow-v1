@@ -3311,9 +3311,9 @@ function DatosYRespaldoCard({ leads = [] }) {
 
   function exportarMetricasJSON() {
     try {
-      const calificados = leads.filter(l => !l.sinSeguimiento && _ETAPAS_CALIFICADAS.includes(l.etapa)).length;
-      const noCalificados = leads.filter(l => l.sinSeguimiento || _ETAPAS_NO_CALIFICADAS.includes(l.etapa)).length;
-      const cierres = leads.filter(l => l.etapa === "venta").length;
+      const calificados = leads.filter(l => !l.esReferido && !l.sinSeguimiento && _ETAPAS_CALIFICADAS.includes(l.etapa)).length;
+      const noCalificados = leads.filter(l => !l.esReferido && (l.sinSeguimiento || _ETAPAS_NO_CALIFICADAS.includes(l.etapa))).length;
+      const cierres = leads.filter(l => !l.esReferido && l.etapa === "venta").length;
       const conv = calificados > 0 ? Math.round((cierres / calificados) * 100) : 0;
       const metricas = {
         fecha_exportacion: new Date().toISOString(),
@@ -4096,14 +4096,15 @@ function Metricas({leads}) {
   const mesAntDate = new Date(ahora.getFullYear(), ahora.getMonth()-1, 1);
   const mesAnt = `${mesAntDate.getFullYear()}-${String(mesAntDate.getMonth()+1).padStart(2,"0")}`;
 
-  // ── Clasificación ──
+  // ── Clasificación (excluye referidos: se contabilizan en su card aparte) ──
+  const _esProspeccion = (l) => !l.esReferido;
   const calificadosArr = leads.filter(l =>
-    !l.sinSeguimiento && _ETAPAS_CALIFICADAS.includes(l.etapa)
+    _esProspeccion(l) && !l.sinSeguimiento && _ETAPAS_CALIFICADAS.includes(l.etapa)
   );
   const noCalificadosArr = leads.filter(l =>
-    l.sinSeguimiento || _ETAPAS_NO_CALIFICADAS.includes(l.etapa)
+    _esProspeccion(l) && (l.sinSeguimiento || _ETAPAS_NO_CALIFICADAS.includes(l.etapa))
   );
-  const cierresArr = leads.filter(l => l.etapa === "venta");
+  const cierresArr = leads.filter(l => _esProspeccion(l) && l.etapa === "venta");
 
   const calificados = calificadosArr.length;
   const noCalificados = noCalificadosArr.length;
@@ -4135,8 +4136,8 @@ function Metricas({leads}) {
   for (let i = 5; i >= 0; i--) {
     const d = new Date(ahora.getFullYear(), ahora.getMonth() - i, 1);
     const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-    const cal = leads.filter(l => !l.sinSeguimiento && _ETAPAS_CALIFICADAS.includes(l.etapa) && l.mesCreacion === k).length;
-    const noCal = leads.filter(l => (l.sinSeguimiento || _ETAPAS_NO_CALIFICADAS.includes(l.etapa)) && l.mesCreacion === k).length;
+    const cal = leads.filter(l => _esProspeccion(l) && !l.sinSeguimiento && _ETAPAS_CALIFICADAS.includes(l.etapa) && l.mesCreacion === k).length;
+    const noCal = leads.filter(l => _esProspeccion(l) && (l.sinSeguimiento || _ETAPAS_NO_CALIFICADAS.includes(l.etapa)) && l.mesCreacion === k).length;
     ultimos6.push({ k, label: MESES[d.getMonth()].slice(0,3), cal, noCal });
   }
   const maxBar = Math.max(1, ...ultimos6.flatMap(m => [m.cal, m.noCal]));
@@ -4209,7 +4210,7 @@ function Metricas({leads}) {
             marginBottom:6,
           }}><KpiNumber value={calificados}/></div>
           <div style={{fontSize:11.5, color:"rgba(10,31,68,0.45)", marginBottom:6}}>
-            Cita · Asesorado · Seguimiento · Cierre
+            Cita · Asesorado · Seguimiento · Cierre · sin referidos
           </div>
           <div style={{
             fontSize:12, fontWeight:500,
@@ -4242,7 +4243,7 @@ function Metricas({leads}) {
             marginBottom:6,
           }}><KpiNumber value={noCalificados}/></div>
           <div style={{fontSize:11.5, color:"rgba(10,31,68,0.45)", marginBottom:6}}>
-            No localizable · Sin interés · Otro
+            No localizable · Sin interés · Otro · sin referidos
           </div>
           <div style={{
             fontSize:12, fontWeight:500,
@@ -4275,7 +4276,7 @@ function Metricas({leads}) {
             marginBottom:6,
           }}><KpiNumber value={conv}/><span style={{fontSize:"0.5em", color:B.gold, marginLeft:4}}>%</span></div>
           <div style={{fontSize:11.5, color:"rgba(10,31,68,0.55)", letterSpacing:"0.005em"}}>
-            <strong style={{color:B.navy, fontWeight:600, fontVariantNumeric:"tabular-nums"}}>{cierresArr.length}</strong> cierres sobre <strong style={{color:B.navy, fontWeight:600, fontVariantNumeric:"tabular-nums"}}>{calificados}</strong> calificados
+            <strong style={{color:B.navy, fontWeight:600, fontVariantNumeric:"tabular-nums"}}>{cierresArr.length}</strong> cierres sobre <strong style={{color:B.navy, fontWeight:600, fontVariantNumeric:"tabular-nums"}}>{calificados}</strong> calificados · sin referidos
           </div>
         </div>
       </div>
@@ -4473,7 +4474,7 @@ function Metricas({leads}) {
             marginBottom:6,
           }}><KpiNumber value={cierresMes}/></div>
           <div style={{fontSize:11, color:"rgba(10,31,68,0.45)"}}>
-            Ventas concretadas en {MESES[ahora.getMonth()]}
+            Ventas concretadas en {MESES[ahora.getMonth()]} · sin referidos
           </div>
         </div>
       </div>
@@ -7200,6 +7201,7 @@ function LeadsSubtabNav({ tabs, active, onChange }) {
 function Leads({ leads, setLeads, setEventos, filtroNav, setFiltroNav, esAdmin, esAsistente, cuentas, usuario, setSeccion, subtab, setSubtab }) {
   // Drawer de filtros (reemplaza el chip row saturado)
   const [filtrosOpen, setFiltrosOpen] = useState(false);
+  const [filtRef, setFiltRef] = useState(false);
   // Label legible del filtro activo, para el badge del botón
   const _filtroOpts = [
     { v: "todos",    l: "Todos" },
@@ -7282,12 +7284,6 @@ function Leads({ leads, setLeads, setEventos, filtroNav, setFiltroNav, esAdmin, 
         <MFModal onClose={() => setFiltrosOpen(false)} width={480}>
           <div style={{marginBottom:18}}>
             <div style={{
-              fontSize:10, fontWeight:500,
-              color:"rgba(10,31,68,0.45)",
-              textTransform:"uppercase", letterSpacing:"0.18em",
-              marginBottom:6,
-            }}>Vista de Seguimiento</div>
-            <div style={{
               fontFamily:"'Cormorant Garamond', serif",
               fontSize:26, fontWeight:500,
               color:B.navy, letterSpacing:"-0.015em", lineHeight:1.1,
@@ -7322,8 +7318,30 @@ function Leads({ leads, setLeads, setEventos, filtroNav, setFiltroNav, esAdmin, 
             </div>
           </div>
 
-          <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:18, paddingTop:16, borderTop:"1px solid rgba(10,31,68,0.06)"}}>
-            <button onClick={() => { setFiltroNav("todos"); setFiltrosOpen(false); }}
+          <div style={{marginBottom:14}}>
+            <div style={{
+              fontSize:10, fontWeight:600,
+              color:"rgba(10,31,68,0.50)",
+              textTransform:"uppercase", letterSpacing:"0.14em",
+              marginBottom:10,
+            }}>Origen del lead</div>
+            <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
+              <button onClick={() => setFiltRef(v => !v)}
+                style={{
+                  padding:"8px 14px", borderRadius:999,
+                  border:`1.5px solid ${filtRef ? B.gold : "rgba(10,31,68,0.10)"}`,
+                  background: filtRef ? `${B.gold}12` : B.white,
+                  color: filtRef ? B.gold : "rgba(10,31,68,0.65)",
+                  fontFamily:"'Poppins',sans-serif", fontWeight: filtRef ? 700 : 500,
+                  fontSize:12, cursor:"pointer",
+                  letterSpacing:"0.005em",
+                  transition:"all var(--mf-t-fast) var(--mf-ease-out)",
+                }}>Referidos</button>
+            </div>
+          </div>
+
+          <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:10, paddingTop:12, borderTop:"1px solid rgba(10,31,68,0.06)"}}>
+            <button onClick={() => { setFiltroNav("todos"); setFiltRef(false); setFiltrosOpen(false); }}
               style={{
                 padding:"8px 14px", borderRadius:8,
                 background:"transparent",
@@ -7351,6 +7369,7 @@ function Leads({ leads, setLeads, setEventos, filtroNav, setFiltroNav, esAdmin, 
           setLeads={setLeads}
           setEventos={setEventos}
           filtroNav={filtroNav}
+          filtRef={filtRef}
           esAdmin={esAdmin}
           cuentas={cuentas}
           usuario={usuario}
@@ -7380,7 +7399,7 @@ function Leads({ leads, setLeads, setEventos, filtroNav, setFiltroNav, esAdmin, 
   );
 }
 
-function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario}) {
+function Pipeline({leads,setLeads,setEventos,filtroNav,filtRef,esAdmin,cuentas,usuario}) {
   const [leadAct,setLeadAct]=useState(null);
   const [nuevoM,setNuevoM]=useState(false);
   const [contactoL,setContactoL]=useState(null);
@@ -7435,6 +7454,7 @@ function Pipeline({leads,setLeads,setEventos,filtroNav,esAdmin,cuentas,usuario})
   if(busq) vis=vis.filter(l=>l.nombre.toLowerCase().includes(busq.toLowerCase())||l.estado?.toLowerCase().includes(busq.toLowerCase()));
   if(filtProd) vis=vis.filter(l=>l.producto===filtProd);
   if(filtTemp) vis=vis.filter(l=>getEstadoOportunidad(l)?.v===filtTemp);
+  if(filtRef) vis=vis.filter(l=>l.esReferido);
   const etapasVis=(filtroNav&&!["todos","activos"].includes(filtroNav)&&ETAPAS.find(e=>e.id===filtroNav))?ETAPAS.filter(e=>e.id===filtroNav):ETAPAS;
 
   async function importar(e){
