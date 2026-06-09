@@ -9713,6 +9713,12 @@ function Cobranza({ usuario }) {
           const rehidratado = data.datos.map(_rehidratarCobranzaRow);
           setDatos(rehidratado);
           LS.set(_LS_COBRANZA, data.datos);  // mantiene LS sincronizado
+        } else {
+          // Supabase confirma que este admin NO tiene datos de cobranza.
+          // Limpia state y LS por si quedó cache de otro usuario o del mismo
+          // usuario antes de borrar su Excel.
+          setDatos([]);
+          LS.set(_LS_COBRANZA, []);
         }
       } catch {}
     })();
@@ -11771,6 +11777,9 @@ export default function App() {
         if (event === "PASSWORD_RECOVERY") { setRecoveryMode(true); return; }
         if (event === "SIGNED_OUT") {
           setUsuario(null); setCuentas([]); setAllLeads({}); setAllEventos({});
+          // Limpia cache LS de Cobranza para evitar que el próximo usuario
+          // vea datos heredados si entra a una cuenta sin datos en Supabase
+          try { localStorage.removeItem("mf_cobranza_datos"); } catch {}
           // Reset de flags para permitir re-login limpio
           usuarioInicialIdRef.current = null;
           setAuthReady(true);
