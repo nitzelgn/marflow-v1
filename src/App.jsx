@@ -154,7 +154,13 @@ const uid = () => {
     return v.toString(16);
   });
 };
-const hoy = () => new Date().toISOString().split("T")[0];
+const hoy = () => {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
 const diasDesde = f => f ? Math.floor((Date.now()-new Date(f).getTime())/86400000) : 999;
 const fmtF = f => { if(!f) return "--"; const [y,m,d]=f.split("-"); return `${d}/${m}/${y}`; };
 const initials = n => (n||"").trim().split(/\s+/).slice(0,2).map(w=>w[0]||"").join("").toUpperCase();
