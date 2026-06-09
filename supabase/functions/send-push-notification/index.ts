@@ -1,16 +1,25 @@
 // ════════════════════════════════════════════════════════════════
-// MARFLOW · send-push-notification (implementación NATIVA Deno)
+// MARFLOW · send-push-notification (modificada 2026-06-08)
 // Web Push protocol: RFC 8030 + RFC 8291 (aes128gcm) + RFC 8292 (VAPID)
 // Sin libraries externas — usa Web Crypto API nativo de Deno.
+//
+// CAMBIOS:
+//   - Acepta user_id explícito en payload (cron lo envía siempre)
+//   - Backward compat con "Probar" desde app (JWT user → usa su id)
+//   - Auth dual: MARFLOW_CRON_SECRET o user JWT de Supabase
+//   - Cross-check: user_id pertenece al admin_id declarado
+//   - Envía a subscriptions del user_id (no broadcast por admin_id)
 // ════════════════════════════════════════════════════════════════
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY")!;
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY")!;
 const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") || "mailto:noreply@marflow.app";
+const MARFLOW_CRON_SECRET = Deno.env.get("MARFLOW_CRON_SECRET")!;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,8 +79,7 @@ async function createVapidJWT(audience: string, subject: string): Promise<string
   })));
   const signingInput = `${header}.${payload}`;
 
-  // Importar private key como JWK (ECDSA P-256). x,y vienen de la pública.
-  const publicBytes = b64uToBytes(VAPID_PUBLIC_KEY); // 65 bytes: 0x04 || X(32) || Y(32)
+  const publicBytes = b64uToBytes(VAPID_PUBLIC_KEY);
   const jwk = {
     kty: "EC",
     crv: "P-256",
@@ -96,26 +104,22 @@ async function createVapidJWT(audience: string, subject: string): Promise<string
 // ── Encriptar payload Web Push (aes128gcm — RFC 8291) ──
 async function encryptPayload(
   payload: string,
-  uaPublic: Uint8Array,   // p256dh del subscriber (65 bytes)
-  authSecret: Uint8Array, // auth del subscriber (16 bytes)
+  uaPublic: Uint8Array,
+  authSecret: Uint8Array,
 ): Promise<{ body: Uint8Array }> {
-  // 1. Generar ECDH keypair efímero (AS = application server)
   const asKeyPair = await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]
   );
   const asPublic = new Uint8Array(await crypto.subtle.exportKey("raw", asKeyPair.publicKey));
 
-  // 2. Importar UA public key
   const uaPubKey = await crypto.subtle.importKey(
     "raw", uaPublic, { name: "ECDH", namedCurve: "P-256" }, false, []
   );
 
-  // 3. ECDH shared secret
   const sharedSecret = new Uint8Array(
     await crypto.subtle.deriveBits({ name: "ECDH", public: uaPubKey }, asKeyPair.privateKey, 256)
   );
 
-  // 4. HKDF: IKM = HKDF-Expand(HKDF-Extract(auth, shared), keyInfo, 32)
   const prkKey = await hkdfExtract(authSecret, sharedSecret);
   const keyInfo = concat(
     new TextEncoder().encode("WebPush: info\0"),
@@ -123,13 +127,11 @@ async function encryptPayload(
   );
   const ikm = await hkdfExpand(prkKey, keyInfo, 32);
 
-  // 5. Salt aleatorio + HKDF para CEK y NONCE
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const prk = await hkdfExtract(salt, ikm);
   const cek = await hkdfExpand(prk, new TextEncoder().encode("Content-Encoding: aes128gcm\0"), 16);
   const nonce = await hkdfExpand(prk, new TextEncoder().encode("Content-Encoding: nonce\0"), 12);
 
-  // 6. AES-128-GCM encrypt (payload || 0x02 padding delimiter)
   const payloadBytes = new TextEncoder().encode(payload);
   const paddedPayload = concat(payloadBytes, new Uint8Array([0x02]));
   const cekKey = await crypto.subtle.importKey("raw", cek, { name: "AES-GCM" }, false, ["encrypt"]);
@@ -137,7 +139,6 @@ async function encryptPayload(
     await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, cekKey, paddedPayload)
   );
 
-  // 7. Body: salt(16) | rs(4 BE, = 4096) | idlen(1) | keyid(asPublic, 65) | ciphertext
   const rs = new Uint8Array(4);
   new DataView(rs.buffer).setUint32(0, 4096, false);
   const body = concat(salt, rs, new Uint8Array([65]), asPublic, ciphertext);
@@ -167,39 +168,121 @@ async function sendPush(sub: { endpoint: string; p256dh: string; auth: string },
   });
 }
 
+// ── Helper response JSON ──
+function jsonResponse(status: number, body: any): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // ── Servidor ──
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { admin_id, title, body, url } = await req.json();
-    if (!admin_id || !title) {
-      return new Response(JSON.stringify({ error: "admin_id y title son requeridos" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // ═══ FASE 1: AUTENTICACIÓN ═══
+    const authHeader = req.headers.get("Authorization") || "";
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+
+    if (!token) {
+      return jsonResponse(401, { error: "Missing Authorization header" });
     }
 
+    let isCron = false;
+    let userIdFromJWT: string | null = null;
+
+    if (token === MARFLOW_CRON_SECRET) {
+      // Cron: token preshared
+      isCron = true;
+    } else {
+      // App: validar como user JWT con anon client
+      const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data: { user }, error: authErr } = await supabaseAuth.auth.getUser(token);
+      if (authErr || !user) {
+        return jsonResponse(401, { error: "Invalid token" });
+      }
+      userIdFromJWT = user.id;
+    }
+
+    // ═══ FASE 2: PARSE PAYLOAD ═══
+    const body = await req.json();
+    let { user_id, admin_id, title, body: msgBody, url, tag } = body;
+
+    // Backward compat: si "Probar" no manda user_id, usar el JWT
+    if (!user_id && userIdFromJWT) user_id = userIdFromJWT;
+    if (!admin_id && userIdFromJWT) admin_id = userIdFromJWT;
+
+    // Validaciones obligatorias
+    if (!user_id) return jsonResponse(400, { error: "user_id es obligatorio" });
+    if (!admin_id) return jsonResponse(400, { error: "admin_id es obligatorio" });
+    if (!title) return jsonResponse(400, { error: "title es obligatorio" });
+
+    // Cliente con service_role (para queries cross-tenant validadas)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { data: subs, error } = await supabase
-      .from("push_subscriptions")
-      .select("*")
-      .eq("admin_id", admin_id);
 
-    if (error) throw error;
-    if (!subs || subs.length === 0) {
-      return new Response(JSON.stringify({ sent: 0, msg: "Sin suscripciones." }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // ═══ FASE 3: CROSS-CHECK user_id ↔ admin_id ═══
+    const { data: cuenta, error: errCuenta } = await supabase
+      .from("cuentas")
+      .select("id, admin_id, rol")
+      .eq("id", user_id)
+      .maybeSingle();
+
+    if (errCuenta || !cuenta) {
+      console.error("[send-push] user_id no existe", { user_id });
+      return jsonResponse(403, { error: "user_id no existe en cuentas" });
     }
 
+    const esAdminMismo       = cuenta.id === admin_id;
+    const esAsistenteDeAdmin = cuenta.rol === "asistente" && cuenta.admin_id === admin_id;
+    const esSuperadminPropio = cuenta.rol === "superadmin" && cuenta.id === admin_id;
+
+    if (!esAdminMismo && !esAsistenteDeAdmin && !esSuperadminPropio) {
+      console.error("[send-push] cross-check FAIL", { user_id, admin_id, cuenta_admin: cuenta.admin_id, cuenta_rol: cuenta.rol });
+      return jsonResponse(403, { error: "user_id no pertenece al admin_id declarado" });
+    }
+
+    // ═══ FASE 4: SI VIENE DE JWT (no cron), AUTORIZAR QUE PUEDA NOTIFICAR ═══
+    if (!isCron && userIdFromJWT !== user_id) {
+      // Solo permitir notificar a self o a asistentes propios
+      const { data: targetCuenta } = await supabase
+        .from("cuentas")
+        .select("admin_id, rol")
+        .eq("id", user_id)
+        .maybeSingle();
+
+      const targetEsAsistentePropio =
+        targetCuenta?.rol === "asistente" && targetCuenta?.admin_id === userIdFromJWT;
+
+      if (!targetEsAsistentePropio) {
+        return jsonResponse(403, { error: "JWT user no autorizado para notificar a este user_id" });
+      }
+    }
+
+    // ═══ FASE 5: BUSCAR SUBSCRIPTIONS DEL user_id ═══
+    const { data: subs, error: errSubs } = await supabase
+      .from("push_subscriptions")
+      .select("id, endpoint, p256dh, auth")
+      .eq("user_id", user_id);
+
+    if (errSubs) throw errSubs;
+    if (!subs || subs.length === 0) {
+      return jsonResponse(200, { sent: 0, total: 0, message: "Sin suscripciones activas para este user" });
+    }
+
+    // ═══ FASE 6: ENVIAR PUSH ═══
     const payload = JSON.stringify({
-      title, body: body || "", url: url || "/",
-      tag: `marflow-${Date.now()}`,
+      title,
+      body: msgBody || "",
+      url: url || "/",
+      tag: tag || `marflow-${Date.now()}`,
     });
 
     const results = await Promise.allSettled(
       subs.map(async (s: any) => {
         const resp = await sendPush({ endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth }, payload);
         if (!resp.ok) {
-          // Limpiar suscripciones inválidas
+          // Limpiar suscripciones inválidas (gone / not found)
           if (resp.status === 410 || resp.status === 404) {
             await supabase.from("push_subscriptions").delete().eq("id", s.id);
           }
@@ -215,14 +298,12 @@ Deno.serve(async (req) => {
     const errors = results.filter(r => r.status === "rejected")
       .map((r: any) => String(r.reason?.message || r.reason));
 
-    return new Response(JSON.stringify({ sent, failed, total: subs.length, errors }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return jsonResponse(200, { sent, failed, total: subs.length, errors });
   } catch (e: any) {
     console.error("[send-push-notification] error:", e?.message, e?.stack);
-    return new Response(JSON.stringify({
+    return jsonResponse(500, {
       error: String(e?.message || e),
       stack: e?.stack ? String(e.stack).split("\n").slice(0, 6).join("\n") : null,
-    }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    });
   }
 });
