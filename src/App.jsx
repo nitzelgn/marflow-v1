@@ -11088,7 +11088,7 @@ function ImportarCorreo({ leads, setLeads, usuario, setSeccion, setFiltroNav, se
         <textarea
           value={texto}
           onChange={e=>setTexto(e.target.value)}
-          placeholder={"Pega aquí el contenido completo del correo...\n\nFormato sugerido:\nNombre: [Nombre del cliente]\nTeléfono: [10 dígitos]\nCorreo: [correo electrónico]\nProducto: [Vida / GMM / Auto / Hogar / Patrimonial]\nEstado: [Entidad federativa]"}
+          placeholder={"Pega aquí el contenido completo del correo...\n\nFormato sugerido:\nNombre: [Nombre del cliente]\nEdad: [años]\nTeléfono: [10 dígitos]\nCorreo: [correo electrónico]\nProducto: [Vida / GMM / Auto / Hogar / Patrimonial]\nEstado: [Entidad federativa]"}
           rows={10}
           style={{
             width:"100%",
