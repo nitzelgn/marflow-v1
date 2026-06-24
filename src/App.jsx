@@ -6847,7 +6847,7 @@ const _RX_EMAIL = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 // Teléfono: agarra secuencias con dígitos, espacios, guiones, paréntesis, +
 // Después se normaliza con normalizarTel
 const _RX_TEL_LABEL  = /(tel(?:[ée]fono)?|celular|m[oó]vil|cel|whats?app|wa)[^\d\+]{0,8}([\+\d][\d\s\-\.\(\)]{7,})/i;
-const _RX_TEL_LIBRE  = /(\+?\d[\d\s\-\.\(\)]{8,}\d)/;
+const _RX_TEL_LIBRE  = /(\+?\d[\d \t\-\.\(\)]{8,}\d)/;
 const _RX_EDAD       = /\bedad\b[^\d]{0,5}(\d{1,3})/i;
 const _RX_EDAD_LIBRE = /\b(\d{2})\s*a[ñn]os\b/i;
 const _RX_NOMBRE     = /^(?:nombre|cliente|prospecto|lead)\s*[:\-]\s*(.+)$/im;
@@ -6921,6 +6921,34 @@ function _separarBloques(texto) {
     return bloques.filter(Boolean);
   }
 
+  // 2.5) Formato TABULAR sin etiquetas: una línea por campo, en orden fijo,
+  //      y cada lead ocupa el mismo número de líneas. Lo detectamos por
+  //      emails que aparecen en líneas solas con espaciado uniforme.
+  //      Ej: nombre / edad / tel / correo / estado / producto / fechas / asesor
+  const _lineasNV = lineas.map(l => l.trim()).filter(Boolean);
+  const _rxEmailLinea = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  const _posEmails = [];
+  for (let i = 0; i < _lineasNV.length; i++) {
+    if (_rxEmailLinea.test(_lineasNV[i])) _posEmails.push(i);
+  }
+  if (_posEmails.length >= 2) {
+    const _difs = [];
+    for (let i = 1; i < _posEmails.length; i++) _difs.push(_posEmails[i] - _posEmails[i - 1]);
+    const _tam = _difs[0];
+    const _uniformes = _difs.every(d => d === _tam);
+    if (_uniformes && _tam >= 4 && _tam <= 20) {
+      const _offset = _posEmails[0];
+      const _bloques = [];
+      for (let i = 0; i < _posEmails.length; i++) {
+        const start = _posEmails[i] - _offset;
+        const end = (i + 1 < _posEmails.length) ? _posEmails[i + 1] - _offset : _lineasNV.length;
+        _bloques.push(_lineasNV.slice(start, end).join("\n").trim());
+      }
+      const _filtrados = _bloques.filter(Boolean);
+      if (_filtrados.length >= 2) return _filtrados;
+    }
+  }
+
   // 3) Triple salto de línea (separación muy explícita)
   const rxTripleSalto = /\n\s*\n\s*\n/;
   if (rxTripleSalto.test(s)) {
@@ -6972,6 +7000,18 @@ function _extraerLeadDeBloque(bloque) {
   // Edad
   const mEdad = bloque.match(_RX_EDAD) || bloque.match(_RX_EDAD_LIBRE);
   if (mEdad) edad = mEdad[1];
+  // Fallback posicional: formato tabular sin etiquetas, donde la edad viene
+  // como una línea solita con un número (1-100). Se ignora "0" (sin edad).
+  if (!edad) {
+    const _ls = bloque.split("\n").map(l => l.trim()).filter(Boolean);
+    for (const l of _ls) {
+      const m = l.match(/^(\d{1,3})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n >= 1 && n <= 100) { edad = String(n); break; }
+      }
+    }
+  }
 
   // Nombre etiquetado
   const mNombre = bloque.match(_RX_NOMBRE);
