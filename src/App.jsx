@@ -5621,6 +5621,7 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
   const [historialCompleto, setHistorialCompleto] = useState(false);
   const [polForm2Abierto, setPolForm2Abierto] = useState(false);
   const [masAccionesAbierto, setMasAccionesAbierto] = useState(false);
+  const masBtnRef = useRef(null);
   const [sugIgnorada, setSugIgnorada] = useState(false);
 
   // Algoritmo de sugerencia de etapa basado en patrones del checklist
@@ -5832,7 +5833,7 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
 
       {/* Más acciones (dropdown) */}
       <div style={{position:"relative"}}>
-        <button onClick={()=>setMasAccionesAbierto(o=>!o)} style={{
+        <button ref={masBtnRef} onClick={()=>setMasAccionesAbierto(o=>!o)} style={{
           display:"inline-flex", alignItems:"center", gap:6,
           padding:"8px 13px", borderRadius:8, border:"1px solid rgba(10,31,68,0.08)",
           background:B.white, color:"rgba(10,31,68,0.65)",
@@ -5842,10 +5843,21 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
           Más
           <span style={{fontSize:9, lineHeight:1}}>▾</span>
         </button>
-        {masAccionesAbierto && (
+        {masAccionesAbierto && (() => {
+          const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+          const rect = isMobile ? masBtnRef.current?.getBoundingClientRect() : null;
+          const topFixed = rect ? rect.bottom + 6 : 0;
+          return (
           <div onClick={e=>e.stopPropagation()} style={{
-            position:"absolute", top:38, right:0, zIndex:50,
-            width:240, background:"#F8F6F2",
+            position: isMobile ? "fixed" : "absolute",
+            top: isMobile ? topFixed : 38,
+            right: isMobile ? 12 : 0,
+            bottom: "auto",
+            left: "auto",
+            zIndex: 50,
+            width: 240,
+            maxWidth: isMobile ? "calc(100vw - 24px)" : 240,
+            background:"#F8F6F2",
             border:"1px solid rgba(10,31,68,0.08)", borderRadius:12,
             boxShadow:"0 12px 30px rgba(10,31,68,0.14)",
             overflow:"hidden", animation:"mfFadeUp .18s var(--mf-ease-spring)",
@@ -5915,7 +5927,8 @@ function LeadModal({lead,onClose,onSave,onDelete,cuentas,usuario,setEventos}) {
               }}>Eliminar lead</button>
             )}
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
 
