@@ -8074,6 +8074,25 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
     setMes(now.getMonth()); setAnio(now.getFullYear()); setFechaAncla(hoy());
   }
 
+  // Swipe horizontal para navegar entre periodos (día/semana/mes) en móvil.
+  const swipeRef = useRef(null);
+  function onSwipeStart(e) {
+    const t = e.touches?.[0]; if (!t) return;
+    swipeRef.current = { x: t.clientX, y: t.clientY };
+  }
+  function onSwipeEnd(e) {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches?.[0]; if (!t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    // Solo swipe horizontal claro: mínimo 60px y más horizontal que vertical.
+    if (Math.abs(dx) < 60) return;
+    if (Math.abs(dy) > Math.abs(dx)) return;
+    if (dx > 0) navAnt(); else navSig();
+  }
+
   // Label del periodo según vista
   const periodoLabel = vista === "mes"
     ? MESES[mes]
@@ -8215,6 +8234,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
         )}
       </div>
 
+      <div onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd}>
       {/* ═══ Vista MES (calendario premium) ═══ */}
       {vista === "mes" && (
       <div style={{
@@ -8411,6 +8431,7 @@ function Agenda({eventos,setEventos,leads,esAsistente,usuario}) {
           </div>
         );
       })()}
+      </div>
       {modalDia&&diaClick&&(
         <MFModal onClose={()=>{setModalDia(false);setDiaClick(null);}} width={460}>
           {/* Header editorial — día grande en serif */}
